@@ -2575,8 +2575,8 @@ if __name__ == "__main__":
                                         print(f"❌ 发送到 TG 失败：{e}")
 
                 # 配置你的 Bot Token 和 Chat ID
-                BOT_TOKEN = ""
-                CHAT_ID = ""
+                BOT_TOKEN = "7664203362:AAEWd52ZdliweeDvrV30MuwE2JcZQDWZIwQ"
+                CHAT_ID = "7697235358"
 
                 if final_result_file:
                         print(f"\n📤 正在将 {final_result_file} 上传至 Telegram ...")
