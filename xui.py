@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板1内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -69,7 +69,6 @@ func writeResultToFile(file *os.File, text string) {
 }
 
 func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
-	// 关键修复：确保任务完成和计数器增加
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -171,7 +170,6 @@ func main() {
 	}
 	defer file.Close()
 
-	batchSize := {batch_size}
 	var batch []string
 
 	allLines := strings.Split(string(lines), "\\n")
@@ -192,11 +190,11 @@ func main() {
 	}
 
 	wg.Wait()
-	time.Sleep(1 * time.Second) // 等待最后的进度条刷新
+	time.Sleep(1 * time.Second)
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板2内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -381,7 +379,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板3内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -562,7 +560,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板4内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -749,7 +747,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板5内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -932,7 +930,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板6内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1294,7 +1292,6 @@ RETRY:
 
 	usernames := {user_list}
 	passwords := {pass_list}
-	batchSize := {batch_size}
 
 	batch := []string{}
 	allLines := strings.Split(string(lines), "\\n")
@@ -1340,7 +1337,7 @@ RETRY:
 
 
 '''
-# =========================== xui.go模板7内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板7内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1524,7 +1521,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (已修复v3 - 死锁修复) ===========================
+# =========================== xui.go模板8内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1867,7 +1864,7 @@ if __name__ == "__main__":
 
 """
 
-# =========================== 主脚本部分 (已修复v3 - 简化并发模型) ===========================
+# =========================== 主脚本部分 (已修复v4 - 移除未使用变量) ===========================
 
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
@@ -2001,13 +1998,11 @@ def run_xui_for_parts(sleep_seconds):
         shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
 
         try:
-            # 简化：直接运行Go程序，它会处理自己的并发和进度
             subprocess.run(['go', 'run', 'xui.go'], check=True)
         except subprocess.CalledProcessError:
             print("go运行失败，请检查环境")
             sys.exit(1)
 
-        # 结果文件由Go程序自己命名，这里只需合并
         output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
         if os.path.exists('xui.txt'):
             shutil.move('xui.txt', output_file)
@@ -2025,7 +2020,7 @@ def run_xui_for_parts(sleep_seconds):
 
 
 def merge_xui_files():
-    merged_file = 'xui.txt' # 直接在主目录合并
+    merged_file = 'xui.txt' 
     if os.path.exists(merged_file):
         os.remove(merged_file)
 
@@ -2036,7 +2031,7 @@ def merge_xui_files():
                     shutil.copyfileobj(infile, outfile)
 
 def merge_result_files(prefix: str, output_name: str, target_dir: str):
-    output_path = output_name # 直接在主目录合并
+    output_path = output_name 
     if os.path.exists(output_path):
         os.remove(output_path)
     
@@ -2060,7 +2055,7 @@ def clean_temp_files():
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
-    for f in ['results.txt', 'xui.go', 'ipcx.py']: # 保留最终的xui.txt等结果文件
+    for f in ['results.txt', 'xui.go', 'ipcx.py']: 
         if os.path.exists(f):
             try:
                 os.remove(f)
@@ -2372,7 +2367,6 @@ if __name__ == "__main__":
                 split_file(input_file, lines_per_file)
                 run_xui_for_parts(sleep_seconds)
                 
-                # 合并所有临时结果文件
                 merge_xui_files()
                 merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
                 merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
