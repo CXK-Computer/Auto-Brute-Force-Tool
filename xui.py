@@ -1874,9 +1874,12 @@ def input_filename_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
     return user_input if user_input else default
 
+def escape_go_string(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
 def generate_xui_go(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1884,8 +1887,8 @@ def generate_xui_go(semaphore_size, batch_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 def generate_xui_go_template2(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1893,8 +1896,8 @@ def generate_xui_go_template2(semaphore_size, batch_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 def generate_xui_go_template3(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1902,8 +1905,8 @@ def generate_xui_go_template3(semaphore_size, batch_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 def generate_xui_go_template4(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1911,8 +1914,8 @@ def generate_xui_go_template4(semaphore_size, batch_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 def generate_xui_go_template5(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1922,9 +1925,6 @@ def generate_xui_go_template5(semaphore_size, batch_size, usernames, passwords):
 def to_go_bool(val: bool) -> str:
     return "true" if val else "false"
 
-def escape_go_string(s: str) -> str:
-    return s.replace("\\", "\\\\").replace('"', '\\"')
-
 def to_go_string_array_one_line(lines: list) -> str:
     if not lines:
         return "[]string{}"
@@ -1932,8 +1932,8 @@ def to_go_string_array_one_line(lines: list) -> str:
 
 
 def generate_xui_go_template6(semaphore_size, batch_size, usernames, passwords, install_backdoor, custom_cmds):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
 
     backdoor_flag = to_go_bool(install_backdoor)
     cmd_array = to_go_string_array_one_line(custom_cmds)
@@ -1950,8 +1950,8 @@ def generate_xui_go_template6(semaphore_size, batch_size, usernames, passwords, 
         f.write(code)
 
 def generate_xui_go_template7(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
@@ -1959,8 +1959,8 @@ def generate_xui_go_template7(semaphore_size, batch_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 def generate_xui_go_template8(semaphore_size, batch_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{u}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{p}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{batch_size}", str(batch_size)) \
                             .replace("{user_list}", user_list) \
