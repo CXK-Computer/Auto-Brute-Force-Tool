@@ -179,7 +179,7 @@ func main() {
 
 	var batch []string
 
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -370,7 +370,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -554,7 +554,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -744,7 +744,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -930,7 +930,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1319,7 +1319,7 @@ RETRY:
 	passwords := {pass_list}
 
 	batch := []string{}
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1752,7 +1752,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
