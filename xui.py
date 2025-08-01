@@ -109,6 +109,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 			
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -283,6 +284,8 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
+			
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -480,6 +483,8 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
+			
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -666,6 +671,8 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
+			
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -852,6 +859,8 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
+
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -1424,6 +1433,8 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool
 	}
 	defer resp.Body.Close()
 
+	fmt.Printf("[INFO] 响应 from %s | Status: %d\n", fullURL, resp.StatusCode)
+
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		if strings.Contains(string(bodyBytes), successFlag) {
@@ -1673,6 +1684,8 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 					fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
 					continue
 				}
+
+				fmt.Printf("[INFO] 响应 from %s | Status: %d\n", finalURL, resp.StatusCode)
 				defer resp.Body.Close()
 				
 				cookies := resp.Cookies()
