@@ -13,6 +13,7 @@ except ImportError:
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,21 +37,22 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -90,13 +92,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			var err error
 			var resp *http.Response
 			
-			// 尝试 HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			url := fmt.Sprintf("http://%s:%s/login", ip, port)
 			resp, err = postRequest(ctx, url, username, password)
 			cancel()
 
-			// 如果 HTTP 失败, 尝试 HTTPS
 			if err != nil {
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 				url = fmt.Sprintf("https://%s:%s/login", ip, port)
@@ -147,7 +147,6 @@ func updateProgress() {
 			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
-
 		if count >= totalTasks {
 			break
 		}
@@ -160,9 +159,9 @@ func triggerGC() {
 
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
@@ -176,16 +175,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -210,6 +199,7 @@ func main() {
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -231,6 +221,24 @@ var startTime time.Time
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
+}
+
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
+	}
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -338,28 +346,11 @@ func triggerGC() {
 	runtime.GC()
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
-	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
-	}
-	return result
-}
-
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
@@ -373,15 +364,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -406,6 +388,7 @@ func main() {
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -429,21 +412,22 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -546,9 +530,9 @@ func triggerGC() {
 
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
@@ -562,15 +546,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -595,6 +570,7 @@ func main() {
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -618,21 +594,22 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -741,9 +718,9 @@ func triggerGC() {
 
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
@@ -757,15 +734,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -790,6 +758,7 @@ func main() {
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -813,21 +782,22 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -932,9 +902,9 @@ func triggerGC() {
 
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
@@ -948,15 +918,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -981,9 +942,9 @@ func main() {
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
-
 	"os"
 	"strings"
 	"sync"
@@ -1000,21 +961,22 @@ var completedCount int64
 var totalTasks int64
 var startTime time.Time
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
@@ -1334,23 +1296,14 @@ func main() {
 	inputFile := "results.txt"
 
 RETRY:
-	lines, err := ioutil.ReadFile(inputFile)
+    batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 
 	usernames := {user_list}
 	passwords := {pass_list}
-
-	batch := []string{}
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
@@ -1396,12 +1349,11 @@ RETRY:
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
-	
 	"os"
 	"strings"
 	"sync"
@@ -1427,21 +1379,22 @@ var headers = map[string]string{
 	"Accept-Encoding": "gzip, deflate, br",
 }
 
-func loadInputFile(inputFile string) []string {
-	content, err := ioutil.ReadFile(inputFile)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var cleaned []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			cleaned = append(cleaned, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return cleaned
+	return lines, scanner.Err()
 }
 
 func writeResultToFile(file *os.File, text string) {
@@ -1561,7 +1514,11 @@ func main() {
 	passwords := {pass_list}
 	paths := passwords
 
-	lines := loadInputFile(inputFile)
+	lines, err := readLines(inputFile)
+	if err != nil {
+		fmt.Printf("无法读取输入文件: %v\\n", err)
+		return
+	}
 
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -1595,12 +1552,12 @@ func main() {
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
+	"bufio"
 	"context"
-	"net/url"
-	
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -1622,21 +1579,22 @@ var client = &http.Client{
     },
 }
 
-func loadList(filename string) []string {
-	content, err := ioutil.ReadFile(filename)
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("无法读取", filename, ":", err)
-		os.Exit(1)
+		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+        if line != "" {
+		    lines = append(lines, line)
+        }
 	}
-	return result
+	return lines, scanner.Err()
 }
 
 func postRequest(ctx context.Context, urlStr string, username string, password string, origin string, referer string) (*http.Response, error) {
@@ -1767,16 +1725,14 @@ func triggerGC() {
 
 func main() {
 	inputFile := "results.txt"
-	lines, err := ioutil.ReadFile(inputFile)
+	batch, err := readLines(inputFile)
 	if err != nil {
-		fmt.Println("无法读取输入文件:", err)
+		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	
 	usernames := {user_list}
 	passwords := {pass_list}
-
-
 
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -1785,15 +1741,6 @@ func main() {
 		return
 	}
 	defer file.Close()
-
-	var batch []string
-	allLines := strings.Split(string(lines), "\n")
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			batch = append(batch, line)
-		}
-	}
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
