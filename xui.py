@@ -42,7 +42,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -109,7 +109,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -285,7 +285,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -339,7 +339,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -425,7 +425,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -484,7 +484,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -609,7 +609,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -672,7 +672,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -799,7 +799,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -860,7 +860,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				continue
 			}
 
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -981,7 +981,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1403,7 +1403,7 @@ func loadInputFile(inputFile string) []string {
 		fmt.Println("无法读取输入文件:", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var cleaned []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1593,7 +1593,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
