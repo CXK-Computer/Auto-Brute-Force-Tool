@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import subprocess
 import time
@@ -7,6 +8,8 @@ try:
     import readline
 except ImportError:
     pass
+
+# =========================== xui.go模板1内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -192,7 +195,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-
+# =========================== xui.go模板2内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -377,7 +380,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-
+# =========================== xui.go模板3内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -558,6 +561,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
+# =========================== xui.go模板4内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -744,7 +748,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-
+# =========================== xui.go模板5内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -927,6 +931,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
+# =========================== xui.go模板6内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -2423,8 +2428,8 @@ if __name__ == "__main__":
                                 except Exception as e:
                                         print(f"❌ 发送到 TG 失败：{e}")
 
-                BOT_TOKEN = "7664203362:AAEWd52ZdliweeDvrV30MuwE2JcZQDWZIwQ"
-                CHAT_ID = "7697235358"
+                BOT_TOKEN = ""
+                CHAT_ID = ""
 
                 if final_result_file and os.path.exists(final_result_file):
                         print(f"\n📤 正在将 {final_result_file} 上传至 Telegram ...")
