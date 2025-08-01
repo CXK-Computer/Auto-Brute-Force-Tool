@@ -7,8 +7,6 @@ try:
     import readline
 except ImportError:
     pass
-
-# =========================== xui.go模板1内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -194,7 +192,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (已修复v4 - 移除未使用变量) ===========================
+
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -379,7 +377,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (已修复v4 - 移除未使用变量) ===========================
+
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -560,7 +558,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -747,7 +744,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (已修复v4 - 移除未使用变量) ===========================
+
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -930,7 +927,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (已修复v4 - 移除未使用变量) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
