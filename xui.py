@@ -2135,6 +2135,11 @@ def check_environment():
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\n")
         return
     
+    # Set GOCACHE to prevent "GOCACHE is not defined" error in restricted environments
+    go_cache_dir = "/tmp/gocache"
+    os.makedirs(go_cache_dir, exist_ok=True)
+    os.environ["GOCACHE"] = go_cache_dir
+    
     print(">>> 正在检测网络位置...\n")
 
     def is_china_by_ping_ttl_delay_only():
