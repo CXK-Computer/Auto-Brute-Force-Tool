@@ -160,8 +160,7 @@ func main() {
 	}
 
 	usernames := {user_list}
-     passwords := {pass_list}
-
+	passwords := {pass_list}
 
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -715,7 +714,7 @@ func main() {
 	}
 
 	usernames := {user_list}
-     passwords := {pass_list}
+	passwords := {pass_list}
 
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -1702,7 +1701,7 @@ func main() {
 	}
 	
 	usernames := {user_list}
-     passwords := {pass_list}
+	passwords := {pass_list}
 
 
 
@@ -2309,7 +2308,7 @@ def load_credentials():
             if not os.path.exists("password.txt"):
                 print("缺少 password.txt 文件，请检查后重试")
                 sys.exit(1)
-            passwords = open("password.txt", encoding='utf-8').read().splitlines()
+            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
         else:
             passwords = ["2cXaAxRGfddmGz2yx1wA"]
     else:
@@ -2318,8 +2317,8 @@ def load_credentials():
             if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
                 print("缺少 username.txt 或 password.txt 文件，请检查后重试")
                 sys.exit(1)
-            usernames = open("username.txt", encoding='utf-8').read().splitlines()
-            passwords = open("password.txt", encoding='utf-8').read().splitlines()
+            usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
+            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
         else:
             if TEMPLATE_MODE == 3:
                 usernames = ["sysadmin"]
