@@ -2208,7 +2208,7 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
     def ensure_module(module_name):
         if importlib.util.find_spec(module_name) is None:
             print(f"⚠️ 模块 {module_name} 未安装，准备安装...")
-            cmd = ["pip3", "install", module_name, "--break-system-packages"]
+            cmd = ["pip3", "install", module_name]
             if IN_CHINA:
                 cmd += ["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"]
             try:
