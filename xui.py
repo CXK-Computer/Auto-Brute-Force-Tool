@@ -42,7 +42,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -179,7 +179,7 @@ func main() {
 
 	var batch []string
 
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -188,6 +188,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -340,7 +344,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -371,7 +375,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -380,6 +384,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -427,7 +435,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -556,7 +564,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -565,6 +573,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -612,7 +624,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -747,7 +759,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -756,6 +768,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -803,7 +819,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -934,7 +950,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -943,6 +959,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -986,7 +1006,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1324,7 +1344,7 @@ RETRY:
 	passwords := {pass_list}
 
 	batch := []string{}
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1333,6 +1353,10 @@ RETRY:
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	completedCount = 0
@@ -1409,7 +1433,7 @@ func loadInputFile(inputFile string) []string {
 		fmt.Println("无法读取输入文件:", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var cleaned []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1547,6 +1571,10 @@ func main() {
 	defer file.Close()
 
 	totalTasks = int64(len(lines))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -1600,7 +1628,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1759,7 +1787,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1768,6 +1796,10 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    if totalTasks == 0 {
+        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        return
+    }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
@@ -2379,19 +2411,33 @@ def load_credentials():
         use_custom = input("是否使用 password.txt 路径库？(y/N，默认使用 2cXaAxRGfddmGz2yx1wA 作为路径): ").strip().lower()
         if use_custom == 'y':
             if not os.path.exists("password.txt"):
-                print("缺少 password.txt 文件，请检查后重试")
+                print("❌ 错误: 缺少 password.txt 文件，请检查后重试")
                 sys.exit(1)
             passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
+            if not passwords:
+                print("❌ 错误: password.txt 文件为空，请添加密码后再试。")
+                sys.exit(1)
         else:
             passwords = ["2cXaAxRGfddmGz2yx1wA"]
     else:
         use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，默认使用 admin/admin 或 sysadmin/sysadmin 或 root/password): ").strip().lower()
         if use_custom == 'y':
-            if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
-                print("缺少 username.txt 或 password.txt 文件，请检查后重试")
+            if not os.path.exists("username.txt"):
+                print("❌ 错误: 缺少 username.txt 文件，请检查后重试。")
                 sys.exit(1)
+            if not os.path.exists("password.txt"):
+                print("❌ 错误: 缺少 password.txt 文件，请检查后重试。")
+                sys.exit(1)
+
             usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
             passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
+
+            if not usernames:
+                print("❌ 错误: username.txt 文件为空，请添加用户名后再试。")
+                sys.exit(1)
+            if not passwords:
+                print("❌ 错误: password.txt 文件为空，请添加密码后再试。")
+                sys.exit(1)
         else:
             if TEMPLATE_MODE == 3:
                 usernames = ["sysadmin"]
@@ -2414,7 +2460,7 @@ if __name__ == "__main__":
                 print("=== 爆破一键启动 ===")
                 input_file = input_filename_with_default("请输入源文件名", "1.txt")
                 if not os.path.exists(input_file):
-                        print("文件不存在")
+                        print(f"❌ 错误: 文件 '{input_file}' 不存在。")
                         sys.exit(1)
 
                 lines_per_file = input_with_default("每个小文件行数", 5000)
