@@ -42,7 +42,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -179,7 +179,7 @@ func main() {
 
 	var batch []string
 
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -340,7 +340,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -371,7 +371,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -427,7 +427,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -556,7 +556,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -612,7 +612,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -747,7 +747,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -803,7 +803,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -934,7 +934,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -986,7 +986,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1324,7 +1324,7 @@ RETRY:
 	passwords := {pass_list}
 
 	batch := []string{}
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1409,7 +1409,7 @@ func loadInputFile(inputFile string) []string {
 		fmt.Println("无法读取输入文件:", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var cleaned []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1600,7 +1600,7 @@ func loadList(filename string) []string {
 		fmt.Println("无法读取", filename, ":", err)
 		os.Exit(1)
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(string(content), "\\n")
 	var result []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1759,7 +1759,7 @@ func main() {
 	defer file.Close()
 
 	var batch []string
-	allLines := strings.Split(string(lines), "\n")
+	allLines := strings.Split(string(lines), "\\n")
 	for _, line := range allLines {
 		line = strings.TrimSpace(line)
 		if line != "" {
@@ -1900,9 +1900,9 @@ def process_ip_port_file(input_file, output_excel):
 
         percent = (completed_tasks / total_tasks) * 100
         eta = format_time(estimated_remaining_time)
-        print(f"\r处理进度: {completed_tasks}/{total_tasks} ({percent:.2f}%) 预计剩余时间: {eta}", end='', flush=True)
+        print(f"\\r处理进度: {completed_tasks}/{total_tasks} ({percent:.2f}%) 预计剩余时间: {eta}", end='', flush=True)
         time.sleep(1.5)
-    print("\n全部处理完成！")
+    print("\\n全部处理完成！")
 
 
 if __name__ == "__main__":
@@ -1921,18 +1921,14 @@ def input_filename_with_default(prompt, default):
     return user_input if user_input else default
 
 def escape_go_string(s: str) -> str:
-    # In python, backslash is an escape character. To write a literal backslash, you must escape it.
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def generate_xui_go(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    # In a python multiline string, to write a literal \n, you must escape it as \\n
-    # The same applies to \r -> \\r
     code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1941,8 +1937,7 @@ def generate_xui_go_template2(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1951,8 +1946,7 @@ def generate_xui_go_template3(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1961,8 +1955,7 @@ def generate_xui_go_template4(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1971,8 +1964,7 @@ def generate_xui_go_template5(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1994,8 +1986,7 @@ def generate_xui_go_template6(semaphore_size, usernames, passwords, install_back
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list) \
                             .replace("{enable_backdoor}", backdoor_flag) \
-                            .replace("{custom_backdoor_cmds}", cmd_array) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{custom_backdoor_cmds}", cmd_array)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -2004,8 +1995,7 @@ def generate_xui_go_template7(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -2014,8 +2004,7 @@ def generate_xui_go_template8(semaphore_size, usernames, passwords):
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("\\n", "\\\\n").replace("\\r", "\\\\r")
+                            .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -2314,7 +2303,7 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
             return None
         try:
             out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
-            m = re.search(r"go(\d+)\.(\d+)", out)
+            m = re.search(r"go(\\d+)\\.(\\d+)", out)
             return (int(m.group(1)), int(m.group(2))) if m else None
         except:
             return None
@@ -2433,10 +2422,6 @@ if __name__ == "__main__":
                 semaphore_size = input_with_default("爆破线程数", 250)
 
                 usernames, passwords = load_credentials()
-
-                # Generate the correct Go source code from templates
-                # This replaces the placeholder generation logic with a more direct approach
-                # to avoid the complexities of multiple replacements.
                 
                 template_map = {
                     1: (generate_xui_go, (semaphore_size, usernames, passwords)),
