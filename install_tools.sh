@@ -1,17 +1,18 @@
 #!/bin/bash
 
 # ==============================================================================
-#  一键安装 Python, Go 并下载指定文件脚本
+#  一键安装 Python, Go 并下载指定文件脚本 (最终修复版)
 #
 #  功能:
-#  1. 自动检测并更新包管理器 (apt for Debian/Ubuntu, yum for CentOS/RHEL).
-#  2. 安装 Python 3 和 Go 语言环境.
-#  3. 从指定的 URL 下载文件.
+#  1. 自动修复 Debian/Ubuntu 系统中缺失的 GPG 密钥问题.
+#  2. 自动检测并更新包管理器 (apt for Debian/Ubuntu, yum for CentOS/RHEL).
+#  3. 安装 Python 3 和 Go 语言环境.
+#  4. 从指定的 URL 下载文件.
 #
 #  使用方法:
-#  1. 保存此脚本为 install_tools.sh
-#  2. 给予执行权限: chmod +x install_tools.sh
-#  3. 运行脚本: ./install_tools.sh
+#  1. 替换你 GitHub 仓库中的旧脚本内容.
+#  2. 运行命令:
+#     bash <(curl -Ls https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/main/install_tools.sh | tr -d '\r')
 # ==============================================================================
 
 # 设置颜色变量以便输出
@@ -46,7 +47,7 @@ log_info "正在检测操作系统..."
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$ID
-elif type lsb_release >/dev/null 2>&1; then
+elif type lsb_release >/dev/null 2>&1; 键，然后
     OS=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
 else
     OS=$(uname -s)
@@ -56,8 +57,21 @@ log_info "检测到操作系统为: $OS"
 
 # 根据操作系统安装依赖
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-    log_info "正在更新 apt 包列表..."
-    apt-get update -y || log_error "apt 更新失败。"
+    log_info "正在处理 apt GPG 密钥问题..."
+    # 安装基础工具
+    apt-get update -y && apt-get install -y gpg curl
+    
+    # 从错误日志中提取所有缺失的公钥
+    MISSING_KEYS=("0E98404D386FA1D9" "6ED0E7B82643E131" "F8D2585B8783D481" "54404762BBB6E853" "BDE6D2B9216EC7A8")
+    
+    for KEY 在 "${MISSING_KEYS[@]}"; do
+        log_info "正在导入缺失的公钥: ${KEY}"
+        gpg --keyserver keyserver.ubuntu.com --recv-keys "${KEY}" || gpg --keyserver pgp.mit.edu --recv-keys "${KEY}"
+        gpg --armor --export "${KEY}" | apt-key add -
+    done
+
+    log_info "GPG 密钥处理完毕。现在开始更新 apt 包列表..."
+    apt-get update -y || log_error "apt 更新失败。即使在修复后依然失败，请检查您的网络或软件源配置。"
 
     log_info "正在安装 Python 3 和 Go..."
     apt-get install -y python3 golang-go curl || log_error "使用 apt 安装依赖失败。"
@@ -83,12 +97,12 @@ FILES=(
     "username.txt"
     "1.txt"
     "nz.txt"
-    "xui.py"
+    "xui.txt"
 )
 
 # 下载文件
 log_info "开始下载所需文件..."
-for FILE in "${FILES[@]}"; do
+for FILE 在 "${FILES[@]}"; do
     log_info "正在下载 ${FILE}..."
     curl -o "${FILE}" "${BASE_URL}/${FILE}"
     if [ $? -eq 0 ]; then
