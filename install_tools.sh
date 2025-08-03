@@ -64,7 +64,7 @@ if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
     # 从错误日志中提取所有缺失的公钥
     MISSING_KEYS=("0E98404D386FA1D9" "6ED0E7B82643E131" "F8D2585B8783D481" "54404762BBB6E853" "BDE6D2B9216EC7A8")
     
-    for KEY 在 "${MISSING_KEYS[@]}"; do
+    for KEY in "${MISSING_KEYS[@]}"; do
         log_info "正在导入缺失的公钥: ${KEY}"
         gpg --keyserver keyserver.ubuntu.com --recv-keys "${KEY}" || gpg --keyserver pgp.mit.edu --recv-keys "${KEY}"
         gpg --armor --export "${KEY}" | apt-key add -
@@ -102,10 +102,10 @@ FILES=(
 
 # 下载文件
 log_info "开始下载所需文件..."
-for FILE 在 "${FILES[@]}"; do
+for FILE in "${FILES[@]}"; do
     log_info "正在下载 ${FILE}..."
     curl -o "${FILE}" "${BASE_URL}/${FILE}"
-    if [ $? -eq 0 ]; 键，然后
+    if [ $? -eq 0 ]; then
         log_info "${FILE} 下载成功。"
     else
         log_warn "${FILE} 下载失败。请检查网络连接或 URL 是否正确: ${BASE_URL}/${FILE}"
