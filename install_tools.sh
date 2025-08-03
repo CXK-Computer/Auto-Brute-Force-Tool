@@ -97,7 +97,7 @@ FILES=(
     "username.txt"
     "1.txt"
     "nz.txt"
-    "xui.txt"
+    "xui.py"
 )
 
 # 下载文件
