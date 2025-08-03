@@ -88,10 +88,10 @@ FILES=(
 
 # 下载文件
 log_info "开始下载所需文件..."
-for FILE in "${FILES[@]}"; do
+for FILE 在 "${FILES[@]}"; do
     log_info "正在下载 ${FILE}..."
     curl -o "${FILE}" "${BASE_URL}/${FILE}"
-    if [ $? -eq 0 ]; then
+    if [ $? -eq 0 ]; 键，然后
         log_info "${FILE} 下载成功。"
     else
         log_warn "${FILE} 下载失败。请检查网络连接或 URL 是否正确: ${BASE_URL}/${FILE}"
@@ -102,5 +102,4 @@ log_info "所有任务已完成！"
 echo -e "${GREEN}=======================================================${NC}"
 echo -e "${GREEN} 环境已准备就绪，相关文件已下载到当前目录。 ${NC}"
 echo -e "${GREEN}=======================================================${NC}"
-
 
