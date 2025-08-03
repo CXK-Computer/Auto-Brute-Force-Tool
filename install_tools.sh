@@ -83,15 +83,15 @@ FILES=(
     "username.txt"
     "1.txt"
     "nz.txt"
-    "xui.txt"
+    "xui.py"
 )
 
 # 下载文件
 log_info "开始下载所需文件..."
-for FILE 在 "${FILES[@]}"; do
+for FILE in "${FILES[@]}"; do
     log_info "正在下载 ${FILE}..."
     curl -o "${FILE}" "${BASE_URL}/${FILE}"
-    if [ $? -eq 0 ]; 键，然后
+    if [ $? -eq 0 ]; then
         log_info "${FILE} 下载成功。"
     else
         log_warn "${FILE} 下载失败。请检查网络连接或 URL 是否正确: ${BASE_URL}/${FILE}"
