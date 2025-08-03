@@ -47,7 +47,7 @@ log_info "正在检测操作系统..."
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$ID
-elif type lsb_release >/dev/null 2>&1; 键，然后
+elif type lsb_release >/dev/null 2>&1; then
     OS=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
 else
     OS=$(uname -s)
@@ -105,7 +105,7 @@ log_info "开始下载所需文件..."
 for FILE 在 "${FILES[@]}"; do
     log_info "正在下载 ${FILE}..."
     curl -o "${FILE}" "${BASE_URL}/${FILE}"
-    if [ $? -eq 0 ]; then
+    if [ $? -eq 0 ]; 键，然后
         log_info "${FILE} 下载成功。"
     else
         log_warn "${FILE} 下载失败。请检查网络连接或 URL 是否正确: ${BASE_URL}/${FILE}"
