@@ -2416,7 +2416,8 @@ def check_environment():
             if capture_output:
                 return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8')
             else:
-                subprocess.run(cmd, check=check, shell=shell, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # 对于非捕获命令，显示输出以提供更多上下文
+                subprocess.run(cmd, check=check, shell=shell)
         except subprocess.CalledProcessError as e:
             if check:
                 raise e
@@ -2443,13 +2444,19 @@ def check_environment():
             print(f"sudo apt-get update && sudo apt-get install -y {' '.join(packages)}")
             sys.exit(1)
 
-    python_apt_packages = [
+    # --- 修改：增加ca-certificates ---
+    base_packages = [
         "python3-pip",
         "python3-requests",
         "python3-openpyxl",
-        "python3-psutil"
+        "python3-psutil",
+        "ca-certificates"
     ]
-    ensure_apt_packages(python_apt_packages)
+    ensure_apt_packages(base_packages)
+    print("--- 正在强制更新系统CA证书... ---")
+    run_cmd(["update-ca-certificates"])
+    print("--- CA证书更新完成 ---")
+
 
     def get_go_version():
         go_exec = shutil.which("go")
@@ -2473,10 +2480,9 @@ def check_environment():
             return
 
         print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
-        # --- 修改：确保tar和curl都已安装，并尝试卸载旧版golang ---
         ensure_apt_packages(["curl", "tar"])
         print("--- 正在尝试卸载系统自带的旧版Go... ---")
-        run_cmd(["apt-get", "remove", "-y", "golang-go"], check=False) # check=False因为包可能不存在
+        run_cmd(["apt-get", "remove", "-y", "golang-go"], check=False) 
         run_cmd(["apt-get", "autoremove", "-y"], check=False)
         print("--- 旧版Go清理完成 ---")
         
@@ -2492,13 +2498,14 @@ def check_environment():
 
         download_success = False
         for url in urls:
-            for attempt in range(3): # Retry up to 3 times
+            for attempt in range(3): 
                 print(f"--- 正在尝试从 {url} 下载Go安装包... (尝试 {attempt + 1}/3) ---")
                 try:
                     if os.path.exists(GO_TAR_PATH):
                         os.remove(GO_TAR_PATH)
 
-                    run_cmd(["curl", "-#", "-Lo", GO_TAR_PATH, url])
+                    # 使用带进度条的curl
+                    subprocess.run(["curl", "-#", "-Lo", GO_TAR_PATH, url], check=True)
                     
                     print("--- 正在校验文件完整性 (SHA256)... ---")
                     result = run_cmd(["sha256sum", GO_TAR_PATH], capture_output=True)
