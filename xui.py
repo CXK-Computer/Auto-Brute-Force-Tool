@@ -2410,9 +2410,13 @@ def check_environment():
     os.environ["GOPROXY"] = "https://goproxy.cn,direct" if IN_CHINA else "https://proxy.golang.org,direct"
     os.environ["GOSUMDB"] = "sum.golang.google.cn" if IN_CHINA else "sum.golang.org"
 
-    def run_cmd(cmd, check=True, shell=False):
+    def run_cmd(cmd, check=True, shell=False, capture_output=False):
         try:
-            subprocess.run(cmd, check=check, shell=shell, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # 根据是否需要捕获输出来决定参数
+            if capture_output:
+                return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8')
+            else:
+                subprocess.run(cmd, check=check, shell=shell, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             if check:
                 raise e
@@ -2469,9 +2473,13 @@ def check_environment():
             return
 
         print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
-        ensure_apt_packages(["curl"])
+        # --- 修改：确保tar和curl都已安装，并尝试卸载旧版golang ---
+        ensure_apt_packages(["curl", "tar"])
+        print("--- 正在尝试卸载系统自带的旧版Go... ---")
+        run_cmd(["apt-get", "remove", "-y", "golang-go"], check=False) # check=False因为包可能不存在
+        run_cmd(["apt-get", "autoremove", "-y"], check=False)
+        print("--- 旧版Go清理完成 ---")
         
-        # --- 修改：增加备用下载地址 ---
         urls = [
             "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz",
             "https://go-zh.org/dl/go1.22.1.linux-amd64.tar.gz"
@@ -2479,26 +2487,49 @@ def check_environment():
             "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"
         ]
         
+        GO_TAR_PATH = "/tmp/go.tar.gz"
+        GO_SHA256 = "91f1c81cc23385f768e8071a52f255ebb5224de528b35b542296f2648588f01b"
+
         download_success = False
         for url in urls:
-            print(f"--- 正在尝试从 {url} 下载Go安装包... ---")
-            try:
-                run_cmd(f"curl -Lo /tmp/go.tar.gz {url}", shell=True)
-                print(f"--- 从 {url} 下载成功 ---")
-                download_success = True
+            for attempt in range(3): # Retry up to 3 times
+                print(f"--- 正在尝试从 {url} 下载Go安装包... (尝试 {attempt + 1}/3) ---")
+                try:
+                    if os.path.exists(GO_TAR_PATH):
+                        os.remove(GO_TAR_PATH)
+
+                    run_cmd(["curl", "-#", "-Lo", GO_TAR_PATH, url])
+                    
+                    print("--- 正在校验文件完整性 (SHA256)... ---")
+                    result = run_cmd(["sha256sum", GO_TAR_PATH], capture_output=True)
+                    checksum = result.stdout.split()[0]
+                    if checksum == GO_SHA256:
+                        print("✅ 文件校验成功。")
+                        download_success = True
+                        break
+                    else:
+                        print(f"❌ 文件校验失败！期望值: {GO_SHA256}, 实际值: {checksum}")
+                        print(f"--- 从 {url} 下载的文件已损坏。将在3秒后重试... ---")
+                        time.sleep(3)
+
+                except Exception as e:
+                    print(f"--- 从 {url} 下载失败: {e}。将在3秒后重试... ---")
+                    time.sleep(3)
+            
+            if download_success:
                 break
-            except Exception:
-                print(f"--- 从 {url} 下载失败，尝试下一个地址... ---")
         
         if not download_success:
             print("❌ 所有Go安装包下载地址均尝试失败，请检查网络或镜像源。")
             sys.exit(1)
 
         try:
-            run_cmd("rm -rf /usr/local/go", shell=True)
-            run_cmd("tar -C /usr/local -xzf /tmp/go.tar.gz", shell=True)
-        except:
-            print("❌ 解压 Go 安装包失败。")
+            print("--- 正在解压Go安装包... ---")
+            run_cmd(["rm", "-rf", "/usr/local/go"])
+            run_cmd(["tar", "-C", "/usr/local", "-xzf", GO_TAR_PATH])
+            print("--- 解压成功 ---")
+        except Exception as e:
+            print(f"❌ 解压 Go 安装包失败: {e}")
             sys.exit(1)
 
         export_line = 'export PATH="/usr/local/go/bin:$PATH"'
@@ -2506,7 +2537,8 @@ def check_environment():
         
         try:
             with open(profile_path, "r+") as f:
-                if export_line not in f.read():
+                content = f.read()
+                if export_line not in content:
                     f.write(f"\\n{export_line}\\n")
                     print(f"✅ PATH 写入 {profile_path} 完成（系统级永久生效）")
                 else:
