@@ -2470,15 +2470,35 @@ def check_environment():
 
         print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
         ensure_apt_packages(["curl"])
+        
+        # --- 修改：增加备用下载地址 ---
+        urls = [
+            "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz",
+            "https://go-zh.org/dl/go1.22.1.linux-amd64.tar.gz"
+        ] if IN_CHINA else [
+            "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"
+        ]
+        
+        download_success = False
+        for url in urls:
+            print(f"--- 正在尝试从 {url} 下载Go安装包... ---")
+            try:
+                run_cmd(f"curl -Lo /tmp/go.tar.gz {url}", shell=True)
+                print(f"--- 从 {url} 下载成功 ---")
+                download_success = True
+                break
+            except Exception:
+                print(f"--- 从 {url} 下载失败，尝试下一个地址... ---")
+        
+        if not download_success:
+            print("❌ 所有Go安装包下载地址均尝试失败，请检查网络或镜像源。")
+            sys.exit(1)
 
-        url = "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz" if IN_CHINA \
-            else "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"
         try:
-            run_cmd(f"curl -Lo /tmp/go.tar.gz {url}", shell=True)
             run_cmd("rm -rf /usr/local/go", shell=True)
             run_cmd("tar -C /usr/local -xzf /tmp/go.tar.gz", shell=True)
         except:
-            print("❌ 下载或解压 Go 安装包失败，请检查网络或Go镜像源")
+            print("❌ 解压 Go 安装包失败。")
             sys.exit(1)
 
         export_line = 'export PATH="/usr/local/go/bin:$PATH"'
@@ -2578,13 +2598,15 @@ if __name__ == "__main__":
         TEMP_HMFAIL_DIR = "temp_hmfail"
 
         try:
+                
+                TEMPLATE_MODE = choose_template_mode()
+                
                 check_environment()
                 import psutil
                 from openpyxl import Workbook, load_workbook
                 from openpyxl.utils import get_column_letter
                 import requests
 
-                TEMPLATE_MODE = choose_template_mode()
 
                 os.makedirs(TEMP_PART_DIR, exist_ok=True)
                 os.makedirs(TEMP_XUI_DIR, exist_ok=True)
