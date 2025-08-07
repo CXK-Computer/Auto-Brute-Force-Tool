@@ -19,11 +19,6 @@ import (
 var XUI_SIGNATURES = []string{
 	`src="/assets/js/model/xray.js"`,
 	`href="/assets/ant-design-vue"`,
-	`location.href = basePath + 'panel/'`,
-	`location.href = basePath + 'xui/'`,
-	`-Login</title>`,
-	`<title>登录</title>`,
-	`<div id="app">`,
 }
 
 // AppConfig 结构体用于存储应用程序的配置
