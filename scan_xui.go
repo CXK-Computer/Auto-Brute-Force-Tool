@@ -17,8 +17,10 @@ import (
 
 // XUI_SIGNATURES 存放了用于识别 x-ui 面板的特征字符串
 var XUI_SIGNATURES = []string{
-	`src="/assets/js/model/xray.js"`,
-	`href="/assets/ant-design-vue"`,
+	`src="/assets/js/model/xray.js`,
+	`href="/assets/ant-design-vue`,
+	`location.href = basePath + 'panel/'`,
+	`location.href = basePath + 'xui/'`,
 }
 
 // AppConfig 结构体用于存储应用程序的配置
