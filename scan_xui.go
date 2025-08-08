@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil" // 引入 ioutil 包以兼容旧版 Go
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 )
 
 // XUI_SIGNATURES 存放了用于识别 x-ui 面板的特征字符串
+// 修正了特征码，移除了末尾的双引号以提高匹配灵活性，使其与原始 Python 脚本行为一致
 var XUI_SIGNATURES = []string{
 	`src="/assets/js/model/xray.js`,
 	`href="/assets/ant-design-vue`,
@@ -25,9 +27,10 @@ var XUI_SIGNATURES = []string{
 
 // AppConfig 结构体用于存储应用程序的配置
 type AppConfig struct {
-	FilePath    string
-	Concurrency int
-	Timeout     time.Duration
+	FilePath       string
+	OutputFilePath string
+	Concurrency    int
+	Timeout        time.Duration
 }
 
 // main 是程序的入口函数
@@ -41,31 +44,41 @@ func main() {
 		log.Fatalf("配置错误: %v", err)
 	}
 
-	var wg sync.WaitGroup
-	// 创建一个带缓冲的 channel 用于分发任务。
-	// 这确保了程序在低内存环境下也能高效运行，因为任务是流式处理的，
-	// 不会将整个文件加载到内存中。
+	// --- 设置并发任务和结果通道 ---
+	var workerWg sync.WaitGroup
+	var writerWg sync.WaitGroup
 	jobs := make(chan string, config.Concurrency)
+	results := make(chan string, config.Concurrency)
 	var processedCounter int64
 
-	// 启动指定数量的 worker goroutine
+	// --- 启动文件写入协程 ---
+	outputFile, err := os.OpenFile(config.OutputFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("无法打开结果文件: %v", err)
+	}
+	defer outputFile.Close()
+
+	writerWg.Add(1)
+	go fileWriter(&writerWg, results, outputFile)
+
+	// --- 启动扫描工作协程 ---
 	log.Printf("启动 %d 个扫描协程...", config.Concurrency)
 	for i := 1; i <= config.Concurrency; i++ {
-		wg.Add(1)
-		go worker(i, &wg, jobs, config.Timeout, &processedCounter)
+		workerWg.Add(1)
+		go worker(&workerWg, jobs, results, config.Timeout, &processedCounter)
 	}
 
-	// 在一个单独的 goroutine 中读取文件并发送任务，这样主 goroutine 可以用于显示进度
+	// --- 读取输入文件并分发任务 ---
 	go func() {
-		file, err := os.Open(config.FilePath)
+		inputFile, err := os.Open(config.FilePath)
 		if err != nil {
 			log.Printf("错误: 无法打开文件 '%s': %v", config.FilePath, err)
-			close(jobs) // 发生错误时关闭 channel，以允许程序退出
+			close(jobs)
 			return
 		}
-		defer file.Close()
+		defer inputFile.Close()
 
-		scanner := bufio.NewScanner(file)
+		scanner := bufio.NewScanner(inputFile)
 		for scanner.Scan() {
 			line := scanner.Text()
 			target := parseLine(line)
@@ -77,16 +90,15 @@ func main() {
 		if err := scanner.Err(); err != nil {
 			log.Printf("读取文件时发生错误: %v", err)
 		}
-
-		// 文件读取完毕，关闭 jobs channel，通知 worker 没有更多任务
-		close(jobs)
+		close(jobs) // 文件读取完毕，关闭 jobs channel
 	}()
 
-	// 进度报告逻辑
+	// --- 等待与进度报告 ---
 	log.Println("扫描已开始...")
 	done := make(chan struct{})
 	go func() {
-		wg.Wait()
+		workerWg.Wait() // 等待所有扫描任务完成
+		close(results)  // 关闭结果通道，通知写入协程可以结束
 		close(done)
 	}()
 
@@ -96,13 +108,24 @@ func main() {
 	for {
 		select {
 		case <-done:
-			// 换行以避免覆盖最终的完成信息
-			fmt.Println()
+			writerWg.Wait() // 确保文件写入已全部完成
+			fmt.Println()   // 换行以避免覆盖最终的完成信息
 			log.Printf("已处理 %d 个目标。扫描完成。", atomic.LoadInt64(&processedCounter))
+			log.Printf("成功的结果已保存到 %s", config.OutputFilePath)
 			return
 		case <-ticker.C:
-			// 使用 \r 回车符将光标移到行首，实现单行动态刷新进度
 			fmt.Printf("\r已处理: %d", atomic.LoadInt64(&processedCounter))
+		}
+	}
+}
+
+// fileWriter 从结果通道读取数据并写入文件
+func fileWriter(wg *sync.WaitGroup, results <-chan string, file *os.File) {
+	defer wg.Done()
+	for result := range results {
+		_, err := file.WriteString(result + "\n")
+		if err != nil {
+			log.Printf("\n写入文件错误: %v", err)
 		}
 	}
 }
@@ -110,15 +133,11 @@ func main() {
 // parseLine 解析输入行，支持 'ip:port' 和 masscan 格式
 func parseLine(line string) string {
 	line = strings.TrimSpace(line)
-	// 忽略空行和注释行
 	if line == "" || strings.HasPrefix(line, "#") {
 		return ""
 	}
-
-	// 检查是否为 Masscan 格式
 	if strings.HasPrefix(line, "Host:") {
 		parts := strings.Fields(line)
-		// "Host:", "1.2.3.4", "()", "Ports:", "54321/open/tcp////"
 		if len(parts) >= 5 && parts[3] == "Ports:" {
 			ip := parts[1]
 			portPart := strings.Split(parts[4], "/")[0]
@@ -126,8 +145,6 @@ func parseLine(line string) string {
 		}
 		return ""
 	}
-
-	// 否则，假定为 'ip:port' 格式
 	return line
 }
 
@@ -136,7 +153,7 @@ func getUserConfig() (AppConfig, error) {
 	config := AppConfig{}
 	reader := bufio.NewReader(os.Stdin)
 
-	// 1. 获取文件路径
+	// 1. 获取输入文件路径
 	fmt.Print("请输入包含目标列表的文件路径 (ip:port 或 masscan 格式): ")
 	filePath, err := reader.ReadString('\n')
 	if err != nil {
@@ -144,7 +161,20 @@ func getUserConfig() (AppConfig, error) {
 	}
 	config.FilePath = strings.TrimSpace(filePath)
 
-	// 2. 获取并发数 (即用户理解的“线程数”)
+	// 2. 获取输出文件路径
+	fmt.Print("请输入结果保存文件名 (默认 results.txt): ")
+	outputFilePath, err := reader.ReadString('\n')
+	if err != nil {
+		return config, fmt.Errorf("读取文件名失败: %w", err)
+	}
+	outputFilePath = strings.TrimSpace(outputFilePath)
+	if outputFilePath == "" {
+		config.OutputFilePath = "results.txt"
+	} else {
+		config.OutputFilePath = outputFilePath
+	}
+
+	// 3. 获取并发数
 	fmt.Print("请输入并发协程数 (默认 100): ")
 	concurrencyStr, err := reader.ReadString('\n')
 	if err != nil {
@@ -161,7 +191,7 @@ func getUserConfig() (AppConfig, error) {
 		config.Concurrency = concurrency
 	}
 
-	// 3. 获取超时时间
+	// 4. 获取超时时间
 	fmt.Print("请输入网络超时时间（秒，默认 5）: ")
 	timeoutStr, err := reader.ReadString('\n')
 	if err != nil {
@@ -183,33 +213,30 @@ func getUserConfig() (AppConfig, error) {
 }
 
 // worker 是执行扫描任务的协程
-func worker(id int, wg *sync.WaitGroup, jobs <-chan string, timeout time.Duration, counter *int64) {
+func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeout time.Duration, counter *int64) {
 	defer wg.Done()
-
 	client := &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
-
 	for target := range jobs {
-		checkTarget(target, client)
-		// 使用原子操作安全地增加计数器
+		checkTarget(target, client, results)
 		atomic.AddInt64(counter, 1)
 	}
 }
 
 // checkTarget 对单个目标进行 HTTP 请求并检查响应内容
-func checkTarget(target string, client *http.Client) {
+func checkTarget(target string, client *http.Client, results chan<- string) {
 	if target == "" {
 		return
 	}
-	checkProtocol("http", target, client)
+	checkProtocol("http", target, client, results)
 }
 
 // checkProtocol 封装了检查特定协议的逻辑
-func checkProtocol(protocol, target string, client *http.Client) {
+func checkProtocol(protocol, target string, client *http.Client, results chan<- string) {
 	url := fmt.Sprintf("%s://%s", protocol, target)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -225,17 +252,16 @@ func checkProtocol(protocol, target string, client *http.Client) {
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		limitedReader := &io.LimitedReader{R: resp.Body, N: 4096}
-		body, err := io.ReadAll(limitedReader)
+		body, err := ioutil.ReadAll(limitedReader)
 		if err != nil {
 			return
 		}
-
 		content := string(body)
 		for _, signature := range XUI_SIGNATURES {
 			if strings.Contains(content, signature) {
-				// 成功找到后换行打印，避免被进度条覆盖
 				fmt.Println()
 				log.Printf("[成功] 发现x-ui面板: %s (特征: %s)", url, signature)
+				results <- target // 将成功结果发送到文件写入通道
 				return
 			}
 		}
