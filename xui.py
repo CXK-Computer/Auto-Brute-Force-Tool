@@ -4,6 +4,7 @@ import subprocess
 import time
 import shutil
 import sys
+import atexit
 
 # 依赖将在check_environment()中通过apt安装，这里仅做导入
 try:
@@ -19,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板1内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -31,10 +32,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -43,6 +46,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -89,7 +93,12 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 	
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return // 收到关闭信号，不再处理新任务
+	case semaphore <- struct{}{}:
+		// 获取到信号量，继续执行
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -183,11 +192,22 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return // 收到关闭信号，停止更新进度
 		}
 	}
 }
 
 func main() {
+	// 设置信号处理
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -230,7 +250,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板2内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -242,10 +262,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -254,6 +276,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -303,7 +326,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 	
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -397,11 +424,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -444,7 +481,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板3内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -456,10 +493,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -468,6 +507,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -519,7 +559,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -604,11 +648,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -651,7 +705,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板4内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -663,10 +717,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -675,6 +731,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -729,7 +786,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -819,11 +880,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -866,7 +937,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板5内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -878,10 +949,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -890,6 +963,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -942,7 +1016,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -1028,11 +1106,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -1075,7 +1163,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板6内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1083,10 +1171,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -1097,6 +1187,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
@@ -1163,7 +1254,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -1282,6 +1377,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
@@ -1435,6 +1532,14 @@ func recordFailure(ip, port, username, password, reason string) {
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 
 RETRY:
@@ -1489,10 +1594,8 @@ RETRY:
 	time.Sleep(1 * time.Second)
 	fmt.Println("\\n全部处理完成！")
 }
-
-
 '''
-# =========================== xui.go模板7内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板7内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1503,10 +1606,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -1515,6 +1620,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 const (
 	timeoutSeconds = 10
@@ -1614,7 +1720,11 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -1671,11 +1781,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	outputFile := "xui.txt"
 	passwords := {pass_list}
@@ -1720,7 +1840,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (增加FreeOSMemory) ===========================
+# =========================== xui.go模板8内容 (增加FreeOSMemory和优雅退出) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1730,10 +1850,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -1742,6 +1864,7 @@ var semaphore = make(chan struct{}, {semaphore_size})
 var completedCount int64
 var totalTasks int64
 var startTime time.Time
+var shutdownRequest = make(chan struct{})
 
 var client = &http.Client{
     Timeout: 10 * time.Second,
@@ -1796,7 +1919,11 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		wg.Done()
 	}()
 
-	semaphore <- struct{}{}
+	select {
+	case <-shutdownRequest:
+		return
+	case semaphore <- struct{}{}:
+	}
 
 	targets := []string{}
 
@@ -1903,11 +2030,21 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-shutdownRequest:
+			return
 		}
 	}
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
+		close(shutdownRequest)
+	}()
+
 	inputFile := "results.txt"
 	batch, err := readLines(inputFile)
 	if err != nil {
@@ -1949,7 +2086,6 @@ func main() {
 	time.Sleep(1 * time.Second)
 	fmt.Println("\\n全部处理完成！")
 }
-
 '''
 # =========================== ipcx.py 内容 (无变化) ===========================
 IPCX_PY_CONTENT = r"""import requests
@@ -2077,9 +2213,7 @@ if __name__ == "__main__":
     process_ip_port_file('xui.txt', 'xui.xlsx')
 
 """
-
-# =========================== 主脚本部分 (已修复并优化) ===========================
-
+# =========================== 主脚本优化部分 ===========================
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
     return int(user_input) if user_input.isdigit() else default
@@ -2217,21 +2351,101 @@ def compile_go_program():
         print("编译失败，请检查Go环境和代码。")
         sys.exit(1)
 
+def adjust_oom_score():
+    """
+    尝试调整当前进程的oom_score_adj，使其更不容易被OOM Killer选中。
+    需要root权限才能设置负值。
+    """
+    if sys.platform != "linux":
+        return
+    
+    try:
+        pid = os.getpid()
+        oom_score_adj_path = f"/proc/{pid}/oom_score_adj"
+        if os.path.exists(oom_score_adj_path):
+            with open(oom_score_adj_path, "w") as f:
+                f.write("-500")
+            print("✅ 成功调整OOM Score，降低被系统杀死的概率。")
+    except PermissionError:
+        print("⚠️  调整OOM Score失败：权限不足。建议使用root用户运行以获得最佳稳定性。")
+    except Exception as e:
+        print(f"⚠️  调整OOM Score时发生未知错误: {e}")
+
+def check_and_manage_swap():
+    """检查并管理Swap交换文件"""
+    if sys.platform != "linux":
+        return
+
+    try:
+        swap_info = psutil.swap_memory()
+        if swap_info.total > 0:
+            print(f"✅ 检测到已存在的Swap空间，大小: {swap_info.total / 1024 / 1024:.2f} MiB。")
+            return
+
+        print("⚠️  警告：未检测到活动的Swap交换空间。在高负载下，这会极大地增加进程被系统杀死的风险。")
+        choice = input("❓ 是否要创建一个2GB的临时Swap文件来提高稳定性？(y/N): ").strip().lower()
+        
+        if choice == 'y':
+            swap_file = "/tmp/autoswap.img"
+            print(f"--- 正在创建2GB Swap文件: {swap_file} (可能需要一些时间)... ---")
+            
+            # 使用fallocate（如果可用）或dd创建文件
+            if shutil.which("fallocate"):
+                subprocess.run(["fallocate", "-l", "2G", swap_file], check=True)
+            else:
+                subprocess.run(["dd", "if=/dev/zero", f"of={swap_file}", "bs=1M", "count=2048"], check=True, capture_output=True)
+            
+            subprocess.run(["chmod", "600", swap_file], check=True)
+            subprocess.run(["mkswap", swap_file], check=True)
+            subprocess.run(["swapon", swap_file], check=True)
+            
+            # 注册一个退出时自动清理的函数
+            atexit.register(cleanup_swap, swap_file)
+            
+            print(f"✅ 成功创建并启用了2GB Swap文件: {swap_file}")
+            print("   该文件将在脚本退出时自动被禁用和删除。")
+
+    except Exception as e:
+        print(f"❌ Swap文件管理失败: {e}")
+        print("   请检查权限或手动创建Swap。脚本将继续运行，但稳定性可能受影响。")
+
+def cleanup_swap(swap_file):
+    """在脚本退出时清理Swap文件"""
+    print(f"\n--- 正在禁用和清理临时Swap文件: {swap_file} ---")
+    try:
+        subprocess.run(["swapoff", swap_file], check=False)
+        os.remove(swap_file)
+        print("✅ 临时Swap文件已成功清理。")
+    except Exception as e:
+        print(f"⚠️ 清理Swap文件失败: {e}")
+
+
 def run_xui_for_parts(sleep_seconds, executable_name):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
     total_parts = len(part_files)
     start_time = time.time()
 
     total_memory = psutil.virtual_memory().total
-    # --- 修改：使用更保守的80%内存限制 ---
-    mem_limit = int(total_memory * 0.8 / 1024 / 1024)
-    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的80%)")
+    # --- 修改：使用更保守的75%内存限制 ---
+    mem_limit = int(total_memory * 0.75 / 1024 / 1024)
+    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的75%)")
     
     run_env = os.environ.copy()
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
 
 
     for idx, part in enumerate(part_files, 1):
+        # ================== 动态资源监控 ==================
+        while True:
+            mem_info = psutil.virtual_memory()
+            available_percent = mem_info.available / mem_info.total * 100
+            if available_percent < 15:
+                print(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
+                time.sleep(60)
+            else:
+                break
+        # ================================================
+
         elapsed = time.time() - start_time
         avg_time_per_part = elapsed / (idx -1) if idx > 1 else 0
         remaining_parts = total_parts - (idx -1)
@@ -2248,8 +2462,14 @@ def run_xui_for_parts(sleep_seconds, executable_name):
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
             
+            # --- 使用nice和ionice调整优先级 ---
+            cmd = []
+            if sys.platform == "linux":
+                cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
+            cmd.append('./' + executable_name)
+
             result = subprocess.run(
-                ['./' + executable_name],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -2412,11 +2632,9 @@ def check_environment():
 
     def run_cmd(cmd, check=True, shell=False, capture_output=False):
         try:
-            # 根据是否需要捕获输出来决定参数
             if capture_output:
                 return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8')
             else:
-                # 对于非捕获命令，显示输出以提供更多上下文
                 subprocess.run(cmd, check=check, shell=shell)
         except subprocess.CalledProcessError as e:
             if check:
@@ -2444,7 +2662,6 @@ def check_environment():
             print(f"sudo apt-get update && sudo apt-get install -y {' '.join(packages)}")
             sys.exit(1)
 
-    # --- 修改：增加ca-certificates ---
     base_packages = [
         "python3-pip",
         "python3-requests",
@@ -2504,7 +2721,6 @@ def check_environment():
                     if os.path.exists(GO_TAR_PATH):
                         os.remove(GO_TAR_PATH)
 
-                    # 使用带进度条的curl
                     subprocess.run(["curl", "-#", "-Lo", GO_TAR_PATH, url], check=True)
                     
                     print("✅ 文件下载完成，跳过校验。")
@@ -2622,14 +2838,15 @@ if __name__ == "__main__":
         interrupted = False
         final_result_file = None
         
-        # --- 修复：将临时目录变量定义在try块外部 ---
         TEMP_PART_DIR = "temp_parts"
         TEMP_XUI_DIR = "xui_outputs"
         TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
         TEMP_HMFAIL_DIR = "temp_hmfail"
 
         try:
-                
+                adjust_oom_score()
+                check_and_manage_swap()
+
                 TEMPLATE_MODE = choose_template_mode()
                 
                 check_environment()
@@ -2727,7 +2944,6 @@ if __name__ == "__main__":
                 print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
                 interrupted = True
         except SystemExit as e:
-                # 捕获由 check_environment 触发的退出
                 print(f"\\n脚本因环境问题中止。")
         finally:
                 clean_temp_files()
