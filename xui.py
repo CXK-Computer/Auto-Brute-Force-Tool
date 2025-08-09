@@ -2536,13 +2536,22 @@ def compile_go_program():
         executable_name += ".exe"
 
     print("--- 正在编译Go程序... ---")
+    
+    # 为Go命令创建一个保证有HOME变量的环境
+    go_env = os.environ.copy()
+    if 'HOME' not in go_env:
+        go_env['HOME'] = '/tmp'
+    if 'GOCACHE' not in go_env:
+        go_env['GOCACHE'] = '/tmp/.cache/go-build'
+
     try:
         result = subprocess.run(
             [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
             capture_output=True,
             text=True,
             check=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            env=go_env
         )
         if result.stderr:
             print("--- Go编译器警告 ---")
@@ -2831,14 +2840,18 @@ def check_environment(template_mode):
             print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl")
         return
 
-    def run_cmd(cmd, check=True, shell=False, capture_output=False, quiet=False):
+    def run_cmd(cmd, check=True, shell=False, capture_output=False, quiet=False, extra_env=None):
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        
         stdout = subprocess.DEVNULL if quiet else None
         stderr = subprocess.DEVNULL if quiet else None
         try:
             if capture_output:
-                return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8')
+                return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8', env=env)
             else:
-                subprocess.run(cmd, check=check, shell=shell, stdout=stdout, stderr=stderr)
+                subprocess.run(cmd, check=check, shell=shell, stdout=stdout, stderr=stderr, env=env)
         except subprocess.CalledProcessError as e:
             if check: raise e
         except FileNotFoundError:
@@ -2913,12 +2926,18 @@ def check_environment(template_mode):
 
         os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
     
+    go_env = os.environ.copy()
+    if 'HOME' not in go_env:
+        go_env['HOME'] = '/tmp'
+    if 'GOCACHE' not in go_env:
+        go_env['GOCACHE'] = '/tmp/.cache/go-build'
+
     if template_mode == 6:
         sys.stdout.write("    - 正在安装SSH模块...")
         sys.stdout.flush()
         if not os.path.exists("go.mod"):
-            run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True)
-        run_cmd([GO_EXEC, "get", "golang.org/x/crypto/ssh"], quiet=True)
+            run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True, extra_env=go_env)
+        run_cmd([GO_EXEC, "get", "golang.org/x/crypto/ssh"], quiet=True, extra_env=go_env)
         print(" 完成")
 
     print(">>> 环境依赖检测完成 ✅\\n")
