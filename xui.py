@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板1内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // 引入pprof
 	"net/url"
@@ -279,7 +278,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板2内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -288,7 +287,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -540,7 +538,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板3内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -549,7 +547,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -794,7 +791,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板4内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -803,7 +800,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -1054,7 +1050,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板5内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -1063,7 +1059,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -1308,7 +1303,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (增加强制GC) ===========================
+# =========================== xui.go模板6内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1757,7 +1752,7 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板7内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -2023,7 +2018,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板8内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
