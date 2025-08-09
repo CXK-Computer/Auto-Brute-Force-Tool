@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (增加sync.Pool和pprof) ===========================
+# =========================== xui.go模板1内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -167,61 +167,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -266,7 +233,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress() // 注释掉此行
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -278,7 +245,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板2内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -427,61 +394,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -526,7 +460,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -538,7 +472,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板3内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -680,61 +614,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -779,7 +680,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -791,7 +692,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板4内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -939,61 +840,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -1038,7 +906,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -1050,7 +918,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板5内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -1192,61 +1060,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -1291,7 +1126,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -1303,7 +1138,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板6内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1465,76 +1300,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-var lastCompletedCount int64
-var lastUpdateTime time.Time
-
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				lastUpdateTime = time.Now()
-				lastCompletedCount = count
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-			
-			if count == lastCompletedCount && time.Since(lastUpdateTime) > 60*time.Second {
-				fmt.Println("\\n进度卡住，重新开始当前任务")
-				triggerFileCleanUp()
-				return
-			}
-
-			lastCompletedCount = count
-			lastUpdateTime = time.Now()
-
 			if count >= totalTasks {
-				fmt.Println("\\n进度完成！")
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 var retryFlag = false
 
@@ -1722,11 +1509,8 @@ RETRY:
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
 	completedCount = 0
-	lastCompletedCount = 0
-	lastUpdateTime = time.Now()
-	retryFlag = false
-
-	go updateProgress()
+	
+	// go updateProgress()
 
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -1752,7 +1536,7 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板7内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1900,61 +1684,28 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -1999,7 +1750,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -2018,7 +1769,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板8内容 (注释掉进度打印) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -2173,61 +1924,28 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-func triggerFreeOSMemory() {
-	fmt.Println("\\n[SYSTEM] 正在尝试将未使用的内存返还给操作系统...")
-	debug.FreeOSMemory()
-	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
-}
-
-func triggerGC() {
-	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
-	runtime.GC()
-	fmt.Printf("\\r[SYSTEM] GC完成。")
-}
-
+/*
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
-	memFreeTicker := time.NewTicker(2 * time.Minute)
-	defer memFreeTicker.Stop()
-	gcTicker := time.NewTicker(30 * time.Second)
-	defer gcTicker.Stop()
 
 	for {
 		select {
 		case <-progressTicker.C:
 			count := atomic.LoadInt64(&completedCount)
-			if totalTasks == 0 {
-				fmt.Printf("\\r没有任务可处理...")
-				continue
-			}
-			percent := float64(count) / float64(totalTasks) * 100
-			elapsed := int(time.Since(startTime).Seconds())
-
-			if count == 0 {
+			if totalTasks > 0 {
+				percent := float64(count) / float64(totalTasks) * 100
 				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-				continue
 			}
-			
-			if totalTasks > count {
-				remaining := int(float64(elapsed)/float64(count)*(float64(totalTasks)-float64(count)))
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 预计剩余: %d分%d秒", count, totalTasks, percent, remaining/60, remaining%60)
-			} else {
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%) 全部完成", count, totalTasks, percent)
-			}
-
 			if count >= totalTasks {
 				return
 			}
-		case <-memFreeTicker.C:
-			triggerFreeOSMemory()
-		case <-gcTicker.C:
-			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
 	}
 }
+*/
 
 func main() {
 	go func() {
@@ -2272,7 +1990,7 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	go updateProgress()
+	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
