@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板1内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -2284,11 +2284,12 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== ipcx.py 内容 (无变化) ===========================
+# =========================== ipcx.py 内容 (增加tqdm风格进度条) ===========================
 IPCX_PY_CONTENT = r"""import requests
 import time
 import os
 import re
+import sys
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
@@ -2323,11 +2324,6 @@ def get_ip_info(ip_port, retries=3):
                 return [f"{ip}:{port}" if port else ip, 'N/A', 'N/A', 'N/A', 'N/A']
     return [f"{ip}:{port}" if port else ip, 'N/A', 'N/A', 'N/A', 'N/A']
 
-def format_time(seconds):
-    minutes = int(seconds) // 60
-    seconds = int(seconds) % 60
-    return f"{minutes}分钟{seconds}秒"
-
 def adjust_column_width(ws):
     for col in ws.columns:
         max_length = 0
@@ -2344,24 +2340,43 @@ def adjust_column_width(ws):
         adjusted_width = max_length + 2
         ws.column_dimensions[column_letter].width = adjusted_width
 
-
-
 def extract_ip_port(url):
     match = re.search(r'https?://([^/\s]+)', url)
     if match:
         return match.group(1)
     
     if ':' in url:
-        
         return url.split()[0]
    
     return url.split()[0]
+
+def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
+    elapsed_time = time.time() - start_time
+    percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+
+    if iteration > 0 and elapsed_time > 0:
+        its_per_sec = iteration / elapsed_time
+        remaining_time = (total - iteration) / its_per_sec
+        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
+    else:
+        its_per_sec = 0
+        eta_str = "??:??"
+
+    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
+    
+    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
+    
+    sys.stdout.write(progress_str)
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write('\n')
 
 def process_ip_port_file(input_file, output_excel):
     with open(input_file, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
     total_tasks = len(lines)
-    completed_tasks = 0
     start_time = time.time()
 
     headers = ['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP']
@@ -2375,7 +2390,9 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    for line in lines:
+    print_progress_bar(0, total_tasks, start_time, prefix='IP信息查询', suffix='开始...')
+    for i, line in enumerate(lines):
+        completed_tasks = i + 1
         parts = line.split()
         if len(parts) >= 3:
             addr, user, passwd = parts[:3]
@@ -2393,17 +2410,9 @@ def process_ip_port_file(input_file, output_excel):
         adjust_column_width(ws)
         wb.save(output_excel)
 
-        completed_tasks += 1
-        elapsed_time = time.time() - start_time
-        avg_time_per_task = elapsed_time / completed_tasks if completed_tasks > 0 else 0
-        remaining_tasks = total_tasks - completed_tasks
-        estimated_remaining_time = avg_time_per_task * remaining_tasks
-
-        percent = (completed_tasks / total_tasks) * 100
-        eta = format_time(estimated_remaining_time)
-        print(f"\\r处理进度: {completed_tasks}/{total_tasks} ({percent:.2f}%) 预计剩余时间: {eta}", end='', flush=True)
+        print_progress_bar(completed_tasks, total_tasks, start_time, prefix='IP信息查询', suffix=f'{ip_port}')
         time.sleep(1.5)
-    print("\\n全部处理完成！")
+    print("\nIP信息查询完成！")
 
 
 if __name__ == "__main__":
@@ -2616,6 +2625,39 @@ def cleanup_swap(swap_file):
     except Exception as e:
         print(f"⚠️ 清理Swap文件失败: {e}")
 
+def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
+    """
+    仿tqdm风格的进度条打印函数
+    """
+    elapsed_time = time.time() - start_time
+    # 防止 total 为 0
+    if total == 0:
+        percent_str = "100.0"
+        iteration = total
+    else:
+        percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
+    
+    filled_length = int(length * iteration // total) if total > 0 else length
+    bar = fill * filled_length + '-' * (length - filled_length)
+
+    # 计算速率和剩余时间
+    if iteration > 0 and elapsed_time > 0:
+        its_per_sec = iteration / elapsed_time
+        remaining_time = (total - iteration) / its_per_sec
+        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
+    else:
+        its_per_sec = 0
+        eta_str = "??:??"
+
+    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
+    
+    # 构建输出字符串, 增加空格以覆盖旧行
+    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
+    
+    sys.stdout.write(progress_str)
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write('\n')
 
 def run_xui_for_parts(sleep_seconds, executable_name):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
@@ -2633,7 +2675,7 @@ def run_xui_for_parts(sleep_seconds, executable_name):
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-
+    print_progress_bar(0, total_parts, start_time, prefix='爆破进度', suffix='开始...')
     for idx, part in enumerate(part_files, 1):
         # ================== 动态资源监控 ==================
         while True:
@@ -2646,19 +2688,10 @@ def run_xui_for_parts(sleep_seconds, executable_name):
                 break
         # ================================================
 
-        elapsed = time.time() - start_time
-        avg_time_per_part = elapsed / (idx -1) if idx > 1 else 0
-        remaining_parts = total_parts - (idx -1)
-        est_remaining_time = avg_time_per_part * remaining_parts
-        est_min = int(est_remaining_time) // 60
-        est_sec = int(est_remaining_time) % 60
-
-        print(f"爆破 {part} ({idx}/{total_parts}) 预计剩余时间: {est_min} 分 {est_sec} 秒")
-
         shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
 
         try:
-            print(f"--- 正在运行已编译的程序进行爆破: {part} ---")
+            # print(f"--- 正在运行已编译的程序进行爆破: {part} ---")
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
             
@@ -2667,45 +2700,43 @@ def run_xui_for_parts(sleep_seconds, executable_name):
                 cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
             cmd.append('./' + executable_name)
 
-            result = subprocess.run(
+            # 使用 Popen 而不是 run 来实时读取输出
+            process = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                check=True,
                 encoding='utf-8',
                 env=run_env
             )
-            if result.stdout:
-                print("--- 程序输出 ---")
-                for line in result.stdout.splitlines():
-                    if not line.startswith('\\r'):
-                        print(line)
-                print("--------------------")
+            
+            # 实时显示Go程序的输出
+            for line in iter(process.stdout.readline, ''):
+                if not line.strip().startswith('\r'):
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+
+            process.wait()
+            if process.returncode != 0:
+                 raise subprocess.CalledProcessError(process.returncode, cmd)
+
 
         except subprocess.CalledProcessError as e:
-            print(f"--- 程序执行失败: {part} ---")
+            print(f"\n--- 程序执行失败: {part} ---")
             print(f"返回码: {e.returncode}")
-            print("--- 标准输出 ---")
-            print(e.stdout)
-            print("--- 错误输出 ---")
-            print(e.stderr)
-            print("--------------------------")
-            print("程序运行失败，请查看上面的错误输出。")
             sys.exit(1)
 
 
         output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
         if os.path.exists('xui.txt'):
             shutil.move('xui.txt', output_file)
-        else:
-            print(f"第 {idx} 批无爆破成功结果（未生成 xui.txt）")
-
+        
         if os.path.exists("hmsuccess.txt"):
             shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess{idx}.txt"))
         if os.path.exists("hmfail.txt"):
             shutil.move("hmfail.txt", os.path.join(TEMP_HMFAIL_DIR, f"hmfail{idx}.txt"))
 
-
+        print_progress_bar(idx, total_parts, start_time, prefix='爆破进度', suffix=f'已完成: {part}')
         time.sleep(sleep_seconds)
 
 
@@ -2780,7 +2811,7 @@ def choose_template_mode():
         else:
             print("输入无效，请重新输入。")
 
-def check_environment():
+def check_environment(template_mode):
     import importlib.util
     import subprocess
     import sys
@@ -2797,89 +2828,49 @@ def check_environment():
             print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl")
         return
 
-    print(">>> 正在执行网络预检...")
-    try:
-        import socket
-        socket.create_connection(("www.google.com", 80), timeout=5)
-        print("✅ 网络预检成功：可以访问外部网络。")
-    except OSError as e:
-        print(f"❌ 网络预检失败: {e}")
-        print("这通常是DNS解析问题或网络防火墙导致。请检查您的网络设置，特别是 /etc/resolv.conf 文件。")
-        sys.exit(1)
-    
-    go_cache_dir = "/tmp/gocache"
-    os.makedirs(go_cache_dir, exist_ok=True)
-    os.environ["GOCACHE"] = go_cache_dir
-    
-    print(">>> 正在检测网络位置...\\n")
-
-    def is_china_by_ping_ttl_delay_only():
-        system = platform.system()
-        cmd = ["ping", "-n", "1", "-w", "1000", "www.google.com"] if system == "Windows" \
-            else ["ping", "-c", "1", "-W", "1", "www.google.com"]
-        try:
-            subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode()
-            return True
-        except:
-            return False
-
-    IN_CHINA = is_china_by_ping_ttl_delay_only()
-    print(f">>> 网络环境判断结果：{'中国大陆（使用国内镜像）' if IN_CHINA else '非中国大陆（使用官方源）'}\\n")
-
-    os.environ["GOPROXY"] = "https://goproxy.cn,direct" if IN_CHINA else "https://proxy.golang.org,direct"
-    os.environ["GOSUMDB"] = "sum.golang.google.cn" if IN_CHINA else "sum.golang.org"
-
-    def run_cmd(cmd, check=True, shell=False, capture_output=False):
+    def run_cmd(cmd, check=True, shell=False, capture_output=False, quiet=False):
+        stdout = subprocess.DEVNULL if quiet else None
+        stderr = subprocess.DEVNULL if quiet else None
         try:
             if capture_output:
                 return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8')
             else:
-                subprocess.run(cmd, check=check, shell=shell)
+                subprocess.run(cmd, check=check, shell=shell, stdout=stdout, stderr=stderr)
         except subprocess.CalledProcessError as e:
-            if check:
-                raise e
+            if check: raise e
         except FileNotFoundError:
             print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
             raise
 
+    print(">>> 正在检查并安装依赖环境...")
+    
     APT_UPDATED = False
     def ensure_apt_packages(packages):
         nonlocal APT_UPDATED
-        print(f">>> 正在检查并安装系统依赖: {', '.join(packages)}")
+        sys.stdout.write("    - 正在检查系统包...")
+        sys.stdout.flush()
         try:
             if not APT_UPDATED:
-                print("    - 正在更新apt包列表...")
-                run_cmd(["apt-get", "update", "-y"])
+                run_cmd(["apt-get", "update", "-y"], quiet=True)
                 APT_UPDATED = True
-            print(f"    - 正在安装 {', '.join(packages)}...")
             install_cmd = ["apt-get", "install", "-y"] + packages
-            run_cmd(install_cmd)
-            print(f"✅ 系统依赖安装/验证完成。")
+            run_cmd(install_cmd, quiet=True)
+            print(" 完成")
         except Exception as e:
-            print(f"❌ 安装系统依赖包失败: {e}")
-            print("请尝试手动运行以下命令:")
-            print(f"sudo apt-get update && sudo apt-get install -y {' '.join(packages)}")
+            print(f" 失败: {e}")
             sys.exit(1)
 
-    base_packages = [
-        "python3-pip",
-        "python3-requests",
-        "python3-openpyxl",
-        "python3-psutil",
-        "ca-certificates"
-    ]
+    base_packages = ["python3-pip", "python3-requests", "python3-openpyxl", "python3-psutil", "ca-certificates", "curl", "tar"]
     ensure_apt_packages(base_packages)
-    print("--- 正在强制更新系统CA证书... ---")
-    run_cmd(["update-ca-certificates"])
-    print("--- CA证书更新完成 ---")
 
+    sys.stdout.write("    - 正在更新CA证书...")
+    sys.stdout.flush()
+    run_cmd(["update-ca-certificates"], quiet=True)
+    print(" 完成")
 
     def get_go_version():
-        go_exec = shutil.which("go")
-        if not go_exec:
-            go_exec = "/usr/local/go/bin/go"
-            if not os.path.exists(go_exec):
-                return None
+        go_exec = shutil.which("go") or "/usr/local/go/bin/go"
+        if not os.path.exists(go_exec): return None
         try:
             out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
             m = re.search(r"go(\d+)\.(\d+)", out)
@@ -2887,108 +2878,52 @@ def check_environment():
         except:
             return None
 
-    def ensure_go():
-        version = get_go_version()
-        if version and version >= (1, 20):
-            print(f"✅ Go {version[0]}.{version[1]} 已安装")
-            if "/usr/local/go/bin" not in os.environ["PATH"]:
-                 os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
-            return
-
-        print("⚠️ Go 未安装或版本过低，准备安装 Go 1.22.1 ...")
-        ensure_apt_packages(["curl", "tar"])
-        print("--- 正在尝试卸载系统自带的旧版Go... ---")
-        run_cmd(["apt-get", "remove", "-y", "golang-go"], check=False) 
-        run_cmd(["apt-get", "autoremove", "-y"], check=False)
-        print("--- 旧版Go清理完成 ---")
+    if not (get_go_version() and get_go_version() >= (1, 20)):
+        print("--- Go环境不满足，正在自动安装... ---")
+        run_cmd(["apt-get", "remove", "-y", "golang-go"], check=False, quiet=True) 
+        run_cmd(["apt-get", "autoremove", "-y"], check=False, quiet=True)
         
-        urls = []
-        if IN_CHINA:
-            urls.extend([
-                "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz",
-                "https://go-zh.org/dl/go1.22.1.linux-amd64.tar.gz"
-            ])
-        urls.append("https://go.dev/dl/go1.22.1.linux-amd64.tar.gz")
-        
+        urls = ["https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz", "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"]
         GO_TAR_PATH = "/tmp/go.tar.gz"
-
         download_success = False
         for url in urls:
-            for attempt in range(3): 
-                print(f"--- 正在尝试从 {url} 下载Go安装包... (尝试 {attempt + 1}/3) ---")
-                try:
-                    if os.path.exists(GO_TAR_PATH):
-                        os.remove(GO_TAR_PATH)
-
-                    subprocess.run(["curl", "-#", "-Lo", GO_TAR_PATH, url], check=True)
-                    
-                    print("✅ 文件下载完成，跳过校验。")
-                    download_success = True
-                    break
-
-                except Exception as e:
-                    print(f"--- 从 {url} 下载失败: {e}。将在3秒后重试... ---")
-                    time.sleep(3)
-            
-            if download_success:
+            print(f"    - 正在从 {url.split('/')[2]} 下载Go...")
+            try:
+                subprocess.run(["curl", "-#", "-Lo", GO_TAR_PATH, url], check=True)
+                download_success = True
                 break
+            except Exception:
+                print(f"      下载失败，尝试下一个源...")
         
         if not download_success:
-            print("❌ 所有Go安装包下载地址均尝试失败，请检查网络或镜像源。")
+            print("❌ Go安装包下载失败，请检查网络。")
             sys.exit(1)
 
+        sys.stdout.write("    - 正在解压Go安装包...")
+        sys.stdout.flush()
         try:
-            print("--- 正在解压Go安装包... ---")
-            run_cmd(["rm", "-rf", "/usr/local/go"])
-            run_cmd(["tar", "-C", "/usr/local", "-xzf", GO_TAR_PATH])
-            print("--- 解压成功 ---")
+            run_cmd(["rm", "-rf", "/usr/local/go"], quiet=True)
+            run_cmd(["tar", "-C", "/usr/local", "-xzf", GO_TAR_PATH], quiet=True)
+            print(" 完成")
         except Exception as e:
-            print(f"❌ 解压 Go 安装包失败: {e}")
+            print(f" 失败: {e}")
             sys.exit(1)
-
-        export_line = 'export PATH="/usr/local/go/bin:$PATH"'
-        profile_path = "/etc/profile"
-        
-        try:
-            with open(profile_path, "r+") as f:
-                content = f.read()
-                if export_line not in content:
-                    f.write(f"\\n{export_line}\\n")
-                    print(f"✅ PATH 写入 {profile_path} 完成（系统级永久生效）")
-                else:
-                    print(f"✅ {profile_path} 中已存在 PATH 设置，跳过写入")
-        except Exception:
-             print(f"⚠️ 无法写入 {profile_path}，请手动添加 PATH。")
-
 
         os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
-        print("✅ Go 安装完成并配置 PATH（当前脚本已生效）")
-        print("💡 如需在其他终端使用 Go，请手动执行：source /etc/profile 或重新登录。")
-
-    def ensure_go_package(pkg):
+    
+    if template_mode == 6:
+        sys.stdout.write("    - 正在安装SSH模块...")
+        sys.stdout.flush()
         go_exec = shutil.which("go") or "/usr/local/go/bin/go"
-        print(f"检查 Go 包 {pkg} ...")
-        
         if not os.path.exists("go.mod"):
-            subprocess.run([go_exec, "mod", "init", "xui"], check=True, capture_output=True)
+            run_cmd([go_exec, "mod", "init", "xui"], quiet=True)
+        run_cmd([go_exec, "get", "golang.org/x/crypto/ssh"], quiet=True)
+        print(" 完成")
 
-        try:
-            subprocess.run([go_exec, "get", pkg], check=True, env=os.environ.copy(), capture_output=True, text=True)
-            print(f"✅ 成功安装/更新 Go 模块 {pkg}")
-        except subprocess.CalledProcessError as e:
-            print(f"❌ 安装 {pkg} 失败，请检查网络或手动安装。")
-            print(e.stderr)
-            sys.exit(1)
+    print(">>> 环境依赖检测完成 ✅\\n")
 
-    ensure_go()
-
-    if TEMPLATE_MODE == 6:
-        ensure_go_package("golang.org/x/crypto/ssh")
-
-    print(">>> 依赖环境检测完成 ✅\\n")
-
-def load_credentials():
-    if TEMPLATE_MODE == 7:
+def load_credentials(template_mode):
+    if template_mode == 7:
         usernames = ["2cXaAxRGfddmGz2yx1wA"]
         use_custom = input("是否使用 password.txt 路径库？(y/N，默认使用 2cXaAxRGfddmGz2yx1wA 作为路径): ").strip().lower()
         if use_custom == 'y':
@@ -3021,10 +2956,10 @@ def load_credentials():
                 print("❌ 错误: password.txt 文件为空，请添加密码后再试。")
                 sys.exit(1)
         else:
-            if TEMPLATE_MODE == 3:
+            if template_mode == 3:
                 usernames = ["sysadmin"]
                 passwords = ["sysadmin"]
-            elif TEMPLATE_MODE == 8:
+            elif template_mode == 8:
                 usernames = ["root"]
                 passwords = ["password"]
             else:
@@ -3043,17 +2978,23 @@ if __name__ == "__main__":
         TEMP_HMFAIL_DIR = "temp_hmfail"
 
         try:
-                adjust_oom_score()
-                check_and_manage_swap()
+                # 检查是否在交互式终端中运行
+                if not sys.stdout.isatty():
+                    print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
+                    sys.exit(1)
 
                 TEMPLATE_MODE = choose_template_mode()
                 
-                check_environment()
+                check_environment(TEMPLATE_MODE)
+                
+                # 在环境检查后导入
                 import psutil
+                import requests
                 from openpyxl import Workbook, load_workbook
                 from openpyxl.utils import get_column_letter
-                import requests
 
+                adjust_oom_score()
+                check_and_manage_swap()
 
                 os.makedirs(TEMP_PART_DIR, exist_ok=True)
                 os.makedirs(TEMP_XUI_DIR, exist_ok=True)
@@ -3094,7 +3035,7 @@ if __name__ == "__main__":
                         print("操作已取消。")
                         sys.exit(0)
 
-                usernames, passwords = load_credentials()
+                usernames, passwords = load_credentials(TEMPLATE_MODE)
                 
                 template_map = {
                     1: (generate_xui_go, (semaphore_size, usernames, passwords)),
