@@ -2420,6 +2420,9 @@ if __name__ == "__main__":
 
 """
 # =========================== 主脚本优化部分 ===========================
+# 定义Go可执行文件的绝对路径
+GO_EXEC = "/usr/local/go/bin/go"
+
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
     return int(user_input) if user_input.isdigit() else default
@@ -2535,7 +2538,7 @@ def compile_go_program():
     print("--- 正在编译Go程序... ---")
     try:
         result = subprocess.run(
-            ['go', 'build', '-o', executable_name, 'xui.go'],
+            [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
             capture_output=True,
             text=True,
             check=True,
@@ -2869,10 +2872,9 @@ def check_environment(template_mode):
     print(" 完成")
 
     def get_go_version():
-        go_exec = shutil.which("go") or "/usr/local/go/bin/go"
-        if not os.path.exists(go_exec): return None
+        if not os.path.exists(GO_EXEC): return None
         try:
-            out = subprocess.check_output([go_exec, "version"], stderr=subprocess.DEVNULL).decode()
+            out = subprocess.check_output([GO_EXEC, "version"], stderr=subprocess.DEVNULL).decode()
             m = re.search(r"go(\d+)\.(\d+)", out)
             return (int(m.group(1)), int(m.group(2))) if m else None
         except:
@@ -2914,10 +2916,9 @@ def check_environment(template_mode):
     if template_mode == 6:
         sys.stdout.write("    - 正在安装SSH模块...")
         sys.stdout.flush()
-        go_exec = shutil.which("go") or "/usr/local/go/bin/go"
         if not os.path.exists("go.mod"):
-            run_cmd([go_exec, "mod", "init", "xui"], quiet=True)
-        run_cmd([go_exec, "get", "golang.org/x/crypto/ssh"], quiet=True)
+            run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True)
+        run_cmd([GO_EXEC, "get", "golang.org/x/crypto/ssh"], quiet=True)
         print(" 完成")
 
     print(">>> 环境依赖检测完成 ✅\\n")
@@ -3085,13 +3086,16 @@ if __name__ == "__main__":
                 interrupted = True
         except SystemExit as e:
                 print(f"\\n脚本因环境问题中止。")
+        except EOFError:
+                print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
+                interrupted = True
         finally:
                 clean_temp_files()
                 end = time.time()
                 cost = int(end - start)
 
                 if interrupted:
-                        print(f"\\n=== 脚本已被用户中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
+                        print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
                 else:
                         print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
