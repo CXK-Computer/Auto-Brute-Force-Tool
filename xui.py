@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板1内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -33,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -95,9 +96,8 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	
 	select {
 	case <-shutdownRequest:
-		return // 收到关闭信号，不再处理新任务
+		return 
 	case semaphore <- struct{}{}:
-		// 获取到信号量，继续执行
 	}
 
 	var ipPort string
@@ -158,11 +158,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -192,14 +200,15 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
-			return // 收到关闭信号，停止更新进度
+			return
 		}
 	}
 }
 
 func main() {
-	// 设置信号处理
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -250,7 +259,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板2内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -263,6 +272,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -390,11 +400,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -424,6 +442,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -481,7 +501,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板3内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -494,6 +514,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -614,11 +635,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -648,6 +677,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -705,7 +736,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板4内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -718,6 +749,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -846,11 +878,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -880,6 +920,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -937,7 +979,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板5内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -950,6 +992,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -1072,11 +1115,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -1106,6 +1157,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -1163,7 +1216,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板6内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1172,6 +1225,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -1331,11 +1385,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -1377,6 +1439,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -1595,7 +1659,7 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板7内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1607,6 +1671,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -1747,11 +1812,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -1781,6 +1854,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -1840,7 +1915,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (增加FreeOSMemory和优雅退出) ===========================
+# =========================== xui.go模板8内容 (增加强制GC) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1851,6 +1926,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -1996,11 +2072,19 @@ func triggerFreeOSMemory() {
 	fmt.Printf("\\r[SYSTEM] 内存返还操作完成。")
 }
 
+func triggerGC() {
+	fmt.Println("\\n[SYSTEM] 正在强制执行垃圾回收(GC)...")
+	runtime.GC()
+	fmt.Printf("\\r[SYSTEM] GC完成。")
+}
+
 func updateProgress() {
 	progressTicker := time.NewTicker(1 * time.Second)
 	defer progressTicker.Stop()
 	memFreeTicker := time.NewTicker(2 * time.Minute)
 	defer memFreeTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second)
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -2030,6 +2114,8 @@ func updateProgress() {
 			}
 		case <-memFreeTicker.C:
 			triggerFreeOSMemory()
+		case <-gcTicker.C:
+			triggerGC()
 		case <-shutdownRequest:
 			return
 		}
@@ -2426,12 +2512,15 @@ def run_xui_for_parts(sleep_seconds, executable_name):
     start_time = time.time()
 
     total_memory = psutil.virtual_memory().total
-    # --- 修改：使用更保守的75%内存限制 ---
-    mem_limit = int(total_memory * 0.75 / 1024 / 1024)
-    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的75%)")
+    # --- 进一步降低内存限制到 70% ---
+    mem_limit = int(total_memory * 0.70 / 1024 / 1024)
+    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
     
     run_env = os.environ.copy()
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+    # --- 设置更积极的GC策略 ---
+    run_env["GOGC"] = "50"
+    print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
 
     for idx, part in enumerate(part_files, 1):
@@ -2462,7 +2551,6 @@ def run_xui_for_parts(sleep_seconds, executable_name):
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
             
-            # --- 使用nice和ionice调整优先级 ---
             cmd = []
             if sys.platform == "linux":
                 cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
