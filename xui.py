@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板1内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -34,8 +34,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -245,7 +243,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板2内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -259,8 +257,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -472,7 +468,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板3内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -486,8 +482,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -692,7 +686,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板4内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -706,8 +700,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -918,7 +910,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板5内容 (修正未使用的导入) ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -932,8 +924,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1149,8 +1139,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1549,8 +1537,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1781,8 +1767,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
