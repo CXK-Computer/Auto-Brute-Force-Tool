@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # ==============================================================================
-#  一键安装最新版 Python, Go 并下载指定 GitHub 仓库文件脚本 (v2)
+#  一键安装最新版 Python, Go, screen, masscan 并下载文件脚本 (v4)
 #
 #  功能:
 #  1. 自动检测并适配 Debian/Ubuntu/CentOS 等主流 Linux 发行版。
 #  2. 安装系统默认的稳定版 Python 3。
-#  3. **从官网下载并安装最新版本的 Go 语言环境。**
-#  4. 从 https://github.com/CXK-Computer/Auto-Brute-Force-Tool 仓库下载所有文件。
+#  3. **安装 screen 和 masscan。**
+#  4. 从官网下载并安装最新版本的 Go 语言环境。
+#  5. 将 https://github.com/CXK-Computer/Auto-Brute-Force-Tool 仓库的所有文件下载到当前目录。
 #
 #  使用方法:
 #  在您的终端中运行以下单行命令:
@@ -56,22 +57,24 @@ log_info "检测到操作系统为: $OS"
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
     log_info "正在更新 apt 包管理器..."
     apt-get update -y
-    log_info "正在安装 Python 3 及基础工具 (curl, wget, git, tar)..."
-    apt-get install -y python3 curl wget git tar || log_error "通过 apt 安装依赖失败。"
+    log_info "正在安装 Python 3, screen, masscan 及基础工具..."
+    apt-get install -y python3 curl wget git tar screen masscan || log_error "通过 apt 安装依赖失败。"
 
 elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "fedora" ]]; then
     log_info "正在更新 yum/dnf 包管理器..."
     if command -v dnf &> /dev/null; then
-        dnf install -y python3 curl wget git tar || log_error "通过 dnf 安装依赖失败。"
+        log_info "正在安装 Python 3, screen, masscan 及基础工具..."
+        dnf install -y python3 curl wget git tar screen masscan || log_error "通过 dnf 安装依赖失败。"
     else
         yum install -y epel-release
-        yum install -y python3 curl wget git tar || log_error "通过 yum 安装依赖失败。"
+        log_info "正在安装 Python 3, screen, masscan 及基础工具..."
+        yum install -y python3 curl wget git tar screen masscan || log_error "通过 yum 安装依赖失败。"
     fi
 else
-    log_error "不支持的操作系统: $OS。请手动安装 Python 3, Curl, Wget, Git, Tar。"
+    log_error "不支持的操作系统: $OS。请手动安装 Python 3, Curl, Wget, Git, Tar, screen, masscan。"
 fi
 
-log_info "✅ Python 3 和基础工具已成功安装。"
+log_info "✅ Python 3, screen, masscan 和基础工具已成功安装。"
 
 # 3. 安装最新版 Go
 log_info "正在准备安装最新版本的 Go..."
@@ -123,28 +126,35 @@ else
     log_error "Go 安装失败。在 PATH 中找不到 'go' 命令。"
 fi
 
-# 4. 下载 GitHub 仓库文件
+# 4. 下载 GitHub 仓库文件到当前目录
 REPO_URL="https://github.com/CXK-Computer/Auto-Brute-Force-Tool.git"
-DEST_DIR="Auto-Brute-Force-Tool"
+TEMP_DIR=$(mktemp -d) # 创建一个安全的临时目录
 
 log_info "正在从 GitHub 仓库下载所有文件..."
-if [ -d "$DEST_DIR" ]; then
-    log_warn "目录 '$DEST_DIR' 已存在。将进行覆盖更新。"
-    rm -rf "$DEST_DIR"
-fi
-
-git clone "$REPO_URL"
-if [ $? -eq 0 ]; then
-    log_info "✅ 所有文件已成功下载到 '$DEST_DIR' 目录中。"
-else
+git clone --depth 1 "$REPO_URL" "$TEMP_DIR"
+if [ $? -ne 0 ]; then
+    rm -rf "$TEMP_DIR"
     log_error "从 GitHub 下载文件失败。请检查您的网络连接或 Git 是否已正确安装。"
 fi
+
+log_info "正在将文件移动到当前目录..."
+# 启用 dotglob 以确保 .gitignore 等隐藏文件也能被移动
+shopt -s dotglob
+# 将临时目录中的所有内容移动到当前目录
+mv -f "$TEMP_DIR"/* .
+# 禁用 dotglob
+shopt -u dotglob
+
+# 清理空的临时目录
+rm -rf "$TEMP_DIR"
+
+log_info "✅ 所有文件已成功下载到当前目录。"
 
 # --- 结束 ---
 echo
 log_info "🎉 所有任务已完成！"
 echo -e "${GREEN}===================================================================${NC}"
-echo -e "${GREEN} 环境已准备就绪，所有文件已下载到当前目录下的 '${DEST_DIR}' 文件夹中。${NC}"
+echo -e "${GREEN} 环境已准备就绪，所有文件已下载到当前目录中。${NC}"
 echo -e "${GREEN} 请重新登录或执行 'source /etc/profile' 以使 Go 环境变量永久生效。${NC}"
 echo -e "${GREEN}===================================================================${NC}"
 
