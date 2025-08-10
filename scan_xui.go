@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil" // 引入 ioutil 包以兼容旧版 Go
 	"log"
 	"net"
 	"net/http"
@@ -272,3 +271,4 @@ func checkProtocol(protocol, target string, client *http.Client, results chan<- 
 	}
 	return false
 }
+
