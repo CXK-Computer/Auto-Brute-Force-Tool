@@ -271,4 +271,3 @@ func checkProtocol(protocol, target string, client *http.Client, results chan<- 
 	}
 	return false
 }
-
