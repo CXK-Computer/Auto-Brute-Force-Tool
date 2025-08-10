@@ -1,119 +1,150 @@
 #!/bin/bash
 
 # ==============================================================================
-#  一键安装 Python, Go 并下载指定文件脚本 (最终修复版)
+#  一键安装最新版 Python, Go 并下载指定 GitHub 仓库文件脚本 (v2)
 #
 #  功能:
-#  1. 自动修复 Debian/Ubuntu 系统中缺失的 GPG 密钥问题.
-#  2. 自动检测并更新包管理器 (apt for Debian/Ubuntu, yum for CentOS/RHEL).
-#  3. 安装 Python 3 和 Go 语言环境.
-#  4. 从指定的 URL 下载文件.
+#  1. 自动检测并适配 Debian/Ubuntu/CentOS 等主流 Linux 发行版。
+#  2. 安装系统默认的稳定版 Python 3。
+#  3. **从官网下载并安装最新版本的 Go 语言环境。**
+#  4. 从 https://github.com/CXK-Computer/Auto-Brute-Force-Tool 仓库下载所有文件。
 #
 #  使用方法:
-#  1. 替换你 GitHub 仓库中的旧脚本内容.
-#  2. 运行命令:
-#     bash <(curl -Ls https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/main/install_tools.sh | tr -d '\r')
+#  在您的终端中运行以下单行命令:
+#  bash <(curl -sL https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/main/install_tools.sh)
 # ==============================================================================
 
-# 设置颜色变量以便输出
+# --- 配置颜色输出 ---
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m' # 无颜色
 
-# 函数：打印信息
+# --- 日志函数 ---
 log_info() {
-    echo -e "${GREEN}[INFO] $1${NC}"
+    echo -e "${GREEN}[信息] $1${NC}"
 }
 
-# 函数：打印警告
 log_warn() {
-    echo -e "${YELLOW}[WARN] $1${NC}"
+    echo -e "${YELLOW}[警告] $1${NC}"
 }
 
-# 函数：打印错误并退出
 log_error() {
-    echo -e "${RED}[ERROR] $1${NC}"
+    echo -e "${RED}[错误] $1${NC}"
     exit 1
 }
 
-# 检查是否以 root 用户运行
+# --- 主逻辑开始 ---
+log_info "脚本开始执行..."
+
+# 1. 检查是否以 root 用户运行
 if [ "$(id -u)" -ne 0 ]; then
-   log_error "此脚本需要以 root 权限运行。请使用 'sudo' 或以 root 用户身份重试。"
+   log_error "此脚本需要以 root 权限运行。请使用 'sudo' 或切换到 root 用户后重试。"
 fi
 
-# 检测操作系统
-log_info "正在检测操作系统..."
+# 2. 安装基础依赖和 Python
+log_info "正在检测操作系统并安装依赖..."
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$ID
-elif type lsb_release >/dev/null 2>&1; then
-    OS=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
 else
-    OS=$(uname -s)
+    log_error "无法检测到您的操作系统。脚本无法继续。"
 fi
 
 log_info "检测到操作系统为: $OS"
 
-# 根据操作系统安装依赖
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-    log_info "正在处理 apt GPG 密钥问题..."
-    # 安装基础工具
-    apt-get update -y && apt-get install -y gpg curl
-    
-    # 从错误日志中提取所有缺失的公钥
-    MISSING_KEYS=("0E98404D386FA1D9" "6ED0E7B82643E131" "F8D2585B8783D481" "54404762BBB6E853" "BDE6D2B9216EC7A8")
-    
-    for KEY in "${MISSING_KEYS[@]}"; do
-        log_info "正在导入缺失的公钥: ${KEY}"
-        gpg --keyserver keyserver.ubuntu.com --recv-keys "${KEY}" || gpg --keyserver pgp.mit.edu --recv-keys "${KEY}"
-        gpg --armor --export "${KEY}" | apt-key add -
-    done
-
-    log_info "GPG 密钥处理完毕。现在开始更新 apt 包列表..."
-    apt-get update -y || log_error "apt 更新失败。即使在修复后依然失败，请检查您的网络或软件源配置。"
-
-    log_info "正在安装 Python 3 和 Go..."
-    apt-get install -y python3 golang-go curl || log_error "使用 apt 安装依赖失败。"
+    log_info "正在更新 apt 包管理器..."
+    apt-get update -y
+    log_info "正在安装 Python 3 及基础工具 (curl, wget, git, tar)..."
+    apt-get install -y python3 curl wget git tar || log_error "通过 apt 安装依赖失败。"
 
 elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "fedora" ]]; then
-    log_info "正在更新 yum 包列表..."
-    yum update -y || log_error "yum 更新失败。"
-
-    log_info "正在安装 Python 3 和 Go..."
-    yum install -y python3 golang curl || log_error "使用 yum 安装依赖失败。"
-
+    log_info "正在更新 yum/dnf 包管理器..."
+    if command -v dnf &> /dev/null; then
+        dnf install -y python3 curl wget git tar || log_error "通过 dnf 安装依赖失败。"
+    else
+        yum install -y epel-release
+        yum install -y python3 curl wget git tar || log_error "通过 yum 安装依赖失败。"
+    fi
 else
-    log_error "不支持的操作系统: $OS. 请手动安装 Python3, Go 和 Curl."
+    log_error "不支持的操作系统: $OS。请手动安装 Python 3, Curl, Wget, Git, Tar。"
 fi
 
-log_info "Python 3 和 Go 已成功安装。"
+log_info "✅ Python 3 和基础工具已成功安装。"
 
-# 定义要下载的文件 URL
-BASE_URL="https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/main"
-FILES=(
-    "xui.py"
-    "password.txt"
-    "username.txt"
-    "1.txt"
-    "nz.txt"
-    "xui.py"
-)
+# 3. 安装最新版 Go
+log_info "正在准备安装最新版本的 Go..."
 
-# 下载文件
-log_info "开始下载所需文件..."
-for FILE in "${FILES[@]}"; do
-    log_info "正在下载 ${FILE}..."
-    curl -o "${FILE}" "${BASE_URL}/${FILE}"
-    if [ $? -eq 0 ]; then
-        log_info "${FILE} 下载成功。"
-    else
-        log_warn "${FILE} 下载失败。请检查网络连接或 URL 是否正确: ${BASE_URL}/${FILE}"
-    fi
-done
+# 检测系统架构
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) GO_ARCH="amd64" ;;
+    aarch64) GO_ARCH="arm64" ;;
+    *) log_error "不支持的 CPU 架构: $ARCH。无法自动安装 Go。" ;;
+esac
 
-log_info "所有任务已完成！"
-echo -e "${GREEN}=======================================================${NC}"
-echo -e "${GREEN} 环境已准备就绪，相关文件已下载到当前目录。 ${NC}"
-echo -e "${GREEN}=======================================================${NC}"
+# 从官网获取最新版本号并下载
+log_info "正在从 go.dev 获取最新版本信息..."
+GO_LATEST_VERSION=$(curl -sL "https://go.dev/VERSION?m=text" | head -n 1)
+if [ -z "$GO_LATEST_VERSION" ]; then
+    log_error "无法获取 Go 的最新版本号，请检查网络。"
+fi
+
+GO_TARBALL="${GO_LATEST_VERSION}.linux-${GO_ARCH}.tar.gz"
+DOWNLOAD_URL="https://go.dev/dl/${GO_TARBALL}"
+
+log_info "正在下载 Go ${GO_LATEST_VERSION} for ${GO_ARCH}..."
+wget -q -O "/tmp/${GO_TARBALL}" "${DOWNLOAD_URL}"
+if [ $? -ne 0 ]; then
+    log_error "下载 Go 安装包失败。请检查网络或访问 ${DOWNLOAD_URL}"
+fi
+
+# 安装 Go
+log_info "正在安装 Go..."
+rm -rf /usr/local/go # 清理旧版本
+tar -C /usr/local -xzf "/tmp/${GO_TARBALL}"
+rm "/tmp/${GO_TARBALL}" # 清理下载的压缩包
+
+# 配置环境变量
+log_info "正在配置 Go 的环境变量..."
+if ! grep -q "/usr/local/go/bin" /etc/profile; then
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+fi
+
+# 使环境变量在当前会话中也生效
+export PATH=$PATH:/usr/local/go/bin
+
+# 验证安装
+if command -v go &> /dev/null; then
+    INSTALLED_GO_VERSION=$(go version)
+    log_info "✅ Go 安装成功: ${INSTALLED_GO_VERSION}"
+else
+    log_error "Go 安装失败。在 PATH 中找不到 'go' 命令。"
+fi
+
+# 4. 下载 GitHub 仓库文件
+REPO_URL="https://github.com/CXK-Computer/Auto-Brute-Force-Tool.git"
+DEST_DIR="Auto-Brute-Force-Tool"
+
+log_info "正在从 GitHub 仓库下载所有文件..."
+if [ -d "$DEST_DIR" ]; then
+    log_warn "目录 '$DEST_DIR' 已存在。将进行覆盖更新。"
+    rm -rf "$DEST_DIR"
+fi
+
+git clone "$REPO_URL"
+if [ $? -eq 0 ]; then
+    log_info "✅ 所有文件已成功下载到 '$DEST_DIR' 目录中。"
+else
+    log_error "从 GitHub 下载文件失败。请检查您的网络连接或 Git 是否已正确安装。"
+fi
+
+# --- 结束 ---
+echo
+log_info "🎉 所有任务已完成！"
+echo -e "${GREEN}===================================================================${NC}"
+echo -e "${GREEN} 环境已准备就绪，所有文件已下载到当前目录下的 '${DEST_DIR}' 文件夹中。${NC}"
+echo -e "${GREEN} 请重新登录或执行 'source /etc/profile' 以使 Go 环境变量永久生效。${NC}"
+echo -e "${GREEN}===================================================================${NC}"
 
