@@ -5,8 +5,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -22,16 +22,9 @@ var XUI_SIGNATURES = []string{
 	`href="/assets/ant-design-vue`,
 	`location.href = basePath + 'panel/'`,
 	`location.href = basePath + 'xui/'`,
-}
-
-// bufferPool 使用 sync.Pool 来复用读取响应体时所需的内存缓冲区。
-// 这能极大减少内存分配和GC压力。
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		// 分配一个4KB的缓冲区，对于读取HTML头部进行特征匹配足够了。
-		b := make([]byte, 4*1024)
-		return &b
-	},
+	`-Login</title>`,
+	`<title>登录</title>`,
+	`<div id="app">`,
 }
 
 // AppConfig 结构体用于存储应用程序的配置
@@ -44,7 +37,7 @@ type AppConfig struct {
 
 // main 是程序的入口函数
 func main() {
-	log.SetFlags(0)
+	log.SetFlags(0) // 不打印默认的时间前缀
 	config, err := getUserConfig()
 	if err != nil {
 		log.Fatalf("配置错误: %v", err)
@@ -53,7 +46,7 @@ func main() {
 	var workerWg, writerWg sync.WaitGroup
 	jobs := make(chan string, config.Concurrency)
 	results := make(chan string, config.Concurrency)
-	var processedCounter int64
+	var processedCounter, dispatchedCounter, successCounter int64
 
 	outputFile, err := os.OpenFile(config.OutputFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -62,7 +55,7 @@ func main() {
 	defer outputFile.Close()
 
 	writerWg.Add(1)
-	go fileWriter(&writerWg, results, outputFile)
+	go fileWriter(&writerWg, results, outputFile, &successCounter)
 
 	log.Printf("启动 %d 个扫描协程...", config.Concurrency)
 	for i := 1; i <= config.Concurrency; i++ {
@@ -74,20 +67,27 @@ func main() {
 		defer close(jobs)
 		inputFile, err := os.Open(config.FilePath)
 		if err != nil {
-			log.Printf("错误: 无法打开文件 '%s': %v", config.FilePath, err)
+			log.Printf("\n错误: 无法打开文件 '%s': %v", config.FilePath, err)
 			return
 		}
 		defer inputFile.Close()
+
 		scanner := bufio.NewScanner(inputFile)
+		const maxCapacity = 1024 * 1024 // 1MB
+		buf := make([]byte, maxCapacity)
+		scanner.Buffer(buf, maxCapacity)
+
 		for scanner.Scan() {
 			line := scanner.Text()
 			target := parseLine(line)
 			if target != "" {
 				jobs <- target
+				atomic.AddInt64(&dispatchedCounter, 1)
 			}
 		}
+
 		if err := scanner.Err(); err != nil {
-			log.Printf("读取文件时发生错误: %v", err)
+			log.Printf("\n[文件读取错误]: %v. 请检查文件格式或权限。", err)
 		}
 	}()
 
@@ -107,40 +107,72 @@ func main() {
 		case <-done:
 			writerWg.Wait()
 			fmt.Println()
-			log.Printf("已处理 %d 个目标。扫描完成。", atomic.LoadInt64(&processedCounter))
-			log.Printf("成功的结果已保存到 %s", config.OutputFilePath)
+			processed := atomic.LoadInt64(&processedCounter)
+			dispatched := atomic.LoadInt64(&dispatchedCounter)
+			success := atomic.LoadInt64(&successCounter)
+			log.Printf("扫描完成。从文件解析并分发 %d 个目标，实际处理 %d 个，成功 %d 个。", dispatched, processed, success)
+			if dispatched > 0 {
+				log.Printf("成功的结果已保存到 %s", config.OutputFilePath)
+			} else {
+				log.Println("警告：未从输入文件中解析出任何有效目标。")
+			}
 			return
 		case <-ticker.C:
-			fmt.Printf("\r已处理: %d", atomic.LoadInt64(&processedCounter))
+			// 实时显示进度
+			fmt.Printf("\r进度: 已处理 %d / 已分发 %d | 成功: %d",
+				atomic.LoadInt64(&processedCounter),
+				atomic.LoadInt64(&dispatchedCounter),
+				atomic.LoadInt64(&successCounter))
 		}
 	}
 }
 
-func fileWriter(wg *sync.WaitGroup, results <-chan string, file *os.File) {
+func fileWriter(wg *sync.WaitGroup, results <-chan string, file *os.File, counter *int64) {
 	defer wg.Done()
 	for result := range results {
+		atomic.AddInt64(counter, 1)
 		_, err := file.WriteString(result + "\n")
 		if err != nil {
-			log.Printf("\n写入文件错误: %v", err)
+			log.Printf("\n[文件写入错误]: %v", err)
 		}
 	}
 }
 
+// parseLine 智能解析输入行，兼容多种 masscan 格式
 func parseLine(line string) string {
 	line = strings.TrimSpace(line)
+
+	// 忽略空行和以'#'开头的注释行
 	if line == "" || strings.HasPrefix(line, "#") {
 		return ""
 	}
-	if strings.HasPrefix(line, "Host:") {
-		parts := strings.Fields(line)
-		if len(parts) >= 5 && parts[3] == "Ports:" {
-			ip := parts[1]
-			portPart := strings.Split(parts[4], "/")[0]
-			return fmt.Sprintf("%s:%s", ip, portPart)
+
+	// --- 核心修正：更健壮的 masscan 格式解析 ---
+	// 只要行内包含 "Host:" 和 "Ports:" 关键字，就尝试解析
+	if strings.Contains(line, "Host:") && strings.Contains(line, "Ports:") {
+		fields := strings.Fields(line)
+		var ip, port string
+		for i, field := range fields {
+			if field == "Host:" && i+1 < len(fields) {
+				ip = fields[i+1]
+			}
+			if field == "Ports:" && i+1 < len(fields) {
+				// 从 "2053/open/tcp//..." 中提取端口号
+				port = strings.Split(fields[i+1], "/")[0]
+			}
 		}
-		return ""
+		if ip != "" && port != "" {
+			return fmt.Sprintf("%s:%s", ip, port)
+		}
 	}
-	return line
+
+	// 如果不是 masscan 格式，则假定为 ip:port 格式
+	// (可以增加更严格的验证，例如检查是否包含':')
+	if strings.Contains(line, ":") {
+		return line
+	}
+
+	return ""
 }
 
 func getUserConfig() (AppConfig, error) {
@@ -160,11 +192,11 @@ func getUserConfig() (AppConfig, error) {
 		config.OutputFilePath = outputFilePath
 	}
 
-	fmt.Print("请输入并发协程数 (默认 100): ")
+	fmt.Print("请输入并发协程数 (默认 30): ")
 	concurrencyStr, _ := reader.ReadString('\n')
 	concurrencyStr = strings.TrimSpace(concurrencyStr)
 	if concurrencyStr == "" {
-		config.Concurrency = 100
+		config.Concurrency = 30
 	} else {
 		concurrency, err := strconv.Atoi(concurrencyStr)
 		if err != nil || concurrency <= 0 {
@@ -173,11 +205,11 @@ func getUserConfig() (AppConfig, error) {
 		config.Concurrency = concurrency
 	}
 
-	fmt.Print("请输入网络超时时间（秒，默认 5）: ")
+	fmt.Print("请输入网络超时时间（秒，默认 10）: ")
 	timeoutStr, _ := reader.ReadString('\n')
 	timeoutStr = strings.TrimSpace(timeoutStr)
 	if timeoutStr == "" {
-		config.Timeout = 5 * time.Second
+		config.Timeout = 10 * time.Second
 	} else {
 		timeoutSec, err := strconv.Atoi(timeoutStr)
 		if err != nil || timeoutSec <= 0 {
@@ -192,24 +224,11 @@ func getUserConfig() (AppConfig, error) {
 
 func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeout time.Duration, counter *int64) {
 	defer wg.Done()
-	// 优化HTTP客户端：自定义Transport以复用更多TCP连接
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		MaxIdleConnsPerHost:   20, // 增加每个主机的空闲连接数
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-	}
 	client := &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
 	for target := range jobs {
@@ -218,7 +237,6 @@ func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeo
 	}
 }
 
-// checkTarget 依次尝试 HTTPS 和 HTTP
 func checkTarget(target string, client *http.Client, results chan<- string) {
 	if target == "" {
 		return
@@ -229,41 +247,35 @@ func checkTarget(target string, client *http.Client, results chan<- string) {
 	checkProtocol("http", target, client, results)
 }
 
-// checkProtocol 检查特定协议，如果成功则返回 true
 func checkProtocol(protocol, target string, client *http.Client, results chan<- string) bool {
 	url := fmt.Sprintf("%s://%s", protocol, target)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		log.Printf("\n[请求创建错误] %s: %v", url, err)
 		return false
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := client.Do(req)
 	if err != nil {
+		// 不再打印普通网络错误，因为数量可能非常大，只在调试时开启
+		// fmt.Printf("\r[网络错误] %s: %v\n", url, err)
 		return false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		// 从池中获取一个缓冲区
-		bufPtr := bufferPool.Get().(*[]byte)
-		defer bufferPool.Put(bufPtr) // 确保缓冲区被归还
-		buf := *bufPtr
-
-		// 使用我们从池中获取的缓冲区来读取响应体
-		n, err := io.ReadFull(io.LimitReader(resp.Body, int64(len(buf))), buf)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false
-		}
-		if n == 0 {
+		limitedReader := io.LimitReader(resp.Body, 4*1024)
+		body, err := ioutil.ReadAll(limitedReader)
+		if err != nil {
+			log.Printf("\n[响应读取错误] %s: %v\n", url, err)
 			return false
 		}
 
-		content := string(buf[:n])
+		content := string(body)
 		for _, signature := range XUI_SIGNATURES {
 			if strings.Contains(content, signature) {
-				fmt.Println()
-				log.Printf("[成功] 发现x-ui面板: %s (特征: %s)", url, signature)
+				fmt.Printf("\r[成功] 发现x-ui面板: %s (特征: %s)\n", url, signature)
 				results <- target
 				return true
 			}
