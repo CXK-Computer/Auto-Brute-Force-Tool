@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime" // 引入 runtime 包以调用GC
 	"strconv"
 	"strings"
 	"sync"
@@ -18,13 +19,8 @@ import (
 
 // XUI_SIGNATURES 存放了用于识别 x-ui 面板的特征字符串
 var XUI_SIGNATURES = []string{
-	`src="/assets/js/model/xray.js`,
-	`href="/assets/ant-design-vue`,
 	`location.href = basePath + 'panel/'`,
 	`location.href = basePath + 'xui/'`,
-	`-Login</title>`,
-	`<title>登录</title>`,
-	`<div id="app">`,
 }
 
 // AppConfig 结构体用于存储应用程序的配置
@@ -123,6 +119,9 @@ func main() {
 				atomic.LoadInt64(&processedCounter),
 				atomic.LoadInt64(&dispatchedCounter),
 				atomic.LoadInt64(&successCounter))
+			// --- 新增功能：手动触发垃圾回收 ---
+			// 在处理大文件时，定期回收内存可以帮助控制程序的峰值内存占用。
+			runtime.GC()
 		}
 	}
 }
@@ -142,13 +141,10 @@ func fileWriter(wg *sync.WaitGroup, results <-chan string, file *os.File, counte
 func parseLine(line string) string {
 	line = strings.TrimSpace(line)
 
-	// 忽略空行和以'#'开头的注释行
 	if line == "" || strings.HasPrefix(line, "#") {
 		return ""
 	}
 
-	// --- 核心修正：更健壮的 masscan 格式解析 ---
-	// 只要行内包含 "Host:" 和 "Ports:" 关键字，就尝试解析
 	if strings.Contains(line, "Host:") && strings.Contains(line, "Ports:") {
 		fields := strings.Fields(line)
 		var ip, port string
@@ -157,7 +153,6 @@ func parseLine(line string) string {
 				ip = fields[i+1]
 			}
 			if field == "Ports:" && i+1 < len(fields) {
-				// 从 "2053/open/tcp//..." 中提取端口号
 				port = strings.Split(fields[i+1], "/")[0]
 			}
 		}
@@ -166,8 +161,6 @@ func parseLine(line string) string {
 		}
 	}
 
-	// 如果不是 masscan 格式，则假定为 ip:port 格式
-	// (可以增加更严格的验证，例如检查是否包含':')
 	if strings.Contains(line, ":") {
 		return line
 	}
@@ -224,11 +217,15 @@ func getUserConfig() (AppConfig, error) {
 
 func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeout time.Duration, counter *int64) {
 	defer wg.Done()
+	// --- 核心修正：禁用 Keep-Alive 以提高稳定性 ---
+	transport := &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives:   true, // 禁用连接复用
+		MaxIdleConnsPerHost: -1,   // 禁用连接池
+	}
 	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+		Timeout:   timeout,
+		Transport: transport,
 	}
 
 	for target := range jobs {
@@ -251,15 +248,12 @@ func checkProtocol(protocol, target string, client *http.Client, results chan<- 
 	url := fmt.Sprintf("%s://%s", protocol, target)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("\n[请求创建错误] %s: %v", url, err)
 		return false
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		// 不再打印普通网络错误，因为数量可能非常大，只在调试时开启
-		// fmt.Printf("\r[网络错误] %s: %v\n", url, err)
 		return false
 	}
 	defer resp.Body.Close()
@@ -268,7 +262,6 @@ func checkProtocol(protocol, target string, client *http.Client, results chan<- 
 		limitedReader := io.LimitReader(resp.Body, 4*1024)
 		body, err := ioutil.ReadAll(limitedReader)
 		if err != nil {
-			log.Printf("\n[响应读取错误] %s: %v\n", url, err)
 			return false
 		}
 
