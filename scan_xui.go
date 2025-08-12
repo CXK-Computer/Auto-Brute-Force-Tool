@@ -5,15 +5,16 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime" // 引入 runtime 包以调用GC
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall" // 引入 syscall 以便重新启动
 	"time"
 )
 
@@ -21,6 +22,25 @@ import (
 var XUI_SIGNATURES = []string{
 	`src="/assets/js/model/xray.js`,
 	`href="/assets/ant-design-vue`,
+	`location.href = basePath + 'panel/'`,
+	`location.href = basePath + 'xui/'`,
+	`-Login</title>`,
+	`<title>登录</title>`,
+	`<div id="app">`,
+}
+
+const (
+	swapFilePath    = "/tmp/scanner_swapfile"
+	childProcFlag   = "--run-as-child"
+	swapSizeInBytes = 2 * 1024 * 1024 * 1024 // 2GB
+)
+
+// bufferPool 使用 sync.Pool 来复用读取响应体时所需的内存缓冲区。
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 4*1024)
+		return &b
+	},
 }
 
 // AppConfig 结构体用于存储应用程序的配置
@@ -33,7 +53,24 @@ type AppConfig struct {
 
 // main 是程序的入口函数
 func main() {
-	log.SetFlags(0) // 不打印默认的时间前缀
+	if len(os.Args) > 1 && os.Args[1] == childProcFlag {
+		os.Args = append(os.Args[:1], os.Args[2:]...)
+	} else {
+		relaunchAsLowPriority()
+	}
+
+	log.SetFlags(0)
+
+	if runtime.GOOS == "linux" {
+		if os.Geteuid() == 0 {
+			log.Println("[系统] 以 root 权限运行，尝试进行系统级优化...")
+			setupSwap()
+			adjustOOMScore()
+		} else {
+			log.Println("[系统] 警告: 未以 root 权限运行，无法进行 Swap 创建和 OOM 分数调整。")
+		}
+	}
+
 	config, err := getUserConfig()
 	if err != nil {
 		log.Fatalf("配置错误: %v", err)
@@ -69,7 +106,7 @@ func main() {
 		defer inputFile.Close()
 
 		scanner := bufio.NewScanner(inputFile)
-		const maxCapacity = 1024 * 1024 // 1MB
+		const maxCapacity = 1024 * 1024
 		buf := make([]byte, maxCapacity)
 		scanner.Buffer(buf, maxCapacity)
 
@@ -95,8 +132,10 @@ func main() {
 		close(done)
 	}()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	progressTicker := time.NewTicker(time.Second)
+	defer progressTicker.Stop()
+	gcTicker := time.NewTicker(30 * time.Second) // 新增：30秒的GC定时器
+	defer gcTicker.Stop()
 
 	for {
 		select {
@@ -113,16 +152,132 @@ func main() {
 				log.Println("警告：未从输入文件中解析出任何有效目标。")
 			}
 			return
-		case <-ticker.C:
-			// 实时显示进度
+		case <-progressTicker.C:
 			fmt.Printf("\r进度: 已处理 %d / 已分发 %d | 成功: %d",
 				atomic.LoadInt64(&processedCounter),
 				atomic.LoadInt64(&dispatchedCounter),
 				atomic.LoadInt64(&successCounter))
-			// --- 新增功能：手动触发垃圾回收 ---
-			// 在处理大文件时，定期回收内存可以帮助控制程序的峰值内存占用。
-			runtime.GC()
+		case <-gcTicker.C:
+			runtime.GC() // 定时强制垃圾回收
 		}
+	}
+}
+
+// --- 系统优化函数 ---
+
+func relaunchAsLowPriority() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	nicePath, err1 := exec.LookPath("nice")
+	ionicePath, err2 := exec.LookPath("ionice")
+
+	if err1 != nil || err2 != nil {
+		log.Println("[系统] 未找到 nice 或 ionice 命令，无法以低优先级启动。将以正常优先级运行。")
+		return
+	}
+
+	log.Println("[系统] 检测到初次启动，将以低CPU和IO优先级并优化内存设置后重新启动自身...")
+	
+	// 准备环境变量
+	env := os.Environ()
+	// 1. 设置更积极的GC
+	env = append(env, "GOGC=50")
+	log.Println("[系统] GOGC=50 已设置。")
+
+	// 2. 设置内存上限
+	if totalMem, err := getMemoryTotal(); err == nil {
+		limit := int(float64(totalMem) * 0.7) // 70% of total memory
+		env = append(env, fmt.Sprintf("GOMEMLIMIT=%dB", limit))
+		log.Printf("[系统] GOMEMLIMIT=%dMB 已设置。", limit/(1024*1024))
+	} else {
+		log.Printf("[系统] 无法获取总内存，跳过 GOMEMLIMIT 设置: %v", err)
+	}
+
+	args := append([]string{childProcFlag}, os.Args[1:]...)
+	cmd := exec.Command(ionicePath, "-c", "3", nicePath, "-n", "19", os.Args[0])
+	cmd.Args = append(cmd.Args, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = env // 应用我们设置的环境变量
+
+	err := syscall.Exec(cmd.Path, cmd.Args, cmd.Env)
+	if err != nil {
+		log.Fatalf("[系统] 重新启动失败: %v", err)
+	}
+}
+
+func getMemoryTotal() (uint64, error) {
+	if runtime.GOOS != "linux" {
+		return 0, fmt.Errorf("该功能仅支持Linux")
+	}
+	memInfo, err := ioutil.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(memInfo), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				val, err := strconv.ParseUint(fields[1], 10, 64)
+				if err != nil {
+					return 0, err
+				}
+				return val * 1024, nil // a value is in kB
+			}
+		}
+	}
+	return 0, fmt.Errorf("在 /proc/meminfo 中未找到 MemTotal")
+}
+
+func setupSwap() {
+	out, err := ioutil.ReadFile("/proc/swaps")
+	if err != nil {
+		log.Printf("[系统] 无法检查 swap: %v", err)
+		return
+	}
+	if len(strings.Split(string(out), "\n")) > 2 {
+		log.Println("[系统] 检测到已存在的 Swap，跳过创建。")
+		return
+	}
+
+	log.Printf("[系统] 未检测到 Swap，正在创建 2GB 临时 Swap 文件于 %s...", swapFilePath)
+
+	if err := exec.Command("fallocate", "-l", strconv.FormatInt(swapSizeInBytes, 10), swapFilePath).Run(); err != nil {
+		log.Printf("[系统] fallocate 创建 swap 文件失败: %v。尝试使用 dd...", err)
+		if err := exec.Command("dd", "if=/dev/zero", "of="+swapFilePath, "bs=1M", "count=2048").Run(); err != nil {
+			log.Printf("[系统] dd 创建 swap 文件也失败了: %v。无法创建 Swap。", err)
+			return
+		}
+	}
+
+	if err := os.Chmod(swapFilePath, 0600); err != nil { log.Printf("[系统] 设置 swap 文件权限失败: %v", err); return }
+	if err := exec.Command("mkswap", swapFilePath).Run(); err != nil { log.Printf("[系统] mkswap 格式化失败: %v", err); return }
+	if err := exec.Command("swapon", swapFilePath).Run(); err != nil { log.Printf("[系统] swapon 启用失败: %v", err); return }
+
+	log.Println("[系统] 临时 Swap 文件创建并启用成功。")
+
+	// 使用 defer 确保在 main 函数退出时执行清理
+	// 注意：这只在程序正常退出时有效。如果被 kill -9，则无法清理。
+	go func() {
+		<-time.After(time.Second) // 等待主程序逻辑
+		defer func() {
+			log.Println("[系统] 程序退出，正在清理临时 Swap 文件...")
+			exec.Command("swapoff", swapFilePath).Run()
+			os.Remove(swapFilePath)
+			log.Println("[系统] 清理完成。")
+		}()
+	}()
+}
+
+func adjustOOMScore() {
+	score := "-500"
+	err := ioutil.WriteFile("/proc/self/oom_score_adj", []byte(score), 0644)
+	if err != nil {
+		log.Printf("[系统] 调整 OOM Score 失败: %v", err)
+	} else {
+		log.Printf("[系统] OOM Score 调整成功，降低被杀死的概率。")
 	}
 }
 
@@ -137,54 +292,32 @@ func fileWriter(wg *sync.WaitGroup, results <-chan string, file *os.File, counte
 	}
 }
 
-// parseLine 智能解析输入行，兼容多种 masscan 格式
 func parseLine(line string) string {
 	line = strings.TrimSpace(line)
-
-	if line == "" || strings.HasPrefix(line, "#") {
-		return ""
-	}
-
+	if line == "" || strings.HasPrefix(line, "#") { return "" }
 	if strings.Contains(line, "Host:") && strings.Contains(line, "Ports:") {
 		fields := strings.Fields(line)
 		var ip, port string
 		for i, field := range fields {
-			if field == "Host:" && i+1 < len(fields) {
-				ip = fields[i+1]
-			}
-			if field == "Ports:" && i+1 < len(fields) {
-				port = strings.Split(fields[i+1], "/")[0]
-			}
+			if field == "Host:" && i+1 < len(fields) { ip = fields[i+1] }
+			if field == "Ports:" && i+1 < len(fields) { port = strings.Split(fields[i+1], "/")[0] }
 		}
-		if ip != "" && port != "" {
-			return fmt.Sprintf("%s:%s", ip, port)
-		}
+		if ip != "" && port != "" { return fmt.Sprintf("%s:%s", ip, port) }
 	}
-
-	if strings.Contains(line, ":") {
-		return line
-	}
-
+	if strings.Contains(line, ":") { return line }
 	return ""
 }
 
 func getUserConfig() (AppConfig, error) {
 	config := AppConfig{}
 	reader := bufio.NewReader(os.Stdin)
-
 	fmt.Print("请输入包含目标列表的文件路径 (ip:port 或 masscan 格式): ")
 	filePath, _ := reader.ReadString('\n')
 	config.FilePath = strings.TrimSpace(filePath)
-
 	fmt.Print("请输入结果保存文件名 (默认 results.txt): ")
 	outputFilePath, _ := reader.ReadString('\n')
 	outputFilePath = strings.TrimSpace(outputFilePath)
-	if outputFilePath == "" {
-		config.OutputFilePath = "results.txt"
-	} else {
-		config.OutputFilePath = outputFilePath
-	}
-
+	if outputFilePath == "" { config.OutputFilePath = "results.txt" } else { config.OutputFilePath = outputFilePath }
 	fmt.Print("请输入并发协程数 (默认 30): ")
 	concurrencyStr, _ := reader.ReadString('\n')
 	concurrencyStr = strings.TrimSpace(concurrencyStr)
@@ -192,12 +325,9 @@ func getUserConfig() (AppConfig, error) {
 		config.Concurrency = 30
 	} else {
 		concurrency, err := strconv.Atoi(concurrencyStr)
-		if err != nil || concurrency <= 0 {
-			return config, fmt.Errorf("无效的并发数: %s", concurrencyStr)
-		}
+		if err != nil || concurrency <= 0 { return config, fmt.Errorf("无效的并发数: %s", concurrencyStr) }
 		config.Concurrency = concurrency
 	}
-
 	fmt.Print("请输入网络超时时间（秒，默认 10）: ")
 	timeoutStr, _ := reader.ReadString('\n')
 	timeoutStr = strings.TrimSpace(timeoutStr)
@@ -205,29 +335,24 @@ func getUserConfig() (AppConfig, error) {
 		config.Timeout = 10 * time.Second
 	} else {
 		timeoutSec, err := strconv.Atoi(timeoutStr)
-		if err != nil || timeoutSec <= 0 {
-			return config, fmt.Errorf("无效的超时时间: %s", timeoutStr)
-		}
+		if err != nil || timeoutSec <= 0 { return config, fmt.Errorf("无效的超时时间: %s", timeoutStr) }
 		config.Timeout = time.Duration(timeoutSec) * time.Second
 	}
-
 	fmt.Println("------------------------------------")
 	return config, nil
 }
 
 func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeout time.Duration, counter *int64) {
 	defer wg.Done()
-	// --- 核心修正：禁用 Keep-Alive 以提高稳定性 ---
 	transport := &http.Transport{
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives:   true, // 禁用连接复用
-		MaxIdleConnsPerHost: -1,   // 禁用连接池
+		DisableKeepAlives:   true,
+		MaxIdleConnsPerHost: -1,
 	}
 	client := &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
 	}
-
 	for target := range jobs {
 		checkTarget(target, client, results)
 		atomic.AddInt64(counter, 1)
@@ -235,37 +360,27 @@ func worker(wg *sync.WaitGroup, jobs <-chan string, results chan<- string, timeo
 }
 
 func checkTarget(target string, client *http.Client, results chan<- string) {
-	if target == "" {
-		return
-	}
-	if checkProtocol("https", target, client, results) {
-		return
-	}
+	if target == "" { return }
+	if checkProtocol("https", target, client, results) { return }
 	checkProtocol("http", target, client, results)
 }
 
 func checkProtocol(protocol, target string, client *http.Client, results chan<- string) bool {
 	url := fmt.Sprintf("%s://%s", protocol, target)
 	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return false
-	}
+	if err != nil { return false }
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-
 	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
+	if err != nil { return false }
 	defer resp.Body.Close()
-
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		limitedReader := io.LimitReader(resp.Body, 4*1024)
-		body, err := ioutil.ReadAll(limitedReader)
-		if err != nil {
-			return false
-		}
-
-		content := string(body)
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+		buf := *bufPtr
+		n, err := io.ReadFull(io.LimitReader(resp.Body, int64(len(buf))), buf)
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF { return false }
+		if n == 0 { return false }
+		content := string(buf[:n])
 		for _, signature := range XUI_SIGNATURES {
 			if strings.Contains(content, signature) {
 				fmt.Printf("\r[成功] 发现x-ui面板: %s (特征: %s)\n", url, signature)
