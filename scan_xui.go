@@ -179,15 +179,12 @@ func relaunchAsLowPriority() {
 
 	log.Println("[系统] 检测到初次启动，将以低CPU和IO优先级并优化内存设置后重新启动自身...")
 	
-	// 准备环境变量
 	env := os.Environ()
-	// 1. 设置更积极的GC
 	env = append(env, "GOGC=50")
 	log.Println("[系统] GOGC=50 已设置。")
 
-	// 2. 设置内存上限
 	if totalMem, err := getMemoryTotal(); err == nil {
-		limit := int(float64(totalMem) * 0.7) // 70% of total memory
+		limit := int(float64(totalMem) * 0.7)
 		env = append(env, fmt.Sprintf("GOMEMLIMIT=%dB", limit))
 		log.Printf("[系统] GOMEMLIMIT=%dMB 已设置。", limit/(1024*1024))
 	} else {
@@ -200,7 +197,7 @@ func relaunchAsLowPriority() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Env = env // 应用我们设置的环境变量
+	cmd.Env = env
 
 	err := syscall.Exec(cmd.Path, cmd.Args, cmd.Env)
 	if err != nil {
@@ -212,7 +209,8 @@ func getMemoryTotal() (uint64, error) {
 	if runtime.GOOS != "linux" {
 		return 0, fmt.Errorf("该功能仅支持Linux")
 	}
-	memInfo, err := ioutil.ReadFile("/proc/meminfo")
+	// 修正：使用 os.ReadFile 替代 ioutil.ReadFile
+	memInfo, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return 0, err
 	}
@@ -224,7 +222,7 @@ func getMemoryTotal() (uint64, error) {
 				if err != nil {
 					return 0, err
 				}
-				return val * 1024, nil // a value is in kB
+				return val * 1024, nil
 			}
 		}
 	}
@@ -232,7 +230,8 @@ func getMemoryTotal() (uint64, error) {
 }
 
 func setupSwap() {
-	out, err := ioutil.ReadFile("/proc/swaps")
+	// 修正：使用 os.ReadFile 替代 ioutil.ReadFile
+	out, err := os.ReadFile("/proc/swaps")
 	if err != nil {
 		log.Printf("[系统] 无法检查 swap: %v", err)
 		return
@@ -258,10 +257,8 @@ func setupSwap() {
 
 	log.Println("[系统] 临时 Swap 文件创建并启用成功。")
 
-	// 使用 defer 确保在 main 函数退出时执行清理
-	// 注意：这只在程序正常退出时有效。如果被 kill -9，则无法清理。
 	go func() {
-		<-time.After(time.Second) // 等待主程序逻辑
+		<-time.After(time.Second)
 		defer func() {
 			log.Println("[系统] 程序退出，正在清理临时 Swap 文件...")
 			exec.Command("swapoff", swapFilePath).Run()
@@ -273,7 +270,8 @@ func setupSwap() {
 
 func adjustOOMScore() {
 	score := "-500"
-	err := ioutil.WriteFile("/proc/self/oom_score_adj", []byte(score), 0644)
+	// 修正：使用 os.WriteFile 替代 ioutil.WriteFile
+	err := os.WriteFile("/proc/self/oom_score_adj", []byte(score), 0644)
 	if err != nil {
 		log.Printf("[系统] 调整 OOM Score 失败: %v", err)
 	} else {
