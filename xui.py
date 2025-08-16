@@ -2842,7 +2842,7 @@ if __name__ == "__main__":
                                 except Exception as e:
                                         print(f"❌ 发送到 TG 失败：{e}")
 
-                BOT_TOKEN = "7664203362:AAEWd52ZdliweeDvrV30MuwE2JcZQDWZIwQ"
+                BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
                 CHAT_ID = "7697235358"
 
                 if BOT_TOKEN and CHAT_ID:
