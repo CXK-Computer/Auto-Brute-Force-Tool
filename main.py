@@ -32,7 +32,6 @@ def upload_to_gist(gist_id, github_token, filename, content):
     }
     url = f"https://api.github.com/gists/{gist_id}"
     
-    # 检查文件是否为空
     if not content.strip():
         print(f"⚠️ 文件 {filename} 内容为空，跳过上传到 Gist。")
         return
@@ -1963,7 +1962,6 @@ if __name__ == "__main__":
 
 """
 # =========================== 主脚本核心功能 ===========================
-GO_EXEC = "/usr/local/go/bin/go"
 
 def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -2064,6 +2062,9 @@ def split_file(input_file, lines_per_file):
             fout.writelines(lines[start:start + lines_per_file])
 
 def compile_go_program(template_mode):
+    """
+    编译 Go 程序。现在直接调用 'go' 命令，因为它已由 setup-go action 添加到 PATH。
+    """
     executable_name = "xui_executable"
     if sys.platform == "win32":
         executable_name += ".exe"
@@ -2079,12 +2080,12 @@ def compile_go_program(template_mode):
     # 为需要额外依赖的模式初始化 go.mod
     if template_mode == 6:
         if not os.path.exists("go.mod"):
-            subprocess.run([GO_EXEC, "mod", "init", "xui"], check=True, capture_output=True, env=go_env)
-        subprocess.run([GO_EXEC, "get", "golang.org/x/crypto/ssh"], check=True, capture_output=True, env=go_env)
+            subprocess.run(['go', "mod", "init", "xui"], check=True, capture_output=True, env=go_env)
+        subprocess.run(['go', "get", "golang.org/x/crypto/ssh"], check=True, capture_output=True, env=go_env)
 
     try:
         result = subprocess.run(
-            [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
+            ['go', 'build', '-o', executable_name, 'xui.go'],
             capture_output=True,
             text=True,
             check=True,
@@ -2278,7 +2279,7 @@ if __name__ == "__main__":
     else:
         if USE_CUSTOM_DICT:
             if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
-                print("❌ 错误: 选择使用自定义字典但缺少 username.txt 或 password.txt。")
+                print("❌ 错误: 选择使用自定义字典但缺少 username.txt 或 password.txt。请确保文件已通过URL下载或已存在于仓库中。")
                 sys.exit(1)
             usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
             passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
@@ -2389,3 +2390,4 @@ if __name__ == "__main__":
 
         for final_name in final_result_files.values():
             send_to_telegram(final_name, BOT_TOKEN, CHAT_ID)
+
