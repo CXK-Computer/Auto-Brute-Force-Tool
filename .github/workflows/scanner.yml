@@ -43,17 +43,18 @@ on:
         default: 'scanner_progress.json'
 
 jobs:
-  # This is the first job in the chain
+  # Job 1
   run-scan-1:
     runs-on: ubuntu-latest
     timeout-minutes: 300 # 5-hour timeout for each job
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Set up Go
         uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with:
+          go-version: '1.22'
+          cache: false # Disable caching to prevent errors
       - name: Set up Python
         uses: actions/setup-python@v4
         with: { python-version: '3.10' }
@@ -86,7 +87,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
-  # Subsequent jobs are identical, but 'need' the previous one
+  # Job 2
   run-scan-2:
     needs: run-scan-1
     runs-on: ubuntu-latest
@@ -94,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -123,9 +124,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
-  # Repeat for jobs 3 through 12... (This is verbose but correct)
-  # To save space, I'll show job 3 and then skip to 13
-
+  # Job 3
   run-scan-3:
     needs: run-scan-2
     runs-on: ubuntu-latest
@@ -133,7 +132,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -161,6 +160,8 @@ jobs:
           PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
+
+  # Job 4
   run-scan-4:
     needs: run-scan-3
     runs-on: ubuntu-latest
@@ -168,7 +169,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -197,6 +198,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
+  # Job 5
   run-scan-5:
     needs: run-scan-4
     runs-on: ubuntu-latest
@@ -204,7 +206,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -233,6 +235,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
+  # Job 6
   run-scan-6:
     needs: run-scan-5
     runs-on: ubuntu-latest
@@ -240,7 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -269,6 +272,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
+  # Job 7
   run-scan-7:
     needs: run-scan-6
     runs-on: ubuntu-latest
@@ -276,7 +280,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -304,6 +308,8 @@ jobs:
           PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
+
+  # Job 8
   run-scan-8:
     needs: run-scan-7
     runs-on: ubuntu-latest
@@ -311,7 +317,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -340,6 +346,7 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
+  # Job 9
   run-scan-9:
     needs: run-scan-8
     runs-on: ubuntu-latest
@@ -347,7 +354,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -375,6 +382,8 @@ jobs:
           PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
+
+  # Job 10
   run-scan-10:
     needs: run-scan-9
     runs-on: ubuntu-latest
@@ -382,7 +391,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -410,6 +419,8 @@ jobs:
           PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
+
+  # Job 11
   run-scan-11:
     needs: run-scan-10
     runs-on: ubuntu-latest
@@ -417,7 +428,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -445,6 +456,8 @@ jobs:
           PASSWORD_DICT_URL: ${{ github.event.inputs.password_dict_url }}
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
+
+  # Job 12
   run-scan-12:
     needs: run-scan-11
     runs-on: ubuntu-latest
@@ -452,7 +465,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -481,16 +494,15 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
-  # ... imagine jobs 4, 5, 6, 7, 8, 9, 10, 11, 12 are here ...
-
+  # Job 13
   run-scan-13:
-    needs: run-scan-12 # This would need run-scan-12 in a full file
+    needs: run-scan-12
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: false }
       - uses: actions/setup-python@v4
         with: { python-version: '3.10' }
       - run: |
@@ -519,20 +531,16 @@ jobs:
           INSTALL_BACKDOOR: ${{ github.event.inputs.install_backdoor }}
         run: python main.py
 
+  # Final job to check progress and trigger the next workflow if needed
   relay_or_finish:
     runs-on: ubuntu-latest
-    needs: run-scan-13 # This job runs only after the last scan job completes
-
+    needs: run-scan-13
     steps:
       - name: Download input file for final check
         run: curl -L -o 1.txt "${{ github.event.inputs.input_file_url }}"
-
       - name: Trigger Next Workflow (if needed)
         run: |
-          # 1. From Gist, get the latest progress
           PROGRESS_CONTENT=$(curl -s -H "Authorization: token ${{ secrets.GIST_TOKEN }}" https://api.github.com/gists/${{ secrets.GIST_ID }} | jq -r '.files."${{ github.event.inputs.progress_file_name }}".content')
-          
-          # 2. Calculate total and completed parts
           TOTAL_LINES=$(wc -l < 1.txt)
           LINES_PER_PART=${{ github.event.inputs.lines_per_file }}
           TOTAL_PARTS=$(( (TOTAL_LINES + LINES_PER_PART - 1) / LINES_PER_PART ))
@@ -541,7 +549,6 @@ jobs:
           echo "Total parts: $TOTAL_PARTS"
           echo "Completed parts: $COMPLETED_PARTS"
 
-          # 3. If not finished, trigger the next workflow
           if [[ "$COMPLETED_PARTS" -lt "$TOTAL_PARTS" ]]; then
             echo "Task not finished. Triggering a new workflow to continue..."
             
