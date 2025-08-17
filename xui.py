@@ -807,7 +807,7 @@ if __name__ == "__main__":
             kwargs["install_backdoor"] = True
             with open("后门命令.txt", encoding='utf-8') as f: kwargs["custom_cmds"] = [l.strip() for l in f if l.strip()]
         print("\n=== 爆破一键启动 ===")
-        input_file = input_filename_with_default("请输入源文件名", "1.txt")
+        input_file = input_with_default("请输入源文件名", "1.txt")
         cleaned_input_file = preprocess_list(input_file, "cleaned_targets.txt")
         semaphore_size = input_with_default("爆破线程数", 2000)
         timeout = input_with_default("网络超时秒数", 8)
