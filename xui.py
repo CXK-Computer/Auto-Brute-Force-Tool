@@ -1673,11 +1673,32 @@ def generate_ipcx_py():
         f.write(IPCX_PY_CONTENT)
 
 def split_file(input_file, lines_per_file):
-    with open(input_file, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    for idx, start in enumerate(range(0, len(lines), lines_per_file), 1):
-        with open(os.path.join(TEMP_PART_DIR, f"part_{idx}.txt"), 'w', encoding='utf-8') as fout:
-            fout.writelines(lines[start:start + lines_per_file])
+    """
+    **MEMORY-EFFICIENT FILE SPLITTING**
+    This function reads the input file line by line (streaming) instead of
+    loading the whole file into memory. This allows it to handle files of
+    any size (like 40 million IPs) with minimal memory usage.
+    """
+    print(f"--- 正在以流式模式分割大文件 '{input_file}'... (这可能需要一些时间) ---")
+    try:
+        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f_in:
+            part_num = 1
+            f_out = None
+            for i, line in enumerate(f_in):
+                if i % lines_per_file == 0:
+                    if f_out:
+                        f_out.close()
+                    part_filename = os.path.join(TEMP_PART_DIR, f"part_{part_num}.txt")
+                    f_out = open(part_filename, 'w', encoding='utf-8')
+                    part_num += 1
+                f_out.write(line)
+            if f_out:
+                f_out.close()
+        print("--- 文件分割完成 ---")
+    except Exception as e:
+        print(f"❌ 文件分割时发生错误: {e}")
+        sys.exit(1)
+
 
 def compile_go_program():
     executable_name = "xui_executable"
@@ -2051,7 +2072,6 @@ def check_environment(template_mode):
     go_env = os.environ.copy()
     if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
     if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
-    # **BUG FIX**: Set Go proxy for reliable package downloads
     go_env['GOPROXY'] = 'https://goproxy.cn,direct'
 
     if not os.path.exists("go.mod"):
@@ -2071,8 +2091,6 @@ def check_environment(template_mode):
                 run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
             except subprocess.CalledProcessError as e:
                 print(f"\n❌ Go模块 '{pkg}' 安装失败。请检查网络或代理设置。")
-                # Do not exit, but inform the user. The compile step will ultimately fail.
-                # This prevents the script from crashing on the NameError later.
                 raise e 
         print(" 完成")
 
@@ -2082,7 +2100,6 @@ def load_credentials(template_mode, auth_mode=0):
     usernames, passwords, credentials = [], [], []
     
     if template_mode == 7: # Sub Store 模式
-        # This logic can be simplified or integrated with the main auth logic
         usernames, passwords = ["2cXaAxRGfddmGz2yx1wA"], ["2cXaAxRGfddmGz2yx1wA"]
         return usernames, passwords, credentials
 
@@ -2143,7 +2160,6 @@ if __name__ == "__main__":
         TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
         TEMP_HMFAIL_DIR = "temp_hmfail"
 
-        # **BUG FIX**: Define time_str earlier
         from datetime import datetime, timedelta, timezone
         beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
         time_str = beijing_time.strftime("%Y%m%d-%H%M")
@@ -2207,7 +2223,7 @@ if __name__ == "__main__":
                         print(f"❌ 错误: 文件 '{input_file}' 不存在。")
                         sys.exit(1)
 
-                with open(input_file, 'r', encoding='utf-8') as f:
+                with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
                     total_ips = sum(1 for line in f if line.strip())
                 print(f"--- 总计 {total_ips} 个目标 ---")
 
