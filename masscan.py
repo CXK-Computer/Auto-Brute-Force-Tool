@@ -2,12 +2,12 @@
 
 import os
 
-def convert_masscan_output():
+def convert_masscan_grepable_output():
     """
-    一个交互式脚本，用于将 Masscan 的默认 TXT 输出文件转换为 'ip:port' 格式列表。
+    一个交互式脚本，用于将 Masscan 的 Grepable 格式 (-oG) TXT 输出文件转换为 'ip:port' 格式。
     """
-    print("--- Masscan 结果转换脚本 ---")
-    print("本脚本将 'Discovered open port 80/tcp on 192.168.1.1' 格式的行转换为 '192.168.1.1:80'")
+    print("--- Masscan 结果转换脚本 (Grepable 格式专用) ---")
+    print("本脚本将 'Host: 1.2.3.4 () Ports: 80/open/tcp,...' 格式的行转换为 '1.2.3.4:80'")
 
     # 1. 获取用户输入的源文件路径
     while True:
@@ -15,7 +15,7 @@ def convert_masscan_output():
         if os.path.exists(input_file_path):
             break
         else:
-            print(f"错误: 文件 '{input_file_path}' 不存在，请检查文件名和路径是否正确。")
+            print(f"错误: 文件 '{input_file_path}' 不存在，请检查文件名和路径。")
 
     # 2. 获取用户指定的输出文件路径
     default_output_name = f"converted_{os.path.basename(input_file_path)}"
@@ -26,12 +26,12 @@ def convert_masscan_output():
     # 3. 开始转换
     converted_count = 0
     total_lines = 0
+    processed_hosts = 0
 
     print(f"\n正在读取文件: {input_file_path}")
     print(f"准备写入文件: {output_file_path}")
 
     try:
-        # 使用 'with' 语句确保文件能被正确关闭
         with open(input_file_path, 'r', encoding='utf-8') as infile, \
              open(output_file_path, 'w', encoding='utf-8') as outfile:
 
@@ -39,30 +39,44 @@ def convert_masscan_output():
                 total_lines += 1
                 line = line.strip()
 
-                # 检查是否是 masscan 的标准发现行
-                if line.startswith("Discovered open port"):
-                    try:
-                        # 分割字符串来提取所需信息
-                        parts = line.split()
+                # 仅处理以 "Host:" 开头的有效行，忽略注释行 "#"
+                if not line.startswith("Host:"):
+                    continue
+                
+                processed_hosts += 1
+                try:
+                    parts = line.split()
+                    # IP 地址总是在 'Host:' 后面，即列表的第二个元素 (索引 1)
+                    ip_addr = parts[1]
+
+                    # 找到 'Ports:' 关键字的索引位置
+                    ports_keyword_index = parts.index("Ports:")
+                    
+                    # 'Ports:' 之后的所有内容都属于端口信息
+                    # 我们将它们重新组合成一个字符串，然后按逗号分割，以处理一行多端口的情况
+                    port_section_str = " ".join(parts[ports_keyword_index + 1:])
+                    port_list = port_section_str.split(',')
+
+                    for port_info in port_list:
+                        port_info = port_info.strip() # 去除前后空格
+                        if not port_info:
+                            continue
                         
-                        # parts 列表应该是 ['Discovered', 'open', 'port', '80/tcp', 'on', '192.168.1.1']
-                        # 检查列表长度是否足够，防止索引错误
-                        if len(parts) >= 6:
-                            port_str = parts[3].split('/')[0] # 从 '80/tcp' 中提取 '80'
-                            ip_addr = parts[5]
-                            
-                            # 格式化并写入文件
-                            formatted_line = f"{ip_addr}:{port_str}\n"
+                        # 端口号是 '1080/open/tcp/...' 中的第一部分
+                        port = port_info.split('/')[0]
+                        
+                        # 验证端口确实是数字
+                        if port.isdigit():
+                            formatted_line = f"{ip_addr}:{port}\n"
                             outfile.write(formatted_line)
                             converted_count += 1
                         else:
-                            # 如果某行以 "Discovered open port" 开头但格式不完整，则打印提示
-                            print(f"警告: 跳过格式异常的行: {line}")
+                             print(f"警告: 在行中未能解析出有效端口: {line}")
 
-                    except IndexError:
-                        # 如果分割或索引操作失败，则跳过此行
-                        print(f"警告: 跳过格式错误的行: {line}")
-                        continue
+                except (ValueError, IndexError):
+                    # 如果某行格式不完整 (例如缺少 'Ports:' 关键字)，则跳过
+                    print(f"警告: 跳过格式异常的行: {line}")
+                    continue
     
     except Exception as e:
         print(f"\n处理文件时发生未知错误: {e}")
@@ -70,9 +84,10 @@ def convert_masscan_output():
 
     print("\n--- 转换完成 ---")
     print(f"总共读取行数: {total_lines}")
-    print(f"成功转换记录: {converted_count}")
-    print(f"结果已保存到文件: {output_file_path}")
+    print(f"已处理主机行: {processed_hosts}")
+    print(f"成功转换 IP:Port 记录: {converted_count}")
+    print(f"✅ 结果已保存到文件: {output_file_path}")
 
 
 if __name__ == "__main__":
-    convert_masscan_output()
+    convert_masscan_grepable_output()
