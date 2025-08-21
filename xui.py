@@ -1698,8 +1698,10 @@ def check_environment(template_mode):
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
     sys.stdout.flush()
     try:
-        pip_executable = "pip3" if shutil.which("pip3") else "python3 -m pip"
-        pip_cmd = pip_executable.split() + ["install"]
+        # **FINAL CENTOS FIX**: Use the most robust pip invocation method.
+        pip_executable = "pip3" if shutil.which("pip3") else sys.executable
+        pip_cmd = [pip_executable, "-m", "pip", "install"] if "python" in pip_executable else [pip_executable, "install"]
+
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
         pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
