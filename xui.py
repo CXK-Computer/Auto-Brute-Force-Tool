@@ -2178,9 +2178,13 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
 
             try:
                 run_env = os.environ.copy()
-                run_env["GOMEMLIMIT"] = f"{psutil.virtual_memory().total * 0.7 // 1024 // 1024}MiB"
+                # ==================== FIX: PASS MEMORY LIMIT ARGUMENT ====================
+                total_memory = psutil.virtual_memory().total
+                mem_limit = int(total_memory * 0.70 / 1024 / 1024)
+                run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
                 run_env["GOGC"] = "50"
-                cmd = ['./' + executable_name]
+                cmd = ['./' + executable_name, str(mem_limit)]
+                # =======================================================================
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
                 
                 if os.path.exists('xui.txt'):
