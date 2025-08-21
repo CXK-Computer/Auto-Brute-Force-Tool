@@ -1678,6 +1678,10 @@ def check_environment(template_mode):
         # For CentOS, EPEL repo is often needed for python3-pip
         run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
         ensure_packages(["python3-pip"])
+        # On some CentOS, we might need to set alternatives
+        if os.path.exists("/usr/bin/python3"):
+            run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False)
+
 
     # Now, use pip to install python modules to ensure they are in the correct path
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
