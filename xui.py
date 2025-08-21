@@ -36,6 +36,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,33 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32 // 0 for false, 1 for true
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+
+	// Establish baseline after a short delay to allow initial allocations
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+
+	// Set watermarks relative to the baseline
+	highWatermark := baselineMem + 200*1024*1024 // Baseline + 200MB
+	lowWatermark := baselineMem + 100*1024*1024  // Baseline + 100MB
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 // Worker function to process IPs from a channel
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
@@ -138,6 +166,8 @@ func main() {
 		os.Exit(0)
 	}()
 
+	go memoryMonitor()
+
 	inputFile := "results.txt"
 	batch, err := os.Open(inputFile)
 	if err != nil {
@@ -171,6 +201,9 @@ func main() {
 
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			tasks <- line
@@ -196,6 +229,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -204,6 +238,27 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
@@ -292,6 +347,8 @@ func main() {
 		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
+    
+    go memoryMonitor()
 
 	inputFile, err := os.Open("results.txt")
 	if err != nil {
@@ -325,6 +382,9 @@ func main() {
 
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			tasks <- line
@@ -347,6 +407,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -357,6 +418,27 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
@@ -435,7 +517,8 @@ func deployBackdoor(client *ssh.Client, ip, port, username, password string, cmd
 // ... (helper functions for backdoor deployment like checkUnzip, installPackage, etc. remain the same)
 
 func main() {
-	// Main function adapted for worker pool
+    go memoryMonitor()
+
 	inputFile, err := os.Open("results.txt")
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
@@ -463,6 +546,9 @@ func main() {
 
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			tasks <- line
@@ -486,6 +572,7 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -493,6 +580,27 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {
 	defer wg.Done()
@@ -559,6 +667,8 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 }
 
 func main() {
+    go memoryMonitor()
+
 	inputFile, err := os.Open("results.txt")
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
@@ -585,6 +695,9 @@ func main() {
 
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			tasks <- line
@@ -606,6 +719,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -613,6 +727,27 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
@@ -676,6 +811,8 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
 }
 
 func main() {
+    go memoryMonitor()
+
 	inputFile, err := os.Open("results.txt")
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
@@ -703,6 +840,9 @@ func main() {
 
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			tasks <- line
@@ -727,6 +867,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -741,7 +882,28 @@ var (
 	testURL      = "http://myip.ipip.net"
 	realIP       = ""
 	completedCount int64
+    isMemoryThrottled int32
 )
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -870,6 +1032,8 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
 }
 
 func main() {
+    go memoryMonitor()
+
 	var err error
 	realIP, err = getPublicIP(testURL)
 	if err != nil {
@@ -900,6 +1064,9 @@ func main() {
 
 	scanner := bufio.NewScanner(proxies)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		proxyAddr := strings.TrimSpace(scanner.Text())
 		if proxyAddr != "" {
 			tasks <- proxyAddr
@@ -923,6 +1090,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -930,6 +1098,27 @@ import (
 )
 
 var completedCount int64
+var isMemoryThrottled int32
+
+func memoryMonitor() {
+	var baselineMem uint64
+	var m runtime.MemStats
+	time.Sleep(2 * time.Second)
+	runtime.ReadMemStats(&m)
+	baselineMem = m.Sys
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		runtime.ReadMemStats(&m)
+		if m.Sys >= highWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 1)
+		} else if m.Sys < lowWatermark {
+			atomic.StoreInt32(&isMemoryThrottled, 0)
+		}
+	}
+}
 
 func createHttpClient() *http.Client {
 	tr := &http.Transport{
@@ -1017,6 +1206,8 @@ func isValidResponse(resp *http.Response) bool {
 }
 
 func main() {
+    go memoryMonitor()
+
 	inputFile, err := os.Open("results.txt")
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
@@ -1041,6 +1232,9 @@ func main() {
 
 	scanner := bufio.NewScanner(inputFile)
 	for scanner.Scan() {
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
+            time.Sleep(250 * time.Millisecond)
+        }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			fields := strings.Fields(line)
@@ -1464,17 +1658,18 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
     start_time = time.time()
     processed_ips = 0
 
-    total_memory = psutil.virtual_memory().total
+    total_memory = psutil.virtual_memory()。total
     mem_limit = int(total_memory * 0.70 / 1024 / 1024)
     print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
     
-    run_env = os.environ.copy()
+    run_env = os.environ。copy()
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
+    print("--- Go程序将进行自我内存调节以防止崩溃。 ---")
 
     print_progress_bar(0, total_ips, start_time, prefix='爆破进度', suffix='开始...')
-    for idx, part in enumerate(part_files, 1):
+    for idx, part 在 enumerate(part_files, 1):
         while True:
             mem_info = psutil.virtual_memory()
             available_percent = mem_info.available / mem_info.total * 100
@@ -1499,21 +1694,22 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
             if sys.platform == "linux":
                 cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
             cmd.append('./' + executable_name)
+            cmd.append(str(mem_limit)) # Pass mem_limit as argument
 
             # **MEMORY LEAK FIX**: Redirect stderr to stdout to ensure the buffer is always read.
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE，
+                stderr=subprocess.STDOUT，
                 text=True,
-                encoding='utf-8',
+                encoding='utf-8'，
                 errors='ignore', # Ignore potential decoding errors from binary output
                 env=run_env
             )
             
             # Read from the combined output stream
             for line in iter(process.stdout.readline, ''):
-                if not line.strip().startswith('\r'):
+                if not line.strip()。startswith('\r'):
                     sys.stdout.write(line)
                     sys.stdout.flush()
 
@@ -1682,6 +1878,7 @@ def check_environment(template_mode):
             print(f" 失败: {e}")
             sys.exit(1)
 
+    # First, ensure curl is present for location check
     ensure_packages(pkg_manager, ["curl"])
     in_china = is_in_china()
     
@@ -1833,8 +2030,8 @@ def load_credentials(template_mode, auth_mode=0):
     if use_custom == 'y':
         return load_credentials(template_mode, auth_mode=2) # Reuse logic
     else:
-        if template_mode == 8: usernames, passwords = ["root"], ["password"]
-        else: usernames, passwords = ["admin"], ["admin"]
+        if template_mode == 8: usernames, passwords = ["root"]， ["password"]
+        else: usernames, passwords = ["admin"]， ["admin"]
         return usernames, passwords, credentials
 
 
@@ -1846,13 +2043,13 @@ def get_vps_info():
         response.raise_for_status()
         data = response.json()
         return data.get('query', 'N/A'), data.get('country', 'N/A')
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions。RequestException as e:
         print(f"⚠️ 获取VPS信息失败: {e}")
     return "N/A", "N/A"
 
 def get_nezha_server(config_file="config.yml"):
     """
-    Checks for config.yml, parses it, and returns the server value.
+    Checks for config.yml, parses it, 和 returns the server value.
     """
     if not os.path.exists(config_file):
         return "N/A"
@@ -1870,8 +2067,8 @@ def parse_result_line(line):
     """Parses a result line and returns ip, port, user, password."""
     proxy_match = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?([\d\.]+):(\d+)', line)
     if proxy_match:
-        user = proxy_match.group(2) or ''
-        password = proxy_match.group(3) or ''
+        user = proxy_match.group(2) 或 ''
+        password = proxy_match.group(3) 或 ''
         ip = proxy_match.group(4)
         port = proxy_match.group(5)
         return ip, port, user, password
@@ -1881,14 +2078,14 @@ def parse_result_line(line):
         ip_port = parts[0]
         user = parts[1] if len(parts) > 1 else ''
         password = parts[2] if len(parts) > 2 else ''
-        if ':' in ip_port:
+        if ':' 在 ip_port:
             ip, port = ip_port.split(':', 1)
             return ip, port, user, password
             
     return None, None, None, None
 
 def analyze_and_expand_scan(result_file, template_mode, params, template_map):
-    """Analyzes results, finds expandable subnets, and runs up to two rounds of expansion scans."""
+    """Analyzes results, finds expandable subnets, 和 runs up to two rounds of expansion scans."""
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
