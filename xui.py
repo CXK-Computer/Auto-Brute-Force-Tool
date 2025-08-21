@@ -1655,7 +1655,6 @@ def check_environment(template_mode):
 
     print(">>> 正在检查并安装依赖环境...")
     
-    # **CENTOS/DEBIAN COMPATIBILITY FIX**
     pkg_manager = ""
     if shutil.which("apt-get"):
         pkg_manager = "apt-get"
@@ -1666,14 +1665,6 @@ def check_environment(template_mode):
         sys.exit(1)
 
     print(f"    - 检测到包管理器: {pkg_manager}")
-    
-    # First, ensure curl is present for location check
-    ensure_packages_cmd = [pkg_manager, "install", "-y", "curl"]
-    if pkg_manager == "yum":
-        run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
-    run_cmd(ensure_packages_cmd, quiet=True)
-    
-    in_china = is_in_china()
     
     UPDATED = False
     def ensure_packages(pm, packages):
@@ -1691,11 +1682,15 @@ def check_environment(template_mode):
         except Exception as e:
             print(f" 失败: {e}")
             sys.exit(1)
+
+    # First, ensure curl is present for location check
+    ensure_packages(pkg_manager, ["curl"])
+    in_china = is_in_china()
     
-    # **PIP INSTALL FIX**
     if pkg_manager == "apt-get":
         ensure_packages("apt-get", ["python3-pip"])
     else: # yum
+        run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
         ensure_packages("yum", ["python3-pip"])
         if os.path.exists("/usr/bin/python3"):
             run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False)
@@ -1703,7 +1698,8 @@ def check_environment(template_mode):
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
     sys.stdout.flush()
     try:
-        pip_cmd = ["python3", "-m", "pip", "install"]
+        pip_executable = "pip3" if shutil.which("pip3") else "python3 -m pip"
+        pip_cmd = pip_executable.split() + ["install"]
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
         pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
