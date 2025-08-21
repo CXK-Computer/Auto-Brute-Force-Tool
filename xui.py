@@ -1548,14 +1548,18 @@ def compile_go_program():
         go_env['GOCACHE'] = '/tmp/.cache/go-build'
 
     try:
+        # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
+        # Replaced capture_output=True with stdout/stderr pipes for Python 3.6 compatibility
         result = subprocess.run(
             [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             check=True,
             encoding='utf-8',
             env=go_env
         )
+        # ======================================================================
         if result.stderr:
             print("--- Go编译器警告 ---")
             print(result.stderr)
@@ -1608,7 +1612,7 @@ def check_and_manage_swap():
             if shutil.which("fallocate"):
                 subprocess.run(["fallocate", "-l", "2G", swap_file], check=True)
             else:
-                subprocess.run(["dd", "if=/dev/zero", f"of={swap_file}", "bs=1M", "count=2048"], check=True, capture_output=True)
+                subprocess.run(["dd", "if=/dev/zero", f"of={swap_file}", "bs=1M", "count=2048"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             subprocess.run(["chmod", "600", swap_file], check=True)
             subprocess.run(["mkswap", swap_file], check=True)
@@ -1836,17 +1840,27 @@ def check_environment(template_mode):
             raise
 
     def is_in_china():
+        print("\n    - 正在通过 ping google.com 检测网络环境...")
         try:
+            # 使用 ping 来检测是否在中国。如果失败，则认为是在中国。
             result = subprocess.run(
-                ["curl", "-s", "http://ip-api.com/json/?fields=countryCode"],
-                capture_output=True, text=True, check=True, timeout=10
+                ["ping", "-c", "1", "-W", "2", "google.com"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False 
             )
-            if '"countryCode":"CN"' in result.stdout:
-                print("\n    - ✅ 检测到服务器位于中国，将自动使用国内镜像。")
+            if result.returncode == 0:
+                print("    - ✅ Ping 成功，判断为海外服务器。")
+                return False
+            else:
+                print("    - ⚠️ Ping 超时或失败，判断为国内服务器，将自动使用镜像。")
                 return True
+        except FileNotFoundError:
+            print("    - ⚠️ 未找到 ping 命令，无法检测网络。将使用默认源。")
+            return False
         except Exception:
-            print("\n    - ⚠️ IP地理位置检测失败，将使用默认源。")
-        return False
+            print("    - ⚠️ Ping 检测时发生未知错误，将使用默认源。")
+            return False
 
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
@@ -1886,8 +1900,10 @@ def check_environment(template_mode):
             print(f" 失败: {e}")
             sys.exit(1)
 
-    # First, ensure curl is present for location check
-    ensure_packages(pkg_manager, ["curl"])
+    # 为 ping 命令安装对应的包
+    ping_package = "iputils" if pkg_manager == "yum" else "iputils-ping"
+    ensure_packages(pkg_manager, ["curl", ping_package])
+    
     in_china = is_in_china()
     
     if pkg_manager == "apt-get":
@@ -1895,13 +1911,12 @@ def check_environment(template_mode):
     else: # yum
         run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
         ensure_packages("yum", ["python3-pip"])
-        if os.path.exists("/usr/bin/python3"):
-            run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False)
+        # This command can fail safely if alternatives is not set up
+        run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False, quiet=True)
 
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
     sys.stdout.flush()
     try:
-        # **FINAL CENTOS FIX**: Use the absolute path to the current python interpreter to run pip
         pip_cmd = [sys.executable, "-m", "pip", "install"]
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
@@ -2044,7 +2059,6 @@ def load_credentials(template_mode, auth_mode=0):
 
 
 def get_vps_info():
-    # **BUG FIX**: Add local import to ensure 'requests' is defined.
     import requests
     try:
         response = requests.get("http://ip-api.com/json/?fields=country,query", timeout=10)
@@ -2056,9 +2070,6 @@ def get_vps_info():
     return "N/A", "N/A"
 
 def get_nezha_server(config_file="config.yml"):
-    """
-    Checks for config.yml, parses it, and returns the server value.
-    """
     if not os.path.exists(config_file):
         return "N/A"
     try:
@@ -2093,7 +2104,6 @@ def parse_result_line(line):
     return None, None, None, None
 
 def analyze_and_expand_scan(result_file, template_mode, params, template_map):
-    """Analyzes results, finds expandable subnets, and runs up to two rounds of expansion scans."""
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
@@ -2138,7 +2148,9 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
                 try:
                     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
                     masscan_cmd = ["masscan", subnet, "-p", port, "--rate=10000", "-oG", masscan_output_file]
-                    subprocess.run(masscan_cmd, check=True, capture_output=True, text=True)
+                    # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
+                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    # ======================================================================
 
                     with open(masscan_output_file, 'r') as f:
                         for line in f:
@@ -2171,7 +2183,9 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
                 run_env["GOMEMLIMIT"] = f"{psutil.virtual_memory().total * 0.7 // 1024 // 1024}MiB"
                 run_env["GOGC"] = "50"
                 cmd = ['./' + executable_name]
-                subprocess.run(cmd, check=True, capture_output=True, text=True, env=run_env)
+                # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
+                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=run_env)
+                # ======================================================================
                 
                 if os.path.exists('xui.txt'):
                     with open('xui.txt', 'r') as f:
@@ -2308,7 +2322,6 @@ if __name__ == "__main__":
                 
                 merge_xui_files()
                 
-                # --- NEW: Expansion Scan Logic ---
                 initial_results_file = "xui.txt"
                 if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
                     newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map)
@@ -2318,7 +2331,6 @@ if __name__ == "__main__":
                             for result in sorted(list(newly_found_results)):
                                 f.write(result + '\n')
                         
-                        # Deduplicate the final file
                         with open(initial_results_file, 'r', encoding='utf-8') as f:
                             unique_lines = sorted(list(set(f.readlines())))
                         with open(initial_results_file, 'w', encoding='utf-8') as f:
@@ -2391,7 +2403,10 @@ if __name__ == "__main__":
                 BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
                 CHAT_ID = "7697235358"
 
-                if BOT_TOKEN and CH_ID:
+                # ==================== TYPO FIX ====================
+                # Corrected CH_ID to CHAT_ID
+                if BOT_TOKEN and CHAT_ID:
+                # ================================================
                     files_to_send = []
                     if final_result_file and os.path.exists(final_result_file):
                         files_to_send.append(final_result_file)
