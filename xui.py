@@ -1822,6 +1822,8 @@ def check_environment(template_mode):
         try:
             subprocess.run(cmd, check=check, stdout=stdout, stderr=stderr, env=env)
         except subprocess.CalledProcessError as e:
+            if not quiet:
+                print(f"❌ 命令 '{' '.join(cmd)}' 执行失败。")
             if check: raise e
         except FileNotFoundError:
             print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
@@ -1898,7 +1900,10 @@ def check_environment(template_mode):
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
         pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
-        run_cmd(pip_cmd, quiet=True)
+        # ==================== DEBUG CHANGE ====================
+        # Changed quiet=True to quiet=False to show detailed error messages
+        run_cmd(pip_cmd, quiet=False)
+        # ======================================================
         print(" 完成")
     except Exception as e:
         print(f" 失败: {e}")
