@@ -1616,14 +1616,6 @@ def check_environment(template_mode):
     import platform
     import re
     
-    if platform.system().lower() == "windows":
-        print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
-        try:
-            import psutil, requests, openpyxl, yaml
-        except ImportError:
-            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml")
-        return
-
     def run_cmd(cmd, check=True, quiet=False, extra_env=None):
         env = os.environ.copy()
         if extra_env:
@@ -1639,6 +1631,28 @@ def check_environment(template_mode):
             print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
             raise
 
+    # Location check function
+    def is_in_china():
+        try:
+            result = subprocess.run(
+                ["curl", "-s", "http://ip-api.com/json/?fields=countryCode"],
+                capture_output=True, text=True, check=True, timeout=10
+            )
+            if '"countryCode":"CN"' in result.stdout:
+                print("\n    - ✅ 检测到服务器位于中国，将自动使用国内镜像。")
+                return True
+        except Exception:
+            print("\n    - ⚠️ IP地理位置检测失败，将使用默认源。")
+        return False
+
+    if platform.system().lower() == "windows":
+        print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
+        try:
+            import psutil, requests, openpyxl, yaml
+        except ImportError:
+            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml")
+        return
+
     print(">>> 正在检查并安装依赖环境...")
     
     # **CENTOS/DEBIAN COMPATIBILITY FIX**
@@ -1653,17 +1667,22 @@ def check_environment(template_mode):
 
     print(f"    - 检测到包管理器: {pkg_manager}")
     
+    # First, ensure curl is present for location check
+    ensure_packages([pkg_manager, "curl"])
+    
+    in_china = is_in_china()
+    
     UPDATED = False
-    def ensure_packages(packages):
+    def ensure_packages(pm, packages):
         nonlocal UPDATED
         sys.stdout.write("    - 正在检查系统包...")
         sys.stdout.flush()
         try:
-            if not UPDATED and pkg_manager == "apt-get":
-                run_cmd([pkg_manager, "update", "-y"], quiet=True)
+            if not UPDATED and pm == "apt-get":
+                run_cmd([pm, "update", "-y"], quiet=True)
                 UPDATED = True
             
-            install_cmd = [pkg_manager, "install", "-y"] + packages
+            install_cmd = [pm, "install", "-y"] + packages
             run_cmd(install_cmd, quiet=True)
             print(" 完成")
         except Exception as e:
@@ -1671,33 +1690,28 @@ def check_environment(template_mode):
             sys.exit(1)
     
     # **PIP INSTALL FIX**
-    # First, ensure python3-pip is installed via system package manager
     if pkg_manager == "apt-get":
-        ensure_packages(["python3-pip"])
+        ensure_packages("apt-get", ["python3-pip"])
     else: # yum
-        # For CentOS, EPEL repo is often needed for python3-pip
         run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
-        ensure_packages(["python3-pip"])
-        # On some CentOS, we might need to set alternatives
+        ensure_packages("yum", ["python3-pip"])
         if os.path.exists("/usr/bin/python3"):
             run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False)
 
-
-    # Now, use pip to install python modules to ensure they are in the correct path
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
     sys.stdout.flush()
     try:
-        pip_cmd = ["python3", "-m", "pip", "install", "requests", "psutil", "openpyxl", "pyyaml"]
+        pip_cmd = ["python3", "-m", "pip", "install"]
+        if in_china:
+            pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
+        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
         run_cmd(pip_cmd, quiet=True)
         print(" 完成")
     except Exception as e:
         print(f" 失败: {e}")
         sys.exit(1)
 
-
-    # Install other system packages
-    ensure_packages(["ca-certificates", "curl", "tar", "masscan"])
-
+    ensure_packages(pkg_manager, ["ca-certificates", "tar", "masscan"])
 
     if pkg_manager == "apt-get":
         sys.stdout.write("    - 正在更新CA证书...")
@@ -1723,6 +1737,9 @@ def check_environment(template_mode):
              run_cmd(["yum", "remove", "-y", "golang"], check=False, quiet=True)
 
         urls = ["https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz", "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"]
+        if not in_china:
+            urls.reverse() # Prioritize go.dev if not in China
+
         GO_TAR_PATH = "/tmp/go.tar.gz"
         download_success = False
         for url in urls:
@@ -1753,7 +1770,8 @@ def check_environment(template_mode):
     go_env = os.environ.copy()
     if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
     if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
-    go_env['GOPROXY'] = 'https://goproxy.cn,direct'
+    if in_china:
+        go_env['GOPROXY'] = 'https://goproxy.cn,direct'
 
     if not os.path.exists("go.mod"):
         run_cmd([GO_EXEC, "mod", "init", "xui"], quiet=True, extra_env=go_env)
