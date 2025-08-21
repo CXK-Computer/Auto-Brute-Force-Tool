@@ -1658,18 +1658,18 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
     start_time = time.time()
     processed_ips = 0
 
-    total_memory = psutil.virtual_memory()。total
+    total_memory = psutil.virtual_memory().total
     mem_limit = int(total_memory * 0.70 / 1024 / 1024)
     print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
     
-    run_env = os.environ。copy()
+    run_env = os.environ.copy()
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
     print("--- Go程序将进行自我内存调节以防止崩溃。 ---")
 
     print_progress_bar(0, total_ips, start_time, prefix='爆破进度', suffix='开始...')
-    for idx, part 在 enumerate(part_files, 1):
+    for idx, part in enumerate(part_files, 1):
         while True:
             mem_info = psutil.virtual_memory()
             available_percent = mem_info.available / mem_info.total * 100
@@ -1699,17 +1699,17 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
             # **MEMORY LEAK FIX**: Redirect stderr to stdout to ensure the buffer is always read.
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE，
-                stderr=subprocess.STDOUT，
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                encoding='utf-8'，
+                encoding='utf-8',
                 errors='ignore', # Ignore potential decoding errors from binary output
                 env=run_env
             )
             
             # Read from the combined output stream
             for line in iter(process.stdout.readline, ''):
-                if not line.strip()。startswith('\r'):
+                if not line.strip().startswith('\r'):
                     sys.stdout.write(line)
                     sys.stdout.flush()
 
@@ -2030,8 +2030,8 @@ def load_credentials(template_mode, auth_mode=0):
     if use_custom == 'y':
         return load_credentials(template_mode, auth_mode=2) # Reuse logic
     else:
-        if template_mode == 8: usernames, passwords = ["root"]， ["password"]
-        else: usernames, passwords = ["admin"]， ["admin"]
+        if template_mode == 8: usernames, passwords = ["root"], ["password"]
+        else: usernames, passwords = ["admin"], ["admin"]
         return usernames, passwords, credentials
 
 
@@ -2043,13 +2043,13 @@ def get_vps_info():
         response.raise_for_status()
         data = response.json()
         return data.get('query', 'N/A'), data.get('country', 'N/A')
-    except requests.exceptions。RequestException as e:
+    except requests.exceptions.RequestException as e:
         print(f"⚠️ 获取VPS信息失败: {e}")
     return "N/A", "N/A"
 
 def get_nezha_server(config_file="config.yml"):
     """
-    Checks for config.yml, parses it, 和 returns the server value.
+    Checks for config.yml, parses it, and returns the server value.
     """
     if not os.path.exists(config_file):
         return "N/A"
@@ -2067,8 +2067,8 @@ def parse_result_line(line):
     """Parses a result line and returns ip, port, user, password."""
     proxy_match = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?([\d\.]+):(\d+)', line)
     if proxy_match:
-        user = proxy_match.group(2) 或 ''
-        password = proxy_match.group(3) 或 ''
+        user = proxy_match.group(2) or ''
+        password = proxy_match.group(3) or ''
         ip = proxy_match.group(4)
         port = proxy_match.group(5)
         return ip, port, user, password
@@ -2078,14 +2078,14 @@ def parse_result_line(line):
         ip_port = parts[0]
         user = parts[1] if len(parts) > 1 else ''
         password = parts[2] if len(parts) > 2 else ''
-        if ':' 在 ip_port:
+        if ':' in ip_port:
             ip, port = ip_port.split(':', 1)
             return ip, port, user, password
             
     return None, None, None, None
 
 def analyze_and_expand_scan(result_file, template_mode, params, template_map):
-    """Analyzes results, finds expandable subnets, 和 runs up to two rounds of expansion scans."""
+    """Analyzes results, finds expandable subnets, and runs up to two rounds of expansion scans."""
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
