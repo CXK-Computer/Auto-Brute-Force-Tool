@@ -7,14 +7,22 @@ import sys
 import atexit
 import re
 
-# 依赖将在check_environment()中通过apt安装，这里仅做导入
+# ==================== 最终修复 ====================
+# 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
+if sys.version_info[0] < 3:
+    print("错误：此脚本需要 Python 3 运行。")
+    print("请使用 'python3 xui.py' 命令来执行。")
+    sys.exit(1)
+# ================================================
+
+# 依赖将在check_environment()中安装，这里仅做导入
 try:
     import psutil
     import requests
     import yaml
     from openpyxl import Workbook, load_workbook
 except ImportError:
-    # 留空，让环境检查函数处理安装
+    # 留空，让环境检查函数处理依赖安装
     pass
 
 try:
@@ -1822,8 +1830,6 @@ def check_environment(template_mode):
         try:
             subprocess.run(cmd, check=check, stdout=stdout, stderr=stderr, env=env)
         except subprocess.CalledProcessError as e:
-            if not quiet:
-                print(f"❌ 命令 '{' '.join(cmd)}' 执行失败。")
             if check: raise e
         except FileNotFoundError:
             print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
@@ -1900,10 +1906,7 @@ def check_environment(template_mode):
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
         pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
-        # ==================== DEBUG CHANGE ====================
-        # Changed quiet=True to quiet=False to show detailed error messages
-        run_cmd(pip_cmd, quiet=False)
-        # ======================================================
+        run_cmd(pip_cmd, quiet=True)
         print(" 完成")
     except Exception as e:
         print(f" 失败: {e}")
@@ -2218,6 +2221,7 @@ if __name__ == "__main__":
                 
                 check_environment(TEMPLATE_MODE)
                 
+                # Re-import after check_environment to ensure they are available
                 import psutil
                 import requests
                 import yaml
@@ -2387,7 +2391,7 @@ if __name__ == "__main__":
                 BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
                 CHAT_ID = "7697235358"
 
-                if BOT_TOKEN and CHAT_ID:
+                if BOT_TOKEN and CH_ID:
                     files_to_send = []
                     if final_result_file and os.path.exists(final_result_file):
                         files_to_send.append(final_result_file)
