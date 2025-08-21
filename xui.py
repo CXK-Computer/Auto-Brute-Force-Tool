@@ -10,6 +10,7 @@ import atexit
 try:
     import psutil
     import requests
+    import yaml
     from openpyxl import Workbook, load_workbook
 except ImportError:
     # 留空，让环境检查函数处理安装
@@ -1498,15 +1499,18 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
                 cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
             cmd.append('./' + executable_name)
 
+            # **MEMORY LEAK FIX**: Redirect stderr to stdout to ensure the buffer is always read.
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding='utf-8',
+                errors='ignore', # Ignore potential decoding errors from binary output
                 env=run_env
             )
             
+            # Read from the combined output stream
             for line in iter(process.stdout.readline, ''):
                 if not line.strip().startswith('\r'):
                     sys.stdout.write(line)
@@ -1614,9 +1618,9 @@ def check_environment(template_mode):
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
         try:
-            import psutil, requests, openpyxl
+            import psutil, requests, openpyxl, yaml
         except ImportError:
-            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl")
+            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml")
         return
 
     def run_cmd(cmd, check=True, quiet=False, extra_env=None):
@@ -1652,7 +1656,7 @@ def check_environment(template_mode):
             print(f" 失败: {e}")
             sys.exit(1)
 
-    base_packages = ["python3-pip", "python3-requests", "python3-openpyxl", "python3-psutil", "ca-certificates", "curl", "tar"]
+    base_packages = ["python3-pip", "python3-requests", "python3-openpyxl", "python3-psutil", "ca-certificates", "curl", "tar", "python3-yaml"]
     ensure_apt_packages(base_packages)
 
     sys.stdout.write("    - 正在更新CA证书...")
@@ -1777,6 +1781,8 @@ def load_credentials(template_mode, auth_mode=0):
 
 
 def get_vps_info():
+    # **BUG FIX**: Add local import to ensure 'requests' is defined.
+    import requests
     try:
         response = requests.get("http://ip-api.com/json/?fields=country,query", timeout=10)
         response.raise_for_status()
@@ -1785,6 +1791,22 @@ def get_vps_info():
     except requests.exceptions.RequestException as e:
         print(f"⚠️ 获取VPS信息失败: {e}")
     return "N/A", "N/A"
+
+def get_nezha_server(config_file="config.yml"):
+    """
+    Checks for config.yml, parses it, and returns the server value.
+    """
+    if not os.path.exists(config_file):
+        return "N/A"
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config_data = yaml.safe_load(f)
+            if isinstance(config_data, dict) and 'server' in config_data:
+                return config_data['server']
+    except Exception as e:
+        print(f"⚠️ 解析 {config_file} 失败: {e}")
+    return "N/A"
+
 
 if __name__ == "__main__":
         start = time.time()
@@ -1811,6 +1833,7 @@ if __name__ == "__main__":
                 
                 import psutil
                 import requests
+                import yaml
                 from openpyxl import Workbook, load_workbook
 
                 adjust_oom_score()
@@ -1898,7 +1921,7 @@ if __name__ == "__main__":
 
                 run_ipcx()
                 
-                mode_map = {1: "XUI", 2: "哪吒", 6: "SSH", 7: "SubStore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
+                mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
                 prefix = mode_map.get(TEMPLATE_MODE, "result")
 
                 if os.path.exists("xui.txt"):
@@ -1925,19 +1948,23 @@ if __name__ == "__main__":
                 cost = int(end - start)
                 
                 vps_ip, vps_country = get_vps_info()
+                nezha_server = get_nezha_server()
 
                 if interrupted:
                         print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
                 else:
                         print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
-                def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A"):
+                def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A"):
                         if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
                                 print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
                                 return
 
                         url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-                        caption_text = f"VPS: {vps_ip} ({vps_country})\n任务结果: {os.path.basename(file_path)}"
+                        caption_text = f"VPS: {vps_ip} ({vps_country})\\n"
+                        if nezha_server != "N/A":
+                            caption_text += f"哪吒Server: {nezha_server}\\n"
+                        caption_text += f"任务结果: {os.path.basename(file_path)}"
                         
                         with open(file_path, "rb") as f:
                                 files = {'document': f}
@@ -1969,4 +1996,4 @@ if __name__ == "__main__":
 
                     for f in files_to_send:
                         print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
-                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country)
+                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
