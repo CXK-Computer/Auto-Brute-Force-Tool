@@ -1631,6 +1631,7 @@ def check_environment(template_mode):
             print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
             raise
 
+    # Location check function
     def is_in_china():
         try:
             result = subprocess.run(
@@ -1682,6 +1683,7 @@ def check_environment(template_mode):
             print(f" 失败: {e}")
             sys.exit(1)
 
+    # First, ensure curl is present for location check
     ensure_packages(pkg_manager, ["curl"])
     in_china = is_in_china()
     
