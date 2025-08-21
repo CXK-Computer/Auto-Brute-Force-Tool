@@ -1668,14 +1668,17 @@ def check_environment(template_mode):
     print(f"    - 检测到包管理器: {pkg_manager}")
     
     # First, ensure curl is present for location check
-    ensure_packages([pkg_manager, "curl"])
+    ensure_packages_cmd = [pkg_manager, "install", "-y", "curl"]
+    if pkg_manager == "yum":
+        run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
+    run_cmd(ensure_packages_cmd, quiet=True)
     
     in_china = is_in_china()
     
     UPDATED = False
     def ensure_packages(pm, packages):
         nonlocal UPDATED
-        sys.stdout.write("    - 正在检查系统包...")
+        sys.stdout.write(f"    - 正在使用 {pm} 检查系统包...")
         sys.stdout.flush()
         try:
             if not UPDATED and pm == "apt-get":
@@ -1693,7 +1696,6 @@ def check_environment(template_mode):
     if pkg_manager == "apt-get":
         ensure_packages("apt-get", ["python3-pip"])
     else: # yum
-        run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
         ensure_packages("yum", ["python3-pip"])
         if os.path.exists("/usr/bin/python3"):
             run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False)
