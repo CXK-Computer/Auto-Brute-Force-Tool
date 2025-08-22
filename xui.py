@@ -6,7 +6,6 @@ import shutil
 import sys
 import atexit
 import re
-import select
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -191,12 +190,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -390,12 +396,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -565,12 +578,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -749,12 +769,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -937,12 +964,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1198,12 +1232,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1385,12 +1426,19 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+		startTime := time.Now()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
 				percentage := float64(current) / float64(totalLines) * 100
 				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				elapsed := time.Since(startTime).Seconds()
+				var eta float64
+				if current > 0 {
+					eta = (elapsed / float64(current)) * float64(totalLines-current)
+				}
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
+					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1792,61 +1840,53 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100) as pbar:
-        for idx, part in enumerate(part_files, 1):
-            pbar.set_description(f"处理Part {idx}/{len(part_files)}")
-            while True:
-                mem_info = psutil.virtual_memory()
-                available_percent = mem_info.available / mem_info.total * 100
-                if available_percent < 15:
-                    tqdm.write(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
-                    time.sleep(60)
-                else:
-                    break
+    for idx, part in enumerate(part_files, 1):
+        print(f"\n--- [开始处理 Part {idx}/{len(part_files)}] ---")
+        while True:
+            mem_info = psutil.virtual_memory()
+            available_percent = mem_info.available / mem_info.total * 100
+            if available_percent < 15:
+                print(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
+                time.sleep(60)
+            else:
+                break
             
-            part_path = os.path.join(TEMP_PART_DIR, part)
+        part_path = os.path.join(TEMP_PART_DIR, part)
             
-            try:
-                if sys.platform != "win32":
-                    os.chmod(executable_name, 0o755)
+        try:
+            if sys.platform != "win32":
+                os.chmod(executable_name, 0o755)
                 
-                output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
-                cmd = ['./' + executable_name, part_path, output_file]
+            output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
+            cmd = ['./' + executable_name, part_path, output_file]
 
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=run_env
-                )
-                
-                # 使用 select 实时读取 stderr
-                while process.poll() is None:
-                    reads = [process.stderr.fileno()]
-                    ret = select.select(reads, [], [], 0.1)
-                    for fd in ret[0]:
-                        if fd == process.stderr.fileno():
-                            progress_dots = process.stderr.read(1)
-                            if progress_dots:
-                                pbar.update(len(progress_dots))
-                
-                # 读取剩余的输出
-                remaining_dots = process.stderr.read()
-                if remaining_dots:
-                    pbar.update(len(remaining_dots))
-
-                if process.returncode != 0:
-                     _, stderr_output = process.communicate()
-                     raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr_output)
-
-            except subprocess.CalledProcessError as e:
-                tqdm.write(f"\n--- 程序执行失败: {part} ---")
-                tqdm.write(f"返回码: {e.returncode}")
-                if e.stderr:
-                    tqdm.write(f"错误输出: {e.stderr.decode('utf-8', errors='ignore')}")
-                sys.exit(1)
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=run_env
+            )
             
-            time.sleep(sleep_seconds)
+            # 直接将子进程的 stdout 实时输出
+            for line in iter(lambda: process.stdout.readline(), b''):
+                sys.stdout.write(line.decode('utf-8', errors='ignore'))
+                sys.stdout.flush()
+
+            process.wait()
+
+            if process.returncode != 0:
+                 _, stderr_output = process.communicate()
+                 raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr_output)
+
+        except subprocess.CalledProcessError as e:
+            print(f"\n--- 程序执行失败: {part} ---")
+            print(f"返回码: {e.returncode}")
+            if e.stderr:
+                print(f"错误输出: {e.stderr.decode('utf-8', errors='ignore')}")
+            sys.exit(1)
+        
+        print(f"--- [Part {idx}/{len(part_files)} 处理完成] ---")
+        time.sleep(sleep_seconds)
 
 def merge_xui_files():
     merged_file = 'xui.txt' 
@@ -2287,20 +2327,14 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
                 
-                process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=run_env)
-                with tqdm(total=len(ips_to_verify), desc="二次验证", unit="ip", ncols=100) as pbar:
-                    while process.poll() is None:
-                        reads = [process.stderr.fileno()]
-                        ret = select.select(reads, [], [], 0.1)
-                        for fd in ret[0]:
-                            if fd == process.stderr.fileno():
-                                progress_dots = process.stderr.read(1)
-                                if progress_dots:
-                                    pbar.update(len(progress_dots))
-                    # 读取剩余的输出
-                    remaining_dots = process.stderr.read()
-                    if remaining_dots:
-                        pbar.update(len(remaining_dots))
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
+                
+                # 直接将子进程的 stdout 实时输出
+                for line in iter(lambda: process.stdout.readline(), b''):
+                    sys.stdout.write(line.decode('utf-8', errors='ignore'))
+                    sys.stdout.flush()
+
+                process.wait()
 
                 if process.returncode != 0:
                     raise subprocess.CalledProcessError(process.returncode, cmd)
