@@ -56,6 +56,16 @@ import (
 var completedCount int64
 var isMemoryThrottled int32
 
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
+
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -169,6 +179,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	usernames, passwords := {user_list}, {pass_list}
 	if len(usernames) == 0 || len(passwords) == 0 {
 		fmt.Println("错误：用户名或密码列表为空。")
@@ -221,6 +251,16 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -336,6 +376,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+	
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	usernames, passwords := {user_list}, {pass_list}
     if len(usernames) == 0 || len(passwords) == 0 {
         fmt.Println("错误：用户名或密码列表为空。")
@@ -383,6 +443,16 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -481,6 +551,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -528,6 +618,16 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -630,6 +730,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	paths := {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -675,6 +795,16 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -784,6 +914,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+	
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -839,6 +989,16 @@ var (
 	completedCount int64
     isMemoryThrottled int32
 )
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -995,6 +1155,13 @@ func main() {
 		os.Exit(1)
 	}
 	inputFile, outputFile := os.Args[1], os.Args[2]
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\nGracefully shutting down...")
+		os.Exit(0)
+	}()
     go memoryMonitor()
 	var err error
 	realIP, err = getPublicIP(testURL)
@@ -1007,6 +1174,26 @@ func main() {
 		return
 	}
 	defer proxies.Close()
+	
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("无法创建输出文件: %v\\n", err)
@@ -1053,6 +1240,16 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
+
+func countLines(filePath string) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil { return 0, err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	count := 0
+	for scanner.Scan() { count++ }
+	return count, scanner.Err()
+}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -1166,6 +1363,26 @@ func main() {
 		return
 	}
 	defer batch.Close()
+
+	totalLines, _ := countLines(inputFile)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			current := atomic.LoadInt64(&completedCount)
+			if totalLines > 0 {
+				percentage := float64(current) / float64(totalLines) * 100
+				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
+				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+			}
+			if current >= int64(totalLines) {
+				fmt.Fprintf(os.Stdout, "\\n")
+				return
+			}
+			<-ticker.C
+		}
+	}()
+
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
@@ -1573,40 +1790,10 @@ def cleanup_swap(swap_file):
     except Exception as e:
         print(f"⚠️ 清理Swap文件失败: {e}")
 
-def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
-    elapsed_time = time.time() - start_time
-    if total == 0:
-        percent_str = "100.0"
-        iteration = total
-    else:
-        percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
-    
-    filled_length = int(length * iteration // total) if total > 0 else length
-    bar = fill * filled_length + '-' * (length - filled_length)
-
-    if iteration > 0 and elapsed_time > 0:
-        its_per_sec = iteration / elapsed_time
-        remaining_time = (total - iteration) / its_per_sec
-        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
-    else:
-        its_per_sec = 0
-        eta_str = "??:??"
-
-    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
-    
-    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
-    
-    sys.stdout.write(progress_str)
-    sys.stdout.flush()
-    if iteration == total:
-        sys.stdout.write('\n')
-
 def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
     total_parts = len(part_files)
-    start_time = time.time()
-    processed_ips = 0
-
+    
     total_memory = psutil.virtual_memory().total
     mem_limit = int(total_memory * 0.70 / 1024 / 1024)
     print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
@@ -1616,8 +1803,8 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    print_progress_bar(0, total_ips, start_time, prefix='爆破进度', suffix='开始...')
     for idx, part in enumerate(part_files, 1):
+        print(f"\n--- [开始处理 Part {idx}/{total_parts}] ---")
         while True:
             mem_info = psutil.virtual_memory()
             available_percent = mem_info.available / mem_info.total * 100
@@ -1629,10 +1816,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
         
         part_path = os.path.join(TEMP_PART_DIR, part)
         
-        ips_in_part = 0
-        with open(part_path, 'r', encoding='utf-8') as f:
-            ips_in_part = sum(1 for _ in f)
-
         try:
             if sys.platform != "win32":
                 os.chmod(executable_name, 0o755)
@@ -1649,9 +1832,8 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
             
             for line in iter(lambda: process.stdout.readline(), b''):
                 line_str = line.decode('utf-8', errors='ignore')
-                if not line_str.strip().startswith('\r'):
-                    sys.stdout.write(line_str)
-                    sys.stdout.flush()
+                sys.stdout.write(line_str)
+                sys.stdout.flush()
 
             process.wait()
             if process.returncode != 0:
@@ -1662,11 +1844,7 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
             print(f"返回码: {e.returncode}")
             sys.exit(1)
         
-        processed_ips += ips_in_part
-        if processed_ips > total_ips:
-            processed_ips = total_ips
-
-        print_progress_bar(processed_ips, total_ips, start_time, prefix='爆破进度', suffix=f'Part {idx}/{total_parts}')
+        print(f"--- [Part {idx}/{total_parts} 处理完成] ---")
         time.sleep(sleep_seconds)
 
 def merge_xui_files():
@@ -2107,7 +2285,14 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 if os.path.exists(verification_output_file): os.remove(verification_output_file)
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
+                
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=run_env)
+                for line in iter(lambda: process.stdout.readline(), b''):
+                    sys.stdout.write(line.decode('utf-8', errors='ignore'))
+                    sys.stdout.flush()
+                process.wait()
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, cmd)
                 
                 if os.path.exists(verification_output_file):
                     with open(verification_output_file, 'r') as f:
