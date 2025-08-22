@@ -2637,4 +2637,4 @@ if __name__ == "__main__":
 
                     for f in files_to_send:
                         print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
-                        send_to_telegram(f, BOT_TOKEN, CH_ID, vps_ip, vps_country, nezha_server)
+                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
