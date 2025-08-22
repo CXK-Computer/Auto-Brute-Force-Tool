@@ -1804,12 +1804,8 @@ def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeo
                    .replace("{auth_mode}", str(kwargs.get('auth_mode', 0))) \
                    .replace("{creds_list}", creds_list)
 
-    # ==================== FIX START ====================
-    # 修复BOM问题：以二进制模式('wb')写入文件，并手动将字符串编码为UTF-8字节。
-    # 这可以确保无论原始脚本或字符串中是否包含BOM，最终文件都是干净的UTF-8编码。
-    with open('xui.go', 'wb') as f:
-        f.write(code.encode('utf-8'))
-    # ===================== FIX END =====================
+    with open('xui.go', 'w', encoding='utf-8', errors='ignore') as f:
+        f.write(code)
 
 def split_file(input_file, lines_per_file):
     # 内存高效的文件分割
@@ -2269,13 +2265,18 @@ def load_credentials(template_mode, auth_mode=0):
     if auth_mode == 1: # 无凭据
         return [], [], []
     
+    # ==================== FIX START ====================
+    # 使用 'utf-8-sig' 编码来读取所有字典文件。
+    # 这会自动处理并移除文件开头的BOM，防止BOM污染数据。
+    # 这是解决 "invalid BOM in the middle of the file" 错误的根本方法。
+    
     if auth_mode == 2: # 用户/密码文件
         if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
             print("❌ 错误: 缺少 username.txt 或 password.txt 文件。")
             sys.exit(1)
-        with open("username.txt", 'r', encoding='utf-8', errors='ignore') as f:
+        with open("username.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
             usernames = [line.strip() for line in f if line.strip()]
-        with open("password.txt", 'r', encoding='utf-8', errors='ignore') as f:
+        with open("password.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
             passwords = [line.strip() for line in f if line.strip()]
         if not usernames or not passwords:
             print("❌ 错误: 用户名或密码文件为空。")
@@ -2286,12 +2287,14 @@ def load_credentials(template_mode, auth_mode=0):
         if not os.path.exists("credentials.txt"):
             print("❌ 错误: 缺少 credentials.txt 文件。")
             sys.exit(1)
-        with open("credentials.txt", 'r', encoding='utf-8', errors='ignore') as f:
+        with open("credentials.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
             credentials = [line.strip() for line in f if line.strip() and ":" in line]
         if not credentials:
             print("❌ 错误: credentials.txt 文件为空或格式不正确。")
             sys.exit(1)
         return usernames, passwords, credentials
+
+    # ===================== FIX END =====================
 
     # 非代理模式的默认逻辑
     use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
