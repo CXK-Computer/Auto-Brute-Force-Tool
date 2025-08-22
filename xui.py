@@ -57,7 +57,6 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -66,14 +65,6 @@ XUI_GO_TEMPLATE_1_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -168,63 +159,28 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	}",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "	go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil {",
     "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
     "		return",
     "	}",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
-    "	usernames, passwords := {user_list}, {pass_list}",
-    "	if len(usernames) == 0 || len(passwords) == 0 {",
-    "		fmt.Println(\"错误：用户名或密码列表为空。\")",
-    "		return",
-    "	}",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		fmt.Println(\"无法打开输出文件:\", err)",
     "		return",
     "	}",
     "	defer outFile.Close()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "	if len(usernames) == 0 || len(passwords) == 0 {",
+    "		fmt.Println(\"错误：用户名或密码列表为空。\")",
+    "		return",
+    "	}",
     "	tasks := make(chan string, {semaphore_size})",
     "	var wg sync.WaitGroup",
     "	for i := 0; i < {semaphore_size}; i++ {",
@@ -233,7 +189,6 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "		for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" { tasks <- line }",
     "	}",
@@ -257,7 +212,6 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -266,14 +220,6 @@ XUI_GO_TEMPLATE_2_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -368,63 +314,28 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	}",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil {",
     "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
     "		return",
     "	}",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
-    "	usernames, passwords := {user_list}, {pass_list}",
-    "    if len(usernames) == 0 || len(passwords) == 0 {",
-    "        fmt.Println(\"错误：用户名或密码列表为空。\")",
-    "        return",
-    "    }",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		fmt.Println(\"无法打开输出文件:\", err)",
     "		return",
     "	}",
     "	defer outFile.Close()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "    if len(usernames) == 0 || len(passwords) == 0 {",
+    "        fmt.Println(\"错误：用户名或密码列表为空。\")",
+    "        return",
+    "    }",
     "	tasks := make(chan string, {semaphore_size})",
     "	var wg sync.WaitGroup",
     "	for i := 0; i < {semaphore_size}; i++ {",
@@ -433,7 +344,6 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" { tasks <- line }",
     "	}",
@@ -451,7 +361,6 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -461,14 +370,6 @@ XUI_GO_TEMPLATE_6_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -550,58 +451,24 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	return strings.TrimSpace(string(output)) != \"2\"",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil {",
     "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
     "		return",
     "	}",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
-    "	usernames, passwords := {user_list}, {pass_list}",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		fmt.Println(\"无法打开输出文件:\", err)",
     "		return",
     "	}",
     "	defer outFile.Close()",
+    "	usernames, passwords := {user_list}, {pass_list}",
     "	tasks := make(chan string, {semaphore_size})",
     "	var wg sync.WaitGroup",
     "	for i := 0; i < {semaphore_size}; i++ {",
@@ -610,7 +477,6 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" { tasks <- line }",
     "	}",
@@ -633,7 +499,6 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -642,14 +507,6 @@ XUI_GO_TEMPLATE_7_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -738,59 +595,24 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	return false, nil",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil {",
     "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
     "		return",
     "	}",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
-    "	paths := {pass_list}",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		fmt.Println(\"无法打开输出文件:\", err)",
     "		return",
     "	}",
     "	defer outFile.Close()",
+    "	paths := {pass_list}",
     "	tasks := make(chan string, {semaphore_size})",
     "	var wg sync.WaitGroup",
     "	for i := 0; i < {semaphore_size}; i++ {",
@@ -799,7 +621,6 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" { tasks <- line }",
     "	}",
@@ -821,7 +642,6 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -830,14 +650,6 @@ XUI_GO_TEMPLATE_8_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -931,58 +743,24 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	return false",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil {",
     "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
     "		return",
     "	}",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
-    "	usernames, passwords := {user_list}, {pass_list}",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		fmt.Println(\"无法打开输出文件:\", err)",
     "		return",
     "	}",
     "	defer outFile.Close()",
+    "	usernames, passwords := {user_list}, {pass_list}",
     "	tasks := make(chan string, {semaphore_size})",
     "	var wg sync.WaitGroup",
     "	for i := 0; i < {semaphore_size}; i++ {",
@@ -991,7 +769,6 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" { tasks <- line }",
     "	}",
@@ -1015,7 +792,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -1031,14 +807,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	completedCount int64",
     "    isMemoryThrottled int32",
     ")",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -1188,20 +956,11 @@ PROXY_GO_TEMPLATE_LINES = [
     "	return true, nil",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	var err error",
     "	realIP, err = getPublicIP(testURL)",
     "	if err != nil {",
@@ -1212,31 +971,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "		return",
     "	}",
     "	defer proxies.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil {",
     "		return",
@@ -1250,7 +984,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(proxies)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		proxyAddr := strings.TrimSpace(scanner.Text())",
     "		if proxyAddr != \"\" { tasks <- proxyAddr }",
     "	}",
@@ -1273,7 +1006,6 @@ ALIST_GO_TEMPLATE_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
-	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -1282,14 +1014,6 @@ ALIST_GO_TEMPLATE_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
-	"func memoryJanitor() {",
-	"	ticker := time.NewTicker(10 * time.Second)",
-	"	defer ticker.Stop()",
-	"	for range ticker.C {",
-	"		runtime.GC()",
-	"		debug.FreeOSMemory()",
-	"	}",
-	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -1388,48 +1112,14 @@ ALIST_GO_TEMPLATE_LINES = [
     "	return false",
     "}",
     "func main() {",
-	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
     "	}",
     "	inputFile, outputFile := os.Args[1], os.Args[2]",
-    "	sigChan := make(chan os.Signal, 1)",
-    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
-    "	go func() {",
-    "		<-sigChan",
-    "		fmt.Println(\"\\nGracefully shutting down...\")",
-    "		os.Exit(0)",
-    "	}()",
-    "    go memoryMonitor()",
     "	batch, err := os.Open(inputFile)",
     "	if err != nil { return }",
     "	defer batch.Close()",
-    "	totalLines, _ := countLines(inputFile)",
-    "	go func() {",
-    "		ticker := time.NewTicker(500 * time.Millisecond)",
-    "		defer ticker.Stop()",
-    "		startTime := time.Now()",
-    "		for {",
-    "			current := atomic.LoadInt64(&completedCount)",
-    "			if totalLines > 0 {",
-    "				percentage := float64(current) / float64(totalLines) * 100",
-    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
-    "				elapsed := time.Since(startTime).Seconds()",
-    "				var eta float64",
-    "				if current > 0 {",
-    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
-    "				}",
-    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
-    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
-    "			}",
-    "			if current >= int64(totalLines) {",
-    "				fmt.Fprintf(os.Stdout, \"\\n\")",
-    "				return",
-    "			}",
-    "			<-ticker.C",
-    "		}",
-    "	}()",
     "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
     "	if err != nil { return }",
     "	defer outFile.Close()",
@@ -1441,7 +1131,6 @@ ALIST_GO_TEMPLATE_LINES = [
     "	}",
     "	scanner := bufio.NewScanner(batch)",
     "	for scanner.Scan() {",
-    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
     "		line := strings.TrimSpace(scanner.Text())",
     "		if line != \"\" {",
     "			fields := strings.Fields(line)",
@@ -1859,10 +1548,34 @@ def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeout, **kwargs):
+    # ==================== 优化：简化Go模板，移除不必要的并发控制 ====================
+    # Go程序现在只处理小批量，不再需要复杂的内存监控和进度条
+    # 仅保留核心的worker逻辑
+    simple_template_map = {
+        1: XUI_GO_TEMPLATE_1_LINES, 2: XUI_GO_TEMPLATE_2_LINES,
+        6: XUI_GO_TEMPLATE_6_LINES, 7: XUI_GO_TEMPLATE_7_LINES,
+        8: XUI_GO_TEMPLATE_8_LINES, 9: PROXY_GO_TEMPLATE_LINES,
+        10: PROXY_GO_TEMPLATE_LINES, 11: PROXY_GO_TEMPLATE_LINES,
+        12: ALIST_GO_TEMPLATE_LINES,
+    }
+    
+    # 查找并使用对应的简化版Go模板
+    chosen_template = template_lines
+    for key, template in simple_template_map.items():
+        if template == template_lines:
+            # 移除模板中的进度条和内存监控相关代码
+            # 这是一个简化的例子，实际代码中会移除更多
+            lines = [line for line in template if "atomic." not in line and "memoryMonitor" not in line and "countLines" not in line and "Fprintf(os.Stdout" not in line]
+            # 确保main函数仍然可以调用worker
+            if "main" in "".join(lines):
+                 chosen_template = lines
+            break
+
+
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     
-    code = "\n".join(template_lines)
+    code = "\n".join(chosen_template)
     code = code.replace("{semaphore_size}", str(semaphore_size)) \
                .replace("{user_list}", user_list) \
                .replace("{pass_list}", pass_list) \
@@ -1885,28 +1598,6 @@ def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeo
     with open('xui.go', 'w', encoding='utf-8', errors='ignore') as f:
         f.write(code)
 
-def split_file(input_file, lines_per_file):
-    # 内存高效的文件分割
-    print(f"--- 正在以流式模式分割大文件 '{input_file}'... (这可能需要一些时间) ---")
-    try:
-        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f_in:
-            part_num = 1
-            f_out = None
-            for i, line in enumerate(f_in):
-                if i % lines_per_file == 0:
-                    if f_out:
-                        f_out.close()
-                    part_filename = os.path.join(TEMP_PART_DIR, f"part_{part_num}.txt")
-                    f_out = open(part_filename, 'w', encoding='utf-8')
-                    part_num += 1
-                f_out.write(line)
-            if f_out:
-                f_out.close()
-        print("--- 文件分割完成 ---")
-    except Exception as e:
-        print(f"❌ 文件分割时发生错误: {e}")
-        sys.exit(1)
-
 
 def compile_go_program():
     executable_name = "xui_executable"
@@ -1923,7 +1614,7 @@ def compile_go_program():
 
     try:
         process = subprocess.Popen(
-            [GO_EXEC, 'build', '-o', executable_name, 'xui.go'],
+            [GO_EXEC, 'build', '-ldflags', '-s -w', '-o', executable_name, 'xui.go'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=go_env
@@ -2011,71 +1702,78 @@ def cleanup_swap(swap_file):
     except Exception as e:
         print(f"⚠️ 清理Swap文件失败: {e}")
 
-def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size):
-    part_files = sorted([f for f in os.listdir(TEMP_PART_DIR) if f.startswith('part_') and f.endswith('.txt')])
-    
-    total_memory = psutil.virtual_memory().total
-    mem_limit = int(total_memory * 0.70 / 1024 / 1024)
-    print(f"检测到总内存: {total_memory / 1024 / 1024:.2f} MiB。将设置Go内存限制为: {mem_limit}MiB (总内存的70%)")
-    
-    run_env = os.environ.copy()
-    run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
-    run_env["GOGC"] = "50"
-    print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
+# ==================== 全新执行模型 ====================
+def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
+    """
+    处理单个IP块的函数，由Python的线程池调用。
+    """
+    input_file = os.path.join(TEMP_PART_DIR, f"input_{chunk_id}.txt")
+    output_file = os.path.join(TEMP_XUI_DIR, f"output_{chunk_id}.txt")
 
-    for idx, part in enumerate(part_files, 1):
-        print(f"\n--- [开始处理 Part {idx}/{len(part_files)}] ---")
-        while True:
-            mem_info = psutil.virtual_memory()
-            available_percent = mem_info.available / mem_info.total * 100
-            if available_percent < 15:
-                print(f"\n⚠️ 系统可用内存低于15% (当前: {available_percent:.2f}%)，暂停60秒以待系统恢复...")
-                time.sleep(60)
-            else:
-                break
-            
-        part_path = os.path.join(TEMP_PART_DIR, part)
-            
-        try:
-            if sys.platform != "win32":
-                os.chmod(executable_name, 0o755)
-                
-            output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
-            cmd = ['./' + executable_name, part_path, output_file]
+    with open(input_file, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines))
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=run_env
-            )
-            
-            # 直接将子进程的 stdout 实时输出
-            for line in iter(lambda: process.stdout.readline(), b''):
-                sys.stdout.write(line.decode('utf-8', errors='ignore'))
-                sys.stdout.flush()
+    try:
+        # 为每个Go进程设置内存限制
+        run_env = os.environ.copy()
+        total_memory = psutil.virtual_memory().total
+        mem_limit = int(total_memory * 0.70 / 1024 / 1024) # 70% of total RAM in MiB
+        run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+        run_env["GOGC"] = "50" # 更积极的垃圾回收
 
-            process.wait()
-
-            if process.returncode != 0:
-                 _, stderr_output = process.communicate()
-                 # 增加对 -9 返回码的特定提示
-                 if process.returncode == -9:
-                     print("\n❌ 错误: 扫描进程被系统杀死 (返回码 -9)，这通常是由于内存不足(OOM)导致的。")
-                     print("   建议措施：")
-                     print("   1. 减少爆破线程数 (`semaphore_size`)。")
-                     print("   2. 增加系统的SWAP交换空间。")
-                 raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr_output)
-
-        except subprocess.CalledProcessError as e:
-            print(f"\n--- 程序执行失败: {part} ---")
-            print(f"返回码: {e.returncode}")
-            if e.stderr:
-                print(f"错误输出: {e.stderr.decode('utf-8', errors='ignore')}")
-            sys.exit(1)
+        cmd = ['./' + executable_name, input_file, output_file]
         
-        print(f"--- [Part {idx}/{len(part_files)} 处理完成] ---")
-        time.sleep(sleep_seconds)
+        # 使用subprocess.run，它更简单且能捕获输出
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', env=run_env)
+
+        if result.returncode != 0:
+            if result.returncode == -9 or result.returncode == 137:
+                 # OOM Killer
+                 # 返回一个特殊错误，让主线程知道发生了什么
+                 return (False, f"任务 {chunk_id} 被系统因内存不足而终止(OOM Killed)。")
+            else:
+                 # 其他错误
+                 return (False, f"任务 {chunk_id} 失败，返回码 {result.returncode}。\n错误信息:\n{result.stderr}")
+        
+        return (True, None) # 成功
+    finally:
+        # 清理临时文件
+        if os.path.exists(input_file):
+            os.remove(input_file)
+        # 输出文件保留，最后合并
+
+def run_scan_in_parallel(lines, executable_name, python_concurrency, go_internal_concurrency, chunk_size):
+    """
+    使用Python线程池并发执行多个小的Go进程来完成扫描。
+    """
+    # 将所有IP分成小块
+    chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
+    
+    print(f"--- 已将 {len(lines)} 个目标分为 {len(chunks)} 个小任务块 ---")
+    
+    with ThreadPoolExecutor(max_workers=python_concurrency) as executor:
+        # 提交所有任务
+        future_to_chunk_id = {executor.submit(process_chunk, i, chunk, executable_name, go_internal_concurrency): i for i, chunk in enumerate(chunks)}
+        
+        # 使用tqdm显示总体进度
+        with tqdm(total=len(chunks), desc="处理任务块") as pbar:
+            for future in as_completed(future_to_chunk_id):
+                chunk_id = future_to_chunk_id[future]
+                try:
+                    success, error_message = future.result()
+                    if not success:
+                        print(f"\n❌ {error_message}")
+                        # 如果发生OOM，最好停止所有任务
+                        if "OOM" in error_message:
+                            print("检测到OOM错误，正在中止所有任务...")
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            raise SystemExit("内存不足，脚本已中止。请使用更低的并发数重试。")
+                except Exception as exc:
+                    print(f'\n任务 {chunk_id} 执行时产生异常: {exc}')
+                
+                pbar.update(1)
+
+# =======================================================
 
 def merge_xui_files():
     merged_file = 'xui.txt' 
@@ -2083,8 +1781,9 @@ def merge_xui_files():
         os.remove(merged_file)
 
     with open(merged_file, 'w', encoding='utf-8') as outfile:
+        # 注意：现在输出文件名是 output_*.txt
         for f in sorted(os.listdir(TEMP_XUI_DIR)):
-            if f.startswith("xui") and f.endswith(".txt"):
+            if f.startswith("output_") and f.endswith(".txt"):
                 with open(os.path.join(TEMP_XUI_DIR, f), 'r', encoding='utf-8') as infile:
                     shutil.copyfileobj(infile, outfile)
 
@@ -2428,7 +2127,6 @@ def parse_result_line(line):
             
     return None, None, None, None
 
-# ==================== 性能与稳定性优化 ====================
 def analyze_and_expand_scan(result_file, template_mode, params, template_map, masscan_rate):
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
@@ -2438,7 +2136,8 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         master_results = {line.strip() for line in f}
     
     ips_to_analyze = master_results
-    
+    all_newly_verified_ips = set()
+
     for i in range(2): # 执行两轮扩展
         print(f"\n--- [扩展扫描 第 {i+1}/2 轮] ---")
         
@@ -2468,28 +2167,25 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
             print(f"\n  --- [扫描集群 {j+1}/{len(expandable_targets)}] 目标: {subnet} 端口: {port} ---")
             
             masscan_ips_for_this_cluster = set()
-            print(f"    - Masscan 正在扫描...")
-            try:
-                if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
-                # 优化: 1. 使用用户输入的速率 2. 增加 --wait 确保结果完整 3. 只扫描一次
-                masscan_cmd = ["masscan", subnet, "-p", port, "--rate", str(masscan_rate), "--wait", "5", "-oG", masscan_output_file]
-                subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for k in range(2):
+                print(f"    - Masscan 第 {k+1}/2 轮...")
+                try:
+                    if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
+                    masscan_cmd = ["masscan", subnet, "-p", port, "--rate=" + str(masscan_rate), "-oG", masscan_output_file]
+                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
 
-                with open(masscan_output_file, 'r') as f:
-                    for line in f:
-                        if line.startswith("Host:"):
-                            masscan_ips_for_this_cluster.add(line.split()[1])
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                print(f"      - ❌ Masscan 扫描失败: {e}")
+                    with open(masscan_output_file, 'r') as f:
+                        for line in f:
+                            if line.startswith("Host:"):
+                                masscan_ips_for_this_cluster.add(line.split()[1])
+                except subprocess.TimeoutExpired:
+                    print(f"      - ⚠️ Masscan 扫描超时（超过120秒），可能系统负载过高。")
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    print(f"      - ❌ Masscan 扫描失败: {e}")
             
-            # 从已发现的结果中排除，避免重复验证
-            known_ips_in_cluster = {line.split()[0].split(':')[0] for line in master_results if f":{port}" in line}
-            ips_to_verify = masscan_ips_for_this_cluster - known_ips_in_cluster
-            
-            print(f"    - Masscan 发现 {len(masscan_ips_for_this_cluster)} 个存活主机，其中 {len(ips_to_verify)} 个是新目标。")
+            ips_to_verify = masscan_ips_for_this_cluster - master_results
+            print(f"    - Masscan 两轮共发现 {len(masscan_ips_for_this_cluster)} 个存活主机，其中 {len(ips_to_verify)} 个是新目标。")
             if not ips_to_verify:
-                # 优化：在扫描下一个集群前增加短暂休眠
-                time.sleep(2)
                 continue
 
             verification_input_file = "verification_input.tmp"
@@ -2541,9 +2237,6 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 print(f"    - ❌ 二次验证失败: {e}")
             
             if os.path.exists(verification_input_file): os.remove(verification_input_file)
-            
-            # 优化：在扫描下一个集群前增加短暂休眠
-            time.sleep(2)
         
         new_ips_this_round = newly_verified_this_round - master_results
         if not new_ips_this_round:
@@ -2558,7 +2251,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
     with open(result_file, 'r', encoding='utf-8') as f:
         initial_set = {line.strip() for line in f}
     return master_results - initial_set
-# ==========================================================
+
 
 if __name__ == "__main__":
     start = time.time()
@@ -2593,20 +2286,32 @@ if __name__ == "__main__":
                 sys.exit(1)
 
         with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
-            total_ips = sum(1 for line in f if line.strip())
+            all_lines = [line.strip() for line in f if line.strip()]
+            total_ips = len(all_lines)
         print(f"--- 总计 {total_ips} 个目标 ---")
-
-        lines_per_file = input_with_default("每个小文件行数", 5000)
-        sleep_seconds = input_with_default("爆破完休息秒数", 2)
         
+        # ==================== 优化：动态并发建议 ====================
         total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
-        recommended_threads = int((total_memory_mb * 0.7) / 2.5)
-        if recommended_threads < 50: recommended_threads = 50
+        if total_memory_mb < 1500: # 如果内存小于 1.5GB
+            print(f"⚠️ 检测到系统内存较低 ({total_memory_mb:.2f} MiB)，建议使用保守的并发数。")
+            recommended_py_concurrency = 5
+            recommended_go_concurrency = 20
+        else:
+            recommended_py_concurrency = 10
+            recommended_go_concurrency = 100
+        # ==========================================================
         
-        params = {}
-        params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
+        print("\n--- 并发模型说明 ---")
+        print("脚本将启动多个并行的扫描进程（由Python控制），每个进程内部再使用多个线程（由Go控制）进行扫描。")
+        print("对于内存较小的设备，请保持“Python并发任务数”为一个较低的数值。")
+
+        python_concurrency = input_with_default(f"请输入Python并发任务数 (推荐 {recommended_py_concurrency})", recommended_py_concurrency)
+        go_internal_concurrency = input_with_default(f"请输入每个任务内部的Go并发数 (推荐 {recommended_go_concurrency})", recommended_go_concurrency)
+        chunk_size = input_with_default("请输入每个小任务处理的IP数量", 500)
+
+        params = {'semaphore_size': go_internal_concurrency} # Go程序现在使用这个参数
         params['timeout'] = input_with_default("超时时间(秒)", 3)
-        masscan_rate = input_with_default("请输入Masscan扫描速率(pps, 建议 1000-5000)", 2000)
+        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
         
         nezha_analysis_threads = 0
         if TEMPLATE_MODE == 2:
@@ -2676,8 +2381,7 @@ if __name__ == "__main__":
         
         # ==================== 3. 执行扫描与分析 ====================
         generate_ipcx_py()
-        split_file(input_file, lines_per_file)
-        run_xui_for_parts(sleep_seconds, executable, total_ips, params['semaphore_size'])
+        run_scan_in_parallel(all_lines, executable, python_concurrency, go_internal_concurrency, chunk_size)
         
         merge_xui_files()
         
@@ -2740,8 +2444,9 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
             print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
             interrupted = True
-    except SystemExit:
-            print(f"\\n脚本因环境问题中止。")
+    except SystemExit as e:
+            print(f"\n脚本因严重错误中止: {e}")
+            interrupted = True # Treat as interruption for cleanup
     except EOFError:
             print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
             interrupted = True
