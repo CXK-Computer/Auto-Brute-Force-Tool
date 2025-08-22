@@ -1825,10 +1825,12 @@ def analyze_panel(result_line):
                         servers_string = ", ".join(map(str, server_names)) if server_names else "无"
                         
                         return result_line, (machine_count, term_count, servers_string)
-                except Exception:
-                    # 如果JSON解析失败，但状态码是200，说明可能是登录页HTML
+                except json.JSONDecodeError:
                     if "oauth2" in res.text.lower():
                         return result_line, (0, 0, "登录页面")
+                    return result_line, (0, 0, "分析失败")
+                except Exception as e:
+                    debug_log(f"分析时出错 {base_url}: {e}", "ERROR")
                     return result_line, (0, 0, "分析失败")
         except requests.exceptions.RequestException:
             continue
@@ -2651,13 +2653,15 @@ if __name__ == "__main__":
     from datetime import datetime, timedelta, timezone
     beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
     time_str = beijing_time.strftime("%Y%m%d-%H%M")
+    
+    TEMPLATE_MODE = choose_template_mode()
+    mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
+    prefix = mode_map.get(TEMPLATE_MODE, "result")
 
     try:
         if not sys.stdout.isatty():
             print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
             sys.exit(1)
-
-        TEMPLATE_MODE = choose_template_mode()
         
         check_environment(TEMPLATE_MODE)
         
@@ -2772,9 +2776,6 @@ if __name__ == "__main__":
 
                 print("--- 结果合并去重完成。 ---")
         
-        mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
-        prefix = mode_map.get(TEMPLATE_MODE, "result")
-
         final_txt_file = f"{prefix}-{time_str}.txt"
         final_xlsx_file = f"{prefix}-{time_str}.xlsx"
         
@@ -2797,9 +2798,11 @@ if __name__ == "__main__":
                 for future in tqdm(as_completed(future_to_result), total=len(results), desc="分析哪吒面板"):
                     result_line = future_to_result[future]
                     try:
-                        # 修正解包逻辑
                         returned_line, analysis_result = future.result()
-                        nezha_analysis_data[returned_line] = analysis_result
+                        if len(analysis_result) == 3:
+                             nezha_analysis_data[returned_line] = analysis_result
+                        else:
+                             nezha_analysis_data[returned_line] = ("数据不一致", 0, "N/A")
                     except Exception as exc:
                         print(f'{result_line} 生成了一个异常: {exc}')
                         nezha_analysis_data[result_line] = ("分析异常", 0, "N/A")
