@@ -1536,7 +1536,6 @@ def extract_ip_port(url):
     return url.split()[0]
 
 def get_ip_info_batch(ip_list, retries=3):
-    """批量查询ip-api.com，每次最多100个。"""
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     results = {}
     
@@ -1553,7 +1552,7 @@ def get_ip_info_batch(ip_list, retries=3):
             data = response.json()
             for item in data:
                 # 从输入列表中找到与查询匹配的原始ip_port
-                original_ip_port = next((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
+                original_ip_port = 下一处((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
                 if original_ip_port:
                     if item.get('status') == 'success':
                         results[original_ip_port] = [
