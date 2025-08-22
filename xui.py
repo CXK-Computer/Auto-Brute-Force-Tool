@@ -1562,6 +1562,12 @@ if __name__ == "__main__":
     else:
         print("Usage: python ipcx.py <input_file> <output_file>")
 """
+def generate_ipcx_py():
+    """
+    将存储在 IPCX_PY_CONTENT 变量中的内容写入到 ipcx.py 文件中。
+    """
+    with open('ipcx.py', 'w', encoding='utf-8') as f:
+        f.write(IPCX_PY_CONTENT)
 # =========================== 新增哪吒面板分析函数 ===========================
 def debug_log(message, level="INFO"):
     colors = {
