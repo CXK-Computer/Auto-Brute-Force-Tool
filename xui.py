@@ -1684,19 +1684,15 @@ def debug_log(message, level="INFO"):
 def check_server_terminal_status(session, base_url, server_id):
     # 检测单台服务器的终端连接状态
     try:
-        # 尝试连接服务器的终端 - 使用多种可能的路径
         terminal_paths = [
             f"/dashboard/terminal/{server_id}", f"/dashboard/ssh/{server_id}",
             f"/dashboard/console/{server_id}", f"/dashboard/shell/{server_id}",
             f"/terminal/{server_id}", f"/ssh/{server_id}",
             f"/console/{server_id}", f"/shell/{server_id}"
         ]
-        
         for path in terminal_paths:
             try:
-                terminal_test_url = base_url + path
-                res = session.get(terminal_test_url, timeout=5, verify=False)
-                
+                res = session.get(base_url + path, timeout=5, verify=False)
                 if res.status_code == 200:
                     content = res.text.lower()
                     has_xterm = "xterm" in content
@@ -1708,18 +1704,14 @@ def check_server_terminal_status(session, base_url, server_id):
                         return True
             except Exception:
                 continue
-        
         try:
-            dashboard_res = session.get(base_url + "/dashboard", timeout=5, verify=False)
-            if dashboard_res.status_code == 200:
-                content = dashboard_res.text.lower()
-                has_xterm = "xterm" in content
-                has_terminal_related = any(term in content for term in ["terminal", "ssh", "console", "shell", "xterm"])
-                if has_xterm and has_terminal_related:
+            res = session.get(base_url + "/dashboard", timeout=5, verify=False)
+            if res.status_code == 200:
+                content = res.text.lower()
+                if "xterm" in content and any(term in content for term in ["terminal", "ssh", "console", "shell"]):
                     return True
         except Exception:
             pass
-            
     except Exception:
         return False
     return False
@@ -1734,10 +1726,8 @@ def count_terminal_accessible_servers(session, base_url):
         data = res.json()
         servers = []
         
-        if isinstance(data, dict) and "error" in data:
-            error_msg = data.get("error", "")
-            if "unauthorized" in error_msg.lower():
-                return check_terminal_status_via_pages(session, base_url)
+        if isinstance(data, dict) and "error" in data and "unauthorized" in data.get("error", "").lower():
+            return check_terminal_status_via_pages(session, base_url)
         
         if isinstance(data, list):
             servers = data
@@ -1747,65 +1737,57 @@ def count_terminal_accessible_servers(session, base_url):
         if not servers:
             return 0, []
         
-        terminal_accessible_count = 0
-        terminal_accessible_servers = []
-        
+        count = 0
+        accessible_servers = []
         for server in servers:
             if isinstance(server, dict) and "id" in server:
                 server_id = server["id"]
                 server_name = server.get("name", f"Server-{server_id}")
                 if check_server_terminal_status(session, base_url, server_id):
-                    terminal_accessible_count += 1
-                    terminal_accessible_servers.append({"id": server_id, "name": server_name, "status": "终端畅通"})
-        
-        return terminal_accessible_count, terminal_accessible_servers
+                    count += 1
+                    accessible_servers.append({"id": server_id, "name": server_name, "status": "终端畅通"})
+        return count, accessible_servers
     except Exception:
         return 0, []
 
 def check_terminal_status_via_pages(session, base_url):
-    # 通过页面检测终端状态（当API未授权时使用）
+    # API未授权时的备用检测方案
     try:
         res = session.get(base_url + "/dashboard", timeout=TIMEOUT, verify=False)
         if res.status_code == 200:
             content = res.text.lower()
-            has_xterm = "xterm" in content
-            has_terminal_related = any(term in content for term in ["terminal", "ssh", "console", "shell", "xterm"])
-            if has_xterm and has_terminal_related:
+            if "xterm" in content and any(term in content for term in ["terminal", "ssh", "console", "shell"]):
                 return 1, [{"id": "unknown", "name": "Dashboard", "status": "终端畅通"}]
         return 0, []
     except Exception:
         return 0, []
 
 def check_for_agents_and_terminal(session, base_url):
-    # 检查是否有代理和终端功能
-    has_agents = False
+    # 检查机器数量和终端状态
     total_servers = 0
     try:
         res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT, verify=False)
         if res.status_code == 200:
-            try:
-                data = res.json()
-                if isinstance(data, list):
-                    total_servers = len(data)
-                elif isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
-                    total_servers = len(data["data"])
-                has_agents = total_servers > 0
-            except Exception:
-                pass
+            data = res.json()
+            if isinstance(data, list):
+                total_servers = len(data)
+            elif isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+                total_servers = len(data["data"])
     except Exception:
         pass
     
+    has_agents = total_servers > 0
     if not has_agents:
-        return False, False, 0
+        return False, 0, 0, []
     
-    terminal_accessible_count, _ = count_terminal_accessible_servers(session, base_url)
-    return has_agents, terminal_accessible_count > 0, total_servers
+    terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
+    return has_agents, terminal_accessible_count, total_servers, terminal_accessible_servers
 
 def analyze_panel(result_line):
     # 多线程分析函数
     parts = result_line.split()
     if len(parts) < 3:
-        return result_line, ("格式错误", "N/A", 0, "N/A")
+        return result_line, (0, 0, "格式错误")
 
     ip_port, username, password = parts[0], parts[1], parts[2]
     
@@ -1837,25 +1819,21 @@ def analyze_panel(result_line):
                         if auth_token:
                             session.headers.update({"Authorization": f"Bearer {auth_token}"})
                         
-                        has_agents, terminal_accessible, machine_count = check_for_agents_and_terminal(session, base_url)
-                        terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
+                        _, term_count, machine_count, term_servers = check_for_agents_and_terminal(session, base_url)
                         
-                        server_names = [s.get('name', s.get('id', '')) for s in terminal_accessible_servers]
+                        server_names = [s.get('name', s.get('id', '')) for s in term_servers]
                         servers_string = ", ".join(map(str, server_names)) if server_names else "无"
                         
-                        return result_line, (machine_count, terminal_accessible_count, servers_string)
-                except json.JSONDecodeError:
-                    if "oauth2" in res.text.lower(): # 处理返回HTML登录页的情况
-                         return result_line, ("登录页面", "N/A", 0, "N/A")
-                except Exception as e:
-                    debug_log(f"分析时出错 {base_url}: {e}", "ERROR")
-                    return result_line, ("分析失败", "N/A", 0, "N/A")
-        except requests.exceptions.RequestException as e:
-            debug_log(f"连接失败 {base_url}: {e}", "ERROR")
-            continue # 继续尝试下一个协议
+                        return result_line, (machine_count, term_count, servers_string)
+                except Exception:
+                    # 如果JSON解析失败，但状态码是200，说明可能是登录页HTML
+                    if "oauth2" in res.text.lower():
+                        return result_line, (0, 0, "登录页面")
+                    return result_line, (0, 0, "分析失败")
+        except requests.exceptions.RequestException:
+            continue
             
-    return result_line, ("登录失败", "N/A", 0, "N/A")
-
+    return result_line, (0, 0, "登录失败")
 
 # =========================== 主脚本优化部分 ===========================
 # 定义Go可执行文件的绝对路径
@@ -1884,10 +1862,12 @@ def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
         for row_idx in range(2, ws.max_row + 1):
             original_address = ws.cell(row=row_idx, column=1).value
             if original_address in analysis_data:
-                machine_count, term_count, servers_string = analysis_data[original_address]
-                ws.cell(row=row_idx, column=server_count_col, value=machine_count)
-                ws.cell(row=row_idx, column=terminal_count_col, value=term_count)
-                ws.cell(row=row_idx, column=terminal_list_col, value=servers_string)
+                analysis_result = analysis_data[original_address]
+                if len(analysis_result) == 3:
+                    machine_count, term_count, servers_string = analysis_result
+                    ws.cell(row=row_idx, column=server_count_col, value=machine_count)
+                    ws.cell(row=row_idx, column=terminal_count_col, value=term_count)
+                    ws.cell(row=row_idx, column=terminal_list_col, value=servers_string)
         
         wb.save(xlsx_file)
         print("✅ 成功将哪吒面板分析结果写入Excel报告。")
@@ -2817,11 +2797,12 @@ if __name__ == "__main__":
                 for future in tqdm(as_completed(future_to_result), total=len(results), desc="分析哪吒面板"):
                     result_line = future_to_result[future]
                     try:
-                        _, (machine_count, term_count, servers_string) = future.result()
-                        nezha_analysis_data[result_line] = (machine_count, term_count, servers_string)
+                        # 修正解包逻辑
+                        returned_line, analysis_result = future.result()
+                        nezha_analysis_data[returned_line] = analysis_result
                     except Exception as exc:
                         print(f'{result_line} 生成了一个异常: {exc}')
-                        nezha_analysis_data[result_line] = ("分析异常", "N/A", 0, "N/A")
+                        nezha_analysis_data[result_line] = ("分析异常", 0, "N/A")
 
             # 将分析结果写入Excel
             if nezha_analysis_data:
