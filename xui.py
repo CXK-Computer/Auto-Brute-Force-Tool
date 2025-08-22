@@ -7,6 +7,7 @@ import sys
 import atexit
 import re
 import json
+from threading import Lock
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -23,6 +24,8 @@ try:
     import yaml
     from openpyxl import Workbook, load_workbook
     from tqdm import tqdm
+    from colorama import Fore, Style, init
+    init(autoreset=True)
 except ImportError:
     # 留空，让环境检查函数处理依赖安装
     pass
@@ -2353,19 +2356,22 @@ def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
 
         # 添加新的表头
         server_count_col = ws.max_column + 1
-        terminal_status_col = ws.max_column + 2
-        ws.cell(row=1, column=server_count_col, value="服务器数量")
-        ws.cell(row=1, column=terminal_status_col, value="终端状态")
+        terminal_count_col = ws.max_column + 2
+        terminal_list_col = ws.max_column + 3
+        
+        ws.cell(row=1, column=server_count_col, value="服务器总数")
+        ws.cell(row=1, column=terminal_count_col, value="终端畅通数")
+        ws.cell(row=1, column=terminal_list_col, value="畅通服务器列表")
 
         # 遍历每一行，更新数据
         for row in ws.iter_rows(min_row=2):
             original_address_cell = row[0]
             original_address = original_address_cell.value
             if original_address in analysis_data:
-                server_count, terminal_status, term_count = analysis_data[original_address]
-                ws.cell(row=original_address_cell.row, column=server_count_col, value=server_count)
-                # 更新终端状态，包含畅通数量
-                ws.cell(row=original_address_cell.row, column=terminal_status_col, value=f"{terminal_status} ({term_count}台)")
+                machine_count, term_count, servers_string = analysis_data[original_address]
+                ws.cell(row=original_address_cell.row, column=server_count_col, value=machine_count)
+                ws.cell(row=original_address_cell.row, column=terminal_count_col, value=term_count)
+                ws.cell(row=original_address_cell.row, column=terminal_list_col, value=servers_string)
         
         wb.save(xlsx_file)
         print("✅ 成功将哪吒面板分析结果写入Excel报告。")
@@ -2779,7 +2785,7 @@ def check_environment(template_mode):
         try:
             import psutil, requests, openpyxl, yaml, tqdm
         except ImportError:
-            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml tqdm")
+            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml tqdm colorama")
         return
 
     print(">>> 正在检查并安装依赖环境...")
@@ -2830,7 +2836,7 @@ def check_environment(template_mode):
         pip_cmd = [sys.executable, "-m", "pip", "install"]
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
-        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml", "tqdm"])
+        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml", "tqdm", "colorama"])
         run_cmd(pip_cmd, quiet=True)
         print(" 完成")
     except Exception as e:
@@ -3331,22 +3337,23 @@ if __name__ == "__main__":
                                     
                                     # 统计终端畅通的服务器数量
                                     terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
-                                    
-                                    terminal_status_str = "畅通" if terminal_accessible else "不通"
+
+                                    server_names = [s.get('name', s.get('id', '')) for s in terminal_accessible_servers]
+                                    servers_string = ", ".join(map(str, server_names)) if server_names else "无"
                                     
                                     # 存储分析结果
-                                    nezha_analysis_data[result_line] = (machine_count, terminal_status_str, terminal_accessible_count)
+                                    nezha_analysis_data[result_line] = (machine_count, terminal_accessible_count, servers_string)
                                     
-                                    status_msg = f"🎯 [分析成功] {base_url} | 用户名: {username} | 密码: {password}"
+                                    status_msg = f"🎯 [分析成功] {base_url} | 用户名: {username}"
                                     if has_agents:
-                                        status_msg += f" (有{machine_count}台机器)"
+                                        status_msg += Fore.CYAN + f" (有{machine_count}台机器)"
                                     else:
-                                        status_msg += " (无机器)"
+                                        status_msg += Fore.YELLOW + " (无机器)"
                                     
                                     if terminal_accessible:
-                                        status_msg += f" (终端畅通{terminal_accessible_count}台)"
+                                        status_msg += Fore.GREEN + f" (终端畅通{terminal_accessible_count}台)"
                                     else:
-                                        status_msg += " (终端不畅通)"
+                                        status_msg += Fore.RED + " (终端不畅通)"
                                     
                                     tqdm.write(status_msg)
                                     break # 登录成功，跳出协议循环
@@ -3356,7 +3363,7 @@ if __name__ == "__main__":
                                 continue
                     except Exception as e:
                         if protocol == "https":
-                           nezha_analysis_data[result_line] = ("登录失败", "未知", 0)
+                           nezha_analysis_data[result_line] = ("登录失败", "未知", "未知")
                            debug_log(f"登录请求错误 at {base_url}: {str(e)}", "ERROR")
 
             # 将分析结果写入Excel
