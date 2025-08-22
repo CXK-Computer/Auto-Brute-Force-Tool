@@ -1536,6 +1536,7 @@ def extract_ip_port(url):
     return url.split()[0]
 
 def get_ip_info_batch(ip_list, retries=3):
+    # 批量查询ip-api.com，每次最多100个。
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     results = {}
     
@@ -1552,7 +1553,7 @@ def get_ip_info_batch(ip_list, retries=3):
             data = response.json()
             for item in data:
                 # 从输入列表中找到与查询匹配的原始ip_port
-                original_ip_port = 下一处((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
+                original_ip_port = next((ip for ip in ip_list if ip.startswith(item.get('query', ''))), None)
                 if original_ip_port:
                     if item.get('status') == 'success':
                         results[original_ip_port] = [
@@ -2361,9 +2362,10 @@ def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
             original_address_cell = row[0]
             original_address = original_address_cell.value
             if original_address in analysis_data:
-                server_count, terminal_status = analysis_data[original_address]
+                server_count, terminal_status, term_count = analysis_data[original_address]
                 ws.cell(row=original_address_cell.row, column=server_count_col, value=server_count)
-                ws.cell(row=original_address_cell.row, column=terminal_status_col, value=terminal_status)
+                # 更新终端状态，包含畅通数量
+                ws.cell(row=original_address_cell.row, column=terminal_status_col, value=f"{terminal_status} ({term_count}台)")
         
         wb.save(xlsx_file)
         print("✅ 成功将哪吒面板分析结果写入Excel报告。")
@@ -3304,18 +3306,59 @@ if __name__ == "__main__":
                         # 禁用SSL警告
                         requests.packages.urllib3.disable_warnings()
                         res = session.post(login_url, json=payload, timeout=TIMEOUT, verify=False)
-                        if res.status_code == 200 and res.json().get("success"):
-                            has_agents, terminal_accessible, total_servers = check_for_agents_and_terminal(session, base_url)
-                            
-                            terminal_status_str = "畅通" if terminal_accessible else "不通"
-                            nezha_analysis_data[result_line] = (total_servers, terminal_status_str)
-                            
-                            print(f"\n[分析成功] {base_url} | 服务器: {total_servers} | 终端: {terminal_status_str}")
-                            break 
-                    except Exception:
+                        
+                        if res.status_code == 200:
+                            try:
+                                j = res.json()
+                                is_login_success = False
+                                auth_token = None
+
+                                if "token" in j.get("data", {}):
+                                    auth_token = j["data"]["token"]
+                                    is_login_success = True
+                                
+                                if "nz-jwt" in res.headers.get("Set-Cookie", ""):
+                                    is_login_success = True
+
+                                if j.get("code") == 200 and j.get("message", "").lower() == "success":
+                                    is_login_success = True
+
+                                if is_login_success:
+                                    if auth_token:
+                                        session.headers.update({"Authorization": f"Bearer {auth_token}"})
+                                    
+                                    has_agents, terminal_accessible, machine_count = check_for_agents_and_terminal(session, base_url)
+                                    
+                                    # 统计终端畅通的服务器数量
+                                    terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
+                                    
+                                    terminal_status_str = "畅通" if terminal_accessible else "不通"
+                                    
+                                    # 存储分析结果
+                                    nezha_analysis_data[result_line] = (machine_count, terminal_status_str, terminal_accessible_count)
+                                    
+                                    status_msg = f"🎯 [分析成功] {base_url} | 用户名: {username} | 密码: {password}"
+                                    if has_agents:
+                                        status_msg += f" (有{machine_count}台机器)"
+                                    else:
+                                        status_msg += " (无机器)"
+                                    
+                                    if terminal_accessible:
+                                        status_msg += f" (终端畅通{terminal_accessible_count}台)"
+                                    else:
+                                        status_msg += " (终端不畅通)"
+                                    
+                                    tqdm.write(status_msg)
+                                    break # 登录成功，跳出协议循环
+
+                            except Exception as e:
+                                debug_log(f"JSON解析或分析错误 at {base_url}: {str(e)}", "ERROR")
+                                continue
+                    except Exception as e:
                         if protocol == "https":
-                           nezha_analysis_data[result_line] = ("登录失败", "未知")
-            
+                           nezha_analysis_data[result_line] = ("登录失败", "未知", 0)
+                           debug_log(f"登录请求错误 at {base_url}: {str(e)}", "ERROR")
+
             # 将分析结果写入Excel
             if nezha_analysis_data:
                 update_excel_with_nezha_analysis(final_xlsx_file, nezha_analysis_data)
