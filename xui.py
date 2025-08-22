@@ -1532,7 +1532,6 @@ def extract_ip_port(url):
     return url.split()[0]
 
 def get_ip_info_batch(ip_list, retries=3):
-    """批量查询ip-api.com，每次最多100个。"""
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     results = {}
     
