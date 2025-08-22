@@ -7,6 +7,7 @@ import sys
 import atexit
 import re
 import select
+import resource
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -101,6 +102,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 
@@ -146,6 +148,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 					}
 				}
 			} else {
+				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 			}
 		}
@@ -265,6 +268,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 
@@ -308,6 +312,7 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 					}
 				}
 			} else {
+				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 			}
 		}
@@ -546,6 +551,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []stri
 	defer wg.Done()
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
 	}
 	client := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 	for line := range tasks {
@@ -600,6 +606,7 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 			return true, nil
 		}
 	} else {
+		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
 	return false, nil
@@ -654,6 +661,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -693,6 +701,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	defer wg.Done()
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
 	}
 	client := &http.Client{
 		Transport: tr,
@@ -703,6 +712,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	}
 	for line := range tasks {
 		processIP(line, file, usernames, passwords, client)
+		fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -927,6 +937,7 @@ func getPublicIP(targetURL string) (string, error) {
 func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) (bool, error) {
 	transport := &http.Transport{ 
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
 	}
 
 	if proxyType == "http" || proxyType == "https" {
@@ -1080,6 +1091,7 @@ func createHttpClient() *http.Client {
 		ResponseHeaderTimeout: 2 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     false,
+		DisableKeepAlives: true,
 	}
 	return &http.Client{
 		Transport: tr,
@@ -1520,6 +1532,18 @@ def adjust_oom_score():
     except Exception as e:
         print(f"⚠️  调整OOM Score时发生未知错误: {e}")
 
+def set_file_descriptor_limit():
+    if sys.platform != "linux":
+        return
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        new_soft = min(hard, 4096)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+        print(f"✅ 成功提升文件句柄上限至: {new_soft}")
+    except (ValueError, OSError) as e:
+        print(f"⚠️ 提升文件句柄上限失败: {e}。脚本将使用系统默认值。")
+
+
 def check_and_manage_swap():
     if sys.platform != "linux":
         return
@@ -1576,9 +1600,9 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100) as pbar:
+    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]') as pbar:
         for idx, part in enumerate(part_files, 1):
-            pbar.set_description(f"处理Part {idx}/{len(part_files)}")
+            pbar.set_postfix_str(f"处理Part {idx}/{len(part_files)}")
             while True:
                 mem_info = psutil.virtual_memory()
                 available_percent = mem_info.available / mem_info.total * 100
@@ -1590,10 +1614,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
             
             part_path = os.path.join(TEMP_PART_DIR, part)
             
-            ips_in_part = 0
-            with open(part_path, 'r', encoding='utf-8') as f:
-                ips_in_part = sum(1 for _ in f)
-
             try:
                 if sys.platform != "win32":
                     os.chmod(executable_name, 0o755)
@@ -1610,16 +1630,14 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
                 
                 # 使用 select 实时读取 stderr
                 while process.poll() is None:
-                    reads = [process.stderr.fileno()]
-                    ret = select.select(reads, [], [])
-                    for fd in ret[0]:
-                        if fd == process.stderr.fileno():
-                            progress_dots = process.stderr.read(1)
-                            pbar.update(len(progress_dots))
+                    reads, _, _ = select.select([process.stderr.fileno()], [], [], 0.1)
+                    if reads:
+                        progress_dots = os.read(process.stderr.fileno(), 1024)
+                        pbar.update(len(progress_dots))
                 
                 # 读取剩余的输出
-                for _ in process.stderr.read():
-                    pbar.update(1)
+                remaining_dots = process.stderr.read()
+                pbar.update(len(remaining_dots))
 
                 if process.returncode != 0:
                      _, stderr_output = process.communicate()
@@ -2076,15 +2094,13 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=run_env)
                 with tqdm(total=len(ips_to_verify), desc="二次验证", unit="ip", ncols=100) as pbar:
                     while process.poll() is None:
-                        reads = [process.stderr.fileno()]
-                        ret = select.select(reads, [], [], 0.1)
-                        for fd in ret[0]:
-                            if fd == process.stderr.fileno():
-                                progress_dots = process.stderr.read(1)
-                                pbar.update(len(progress_dots))
+                        reads, _, _ = select.select([process.stderr.fileno()], [], [], 0.1)
+                        if reads:
+                            progress_dots = os.read(process.stderr.fileno(), 1024)
+                            pbar.update(len(progress_dots))
                     # 读取剩余的输出
-                    for _ in process.stderr.read():
-                        pbar.update(1)
+                    remaining_dots = process.stderr.read()
+                    pbar.update(len(remaining_dots))
 
                 if process.returncode != 0:
                     raise subprocess.CalledProcessError(process.returncode, cmd)
@@ -2146,6 +2162,7 @@ if __name__ == "__main__":
                 from tqdm import tqdm
 
                 adjust_oom_score()
+                set_file_descriptor_limit()
                 check_and_manage_swap()
 
                 os.makedirs(TEMP_PART_DIR, exist_ok=True)
