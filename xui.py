@@ -1804,8 +1804,12 @@ def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeo
                    .replace("{auth_mode}", str(kwargs.get('auth_mode', 0))) \
                    .replace("{creds_list}", creds_list)
 
-    with open('xui.go', 'w', encoding='utf-8') as f:
-        f.write(code)
+    # ==================== FIX START ====================
+    # 修复BOM问题：以二进制模式('wb')写入文件，并手动将字符串编码为UTF-8字节。
+    # 这可以确保无论原始脚本或字符串中是否包含BOM，最终文件都是干净的UTF-8编码。
+    with open('xui.go', 'wb') as f:
+        f.write(code.encode('utf-8'))
+    # ===================== FIX END =====================
 
 def split_file(input_file, lines_per_file):
     # 内存高效的文件分割
