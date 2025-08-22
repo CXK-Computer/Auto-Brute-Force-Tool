@@ -6,6 +6,7 @@ import shutil
 import sys
 import atexit
 import re
+import select
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -81,6 +82,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	defer wg.Done()
 	for line := range tasks {
 		processIP(line, file, usernames, passwords)
+		fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -244,6 +246,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	defer wg.Done()
 	for line := range tasks {
 		processIP(line, file, usernames, passwords)
+        fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -400,6 +403,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 	defer wg.Done()
 	for line := range tasks {
 		processIP(line, file, usernames, passwords)
+        fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -546,6 +550,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []stri
 	client := &http.Client{ Transport: tr, Timeout: 10 * time.Second }
 	for line := range tasks {
 		processIP(line, file, paths, client)
+		fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -848,6 +853,7 @@ func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for proxyAddr := range tasks {
 		processProxy(proxyAddr, outputFile)
+		fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -1086,6 +1092,7 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
 	httpClient := createHttpClient()
 	for ipPort := range tasks {
 		processIP(ipPort, file, httpClient)
+		fmt.Fprint(os.Stderr, ".") // 向 stderr 输出进度信号
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
@@ -1594,8 +1601,30 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
                 output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
                 cmd = ['./' + executable_name, part_path, output_file]
 
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=run_env
+                )
                 
+                # 使用 select 实时读取 stderr
+                while process.poll() is None:
+                    reads = [process.stderr.fileno()]
+                    ret = select.select(reads, [], [])
+                    for fd in ret[0]:
+                        if fd == process.stderr.fileno():
+                            progress_dots = process.stderr.read(1)
+                            pbar.update(len(progress_dots))
+                
+                # 读取剩余的输出
+                for _ in process.stderr.read():
+                    pbar.update(1)
+
+                if process.returncode != 0:
+                     _, stderr_output = process.communicate()
+                     raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr_output)
+
             except subprocess.CalledProcessError as e:
                 tqdm.write(f"\n--- 程序执行失败: {part} ---")
                 tqdm.write(f"返回码: {e.returncode}")
@@ -1603,7 +1632,6 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
                     tqdm.write(f"错误输出: {e.stderr.decode('utf-8', errors='ignore')}")
                 sys.exit(1)
             
-            pbar.update(ips_in_part)
             time.sleep(sleep_seconds)
 
 def merge_xui_files():
@@ -2044,7 +2072,22 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 if os.path.exists(verification_output_file): os.remove(verification_output_file)
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=run_env)
+                
+                process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=run_env)
+                with tqdm(total=len(ips_to_verify), desc="二次验证", unit="ip", ncols=100) as pbar:
+                    while process.poll() is None:
+                        reads = [process.stderr.fileno()]
+                        ret = select.select(reads, [], [], 0.1)
+                        for fd in ret[0]:
+                            if fd == process.stderr.fileno():
+                                progress_dots = process.stderr.read(1)
+                                pbar.update(len(progress_dots))
+                    # 读取剩余的输出
+                    for _ in process.stderr.read():
+                        pbar.update(1)
+
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, cmd)
                 
                 if os.path.exists(verification_output_file):
                     with open(verification_output_file, 'r') as f:
