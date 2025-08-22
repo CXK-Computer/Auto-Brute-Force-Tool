@@ -7,7 +7,6 @@ import sys
 import atexit
 import re
 import select
-import resource
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -138,8 +137,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 			
 			if resp.StatusCode == http.StatusOK {
-				body, _ := io.ReadAll(resp.Body)
+				body, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				if readErr != nil { continue }
+				
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
@@ -302,8 +303,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			}
 			
 			if resp.StatusCode == http.StatusOK {
-				body, _ := io.ReadAll(resp.Body)
+				body, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				if readErr != nil { continue }
+
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
@@ -600,8 +603,9 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
     }
 	
 	if resp.StatusCode == http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if readErr != nil { return false, readErr }
 		if strings.Contains(string(bodyBytes), `{"status":"success","data"`) {
 			return true, nil
 		}
@@ -757,7 +761,10 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
         if resp != nil { resp.Body.Close() }
         return false 
     }
+	
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // Ensure body is read and closed
+
 	for _, c := range resp.Cookies() {
 		if c.Name == "sysauth_http" && c.Value != "" {
 			return true
@@ -814,6 +821,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -970,10 +978,11 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, timeout time.Duration) 
         if resp != nil { resp.Body.Close() }
         return false, err 
     }
-	defer resp.Body.Close()
+	
+	body, readErr := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if readErr != nil { return false, fmt.Errorf("无法读取响应") }
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil { return false, fmt.Errorf("无法读取响应") }
 	proxyIP := string(body)
 	if strings.Contains(proxyIP, "当前 IP：") {
 		parts := strings.Split(proxyIP, "：")
@@ -1205,6 +1214,7 @@ import re
 import sys
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+from tqdm import tqdm
 
 def extract_host_port(line):
     match = re.search(r'https?://([^/\s]+)', line)
@@ -1265,36 +1275,10 @@ def extract_ip_port(url):
 
     return url.split()[0]
 
-
-def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
-    elapsed_time = time.time() - start_time
-    percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-
-    if iteration > 0 and elapsed_time > 0:
-        its_per_sec = iteration / elapsed_time
-        remaining_time = (total - iteration) / its_per_sec
-        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
-    else:
-        its_per_sec = 0
-        eta_str = "??:??"
-
-    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
-    
-    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
-    
-    sys.stdout.write(progress_str)
-    sys.stdout.flush()
-    if iteration == total:
-        sys.stdout.write('\n')
-
 def process_ip_port_file(input_file, output_excel):
     with open(input_file, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
-    total_tasks = len(lines)
-    start_time = time.time()
-
+    
     headers = ['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP']
 
     if os.path.exists(output_excel):
@@ -1306,14 +1290,10 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    print_progress_bar(0, total_tasks, start_time, prefix='IP信息查询', suffix='开始...')
-    for i, line in enumerate(lines):
-        completed_tasks = i + 1
-        
+    for line in tqdm(lines, desc="IP信息查询", unit="ip", ncols=100):
         addr = line
         user, passwd = '', ''
         
-        # More robust parsing for proxy URLs
         try:
             parsed_url = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
             if parsed_url:
@@ -1321,7 +1301,6 @@ def process_ip_port_file(input_file, output_excel):
                 passwd = parsed_url.group(3) or ''
                 addr = f"{parsed_url.group(1)}://{parsed_url.group(4)}"
         except (TypeError, AttributeError):
-             # Fallback for simple ip:port user pass format
             parts = line.split()
             if len(parts) >= 3:
                 addr, user, passwd = parts[0], parts[1], parts[2]
@@ -1331,17 +1310,21 @@ def process_ip_port_file(input_file, output_excel):
         ip_port = extract_ip_port(addr)
         ip_info = get_ip_info(ip_port)
         
-        # If user/passwd were parsed from URL, use them
         row = [line, ip_port, user, passwd] + ip_info[1:]
 
         wb = load_workbook(output_excel)
         ws = wb.active
         ws.append(row)
-        adjust_column_width(ws)
+        # Defer width adjustment to the end for performance
+        # adjust_column_width(ws)
         wb.save(output_excel)
+        time.sleep(1.5) # ip-api.com has a rate limit of 45 reqs/min
 
-        print_progress_bar(completed_tasks, total_tasks, start_time, prefix='IP信息查询', suffix=f'{ip_port}')
-        time.sleep(1.5)
+    # Adjust width once at the end
+    wb = load_workbook(output_excel)
+    ws = wb.active
+    adjust_column_width(ws)
+    wb.save(output_excel)
     print("\nIP信息查询完成！")
 
 
@@ -1532,18 +1515,6 @@ def adjust_oom_score():
     except Exception as e:
         print(f"⚠️  调整OOM Score时发生未知错误: {e}")
 
-def set_file_descriptor_limit():
-    if sys.platform != "linux":
-        return
-    try:
-        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        new_soft = min(hard, 4096)
-        resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
-        print(f"✅ 成功提升文件句柄上限至: {new_soft}")
-    except (ValueError, OSError) as e:
-        print(f"⚠️ 提升文件句柄上限失败: {e}。脚本将使用系统默认值。")
-
-
 def check_and_manage_swap():
     if sys.platform != "linux":
         return
@@ -1600,9 +1571,9 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
     run_env["GOGC"] = "50"
     print("--- 已设置Go垃圾回收器(GC)更积极地运行以控制内存。 ---")
 
-    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]') as pbar:
+    with tqdm(total=total_ips, desc="爆破进度", unit="ip", ncols=100) as pbar:
         for idx, part in enumerate(part_files, 1):
-            pbar.set_postfix_str(f"处理Part {idx}/{len(part_files)}")
+            pbar.set_description(f"处理Part {idx}/{len(part_files)}")
             while True:
                 mem_info = psutil.virtual_memory()
                 available_percent = mem_info.available / mem_info.total * 100
@@ -1614,6 +1585,10 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
             
             part_path = os.path.join(TEMP_PART_DIR, part)
             
+            ips_in_part = 0
+            with open(part_path, 'r', encoding='utf-8') as f:
+                ips_in_part = sum(1 for _ in f)
+
             try:
                 if sys.platform != "win32":
                     os.chmod(executable_name, 0o755)
@@ -1630,14 +1605,18 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
                 
                 # 使用 select 实时读取 stderr
                 while process.poll() is None:
-                    reads, _, _ = select.select([process.stderr.fileno()], [], [], 0.1)
-                    if reads:
-                        progress_dots = os.read(process.stderr.fileno(), 1024)
-                        pbar.update(len(progress_dots))
+                    reads = [process.stderr.fileno()]
+                    ret = select.select(reads, [], [], 0.1)
+                    for fd in ret[0]:
+                        if fd == process.stderr.fileno():
+                            progress_dots = process.stderr.read(1)
+                            if progress_dots:
+                                pbar.update(len(progress_dots))
                 
                 # 读取剩余的输出
                 remaining_dots = process.stderr.read()
-                pbar.update(len(remaining_dots))
+                if remaining_dots:
+                    pbar.update(len(remaining_dots))
 
                 if process.returncode != 0:
                      _, stderr_output = process.communicate()
@@ -2094,13 +2073,16 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=run_env)
                 with tqdm(total=len(ips_to_verify), desc="二次验证", unit="ip", ncols=100) as pbar:
                     while process.poll() is None:
-                        reads, _, _ = select.select([process.stderr.fileno()], [], [], 0.1)
-                        if reads:
-                            progress_dots = os.read(process.stderr.fileno(), 1024)
-                            pbar.update(len(progress_dots))
+                        reads = [process.stderr.fileno()]
+                        ret = select.select(reads, [], [], 0.1)
+                        for fd in ret[0]:
+                            if fd == process.stderr.fileno():
+                                progress_dots = process.stderr.read(1)
+                                pbar.update(len(progress_dots))
                     # 读取剩余的输出
                     remaining_dots = process.stderr.read()
-                    pbar.update(len(remaining_dots))
+                    if remaining_dots:
+                        pbar.update(len(remaining_dots))
 
                 if process.returncode != 0:
                     raise subprocess.CalledProcessError(process.returncode, cmd)
@@ -2162,7 +2144,6 @@ if __name__ == "__main__":
                 from tqdm import tqdm
 
                 adjust_oom_score()
-                set_file_descriptor_limit()
                 check_and_manage_swap()
 
                 os.makedirs(TEMP_PART_DIR, exist_ok=True)
