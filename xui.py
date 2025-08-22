@@ -181,15 +181,21 @@ func main() {
 	defer batch.Close()
 
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -378,15 +384,21 @@ func main() {
 	defer batch.Close()
 	
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -551,17 +563,23 @@ func main() {
 		return
 	}
 	defer batch.Close()
-
+	
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -732,15 +750,21 @@ func main() {
 	defer batch.Close()
 
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -916,15 +940,21 @@ func main() {
 	defer batch.Close()
 	
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1176,15 +1206,21 @@ func main() {
 	defer proxies.Close()
 	
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1365,15 +1401,21 @@ func main() {
 	defer batch.Close()
 
 	totalLines, _ := countLines(inputFile)
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			current := atomic.LoadInt64(&completedCount)
 			if totalLines > 0 {
+				elapsed := time.Since(startTime)
+				rate := float64(current) / elapsed.Seconds()
+				eta := time.Duration(float64(totalLines-int(current)) / rate * float64(time.Second))
 				percentage := float64(current) / float64(totalLines) * 100
-				bar := strings.Repeat("=", int(percentage/2)) + strings.Repeat("-", 50-int(percentage/2))
-				fmt.Fprintf(os.Stdout, "\\r[%s] %.2f%% (%d/%d) ", bar, percentage, current, totalLines)
+				barWidth := 40
+				pos := int(float64(barWidth) * percentage / 100)
+				bar := strings.Repeat("=", pos) + strings.Repeat("-", barWidth-pos)
+				fmt.Fprintf(os.Stdout, "\\r%d%%|%s| %d/%d [%s<%s, %.2f it/s]", int(percentage), bar, current, totalLines, elapsed.Round(time.Second), eta.Round(time.Second), rate)
 			}
 			if current >= int64(totalLines) {
 				fmt.Fprintf(os.Stdout, "\\n")
@@ -1419,6 +1461,7 @@ import re
 import sys
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+from tqdm import tqdm
 
 def extract_host_port(line):
     match = re.search(r'https?://([^/\s]+)', line)
@@ -1479,36 +1522,10 @@ def extract_ip_port(url):
 
     return url.split()[0]
 
-
-def print_progress_bar(iteration, total, start_time, prefix='', suffix='', length=50, fill='█'):
-    elapsed_time = time.time() - start_time
-    percent_str = "{0:.1f}".format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-
-    if iteration > 0 and elapsed_time > 0:
-        its_per_sec = iteration / elapsed_time
-        remaining_time = (total - iteration) / its_per_sec
-        eta_str = time.strftime('%M:%S', time.gmtime(remaining_time))
-    else:
-        its_per_sec = 0
-        eta_str = "??:??"
-
-    elapsed_str = time.strftime('%M:%S', time.gmtime(elapsed_time))
-    
-    progress_str = f'\r{prefix} |{bar}| {iteration}/{total} [{elapsed_str}<{eta_str}, {its_per_sec:.2f}it/s] {suffix}      '
-    
-    sys.stdout.write(progress_str)
-    sys.stdout.flush()
-    if iteration == total:
-        sys.stdout.write('\n')
-
 def process_ip_port_file(input_file, output_excel):
     with open(input_file, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
-    total_tasks = len(lines)
-    start_time = time.time()
-
+    
     headers = ['原始地址', 'IP/域名:端口', '用户名', '密码', '国家', '地区', '城市', 'ISP']
 
     if os.path.exists(output_excel):
@@ -1520,14 +1537,10 @@ def process_ip_port_file(input_file, output_excel):
     ws.append(headers)
     wb.save(output_excel)
 
-    print_progress_bar(0, total_tasks, start_time, prefix='IP信息查询', suffix='开始...')
-    for i, line in enumerate(lines):
-        completed_tasks = i + 1
-        
+    for line in tqdm(lines, desc="IP信息查询"):
         addr = line
         user, passwd = '', ''
         
-        # More robust parsing for proxy URLs
         try:
             parsed_url = re.match(r'(\w+)://(?:([^:]+):([^@]+)@)?(.+)', line)
             if parsed_url:
@@ -1535,7 +1548,6 @@ def process_ip_port_file(input_file, output_excel):
                 passwd = parsed_url.group(3) or ''
                 addr = f"{parsed_url.group(1)}://{parsed_url.group(4)}"
         except (TypeError, AttributeError):
-             # Fallback for simple ip:port user pass format
             parts = line.split()
             if len(parts) >= 3:
                 addr, user, passwd = parts[0], parts[1], parts[2]
@@ -1545,7 +1557,6 @@ def process_ip_port_file(input_file, output_excel):
         ip_port = extract_ip_port(addr)
         ip_info = get_ip_info(ip_port)
         
-        # If user/passwd were parsed from URL, use them
         row = [line, ip_port, user, passwd] + ip_info[1:]
 
         wb = load_workbook(output_excel)
@@ -1553,8 +1564,6 @@ def process_ip_port_file(input_file, output_excel):
         ws.append(row)
         adjust_column_width(ws)
         wb.save(output_excel)
-
-        print_progress_bar(completed_tasks, total_tasks, start_time, prefix='IP信息查询', suffix=f'{ip_port}')
         time.sleep(1.5)
     print("\nIP信息查询完成！")
 
@@ -1823,19 +1832,10 @@ def run_xui_for_parts(sleep_seconds, executable_name, total_ips, semaphore_size)
             output_file = os.path.join(TEMP_XUI_DIR, f'xui{idx}.txt')
             cmd = ['./' + executable_name, part_path, output_file]
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=run_env
-            )
-            
-            for line in iter(lambda: process.stdout.readline(), b''):
-                line_str = line.decode('utf-8', errors='ignore')
-                sys.stdout.write(line_str)
-                sys.stdout.flush()
-
+            # Let the Go process write directly to the terminal
+            process = subprocess.Popen(cmd, env=run_env)
             process.wait()
+
             if process.returncode != 0:
                  raise subprocess.CalledProcessError(process.returncode, cmd)
 
@@ -1875,6 +1875,8 @@ def merge_result_files(prefix: str, output_name: str, target_dir: str):
 
 def run_ipcx():
     if os.path.exists('xui.txt') and os.path.getsize('xui.txt') > 0:
+        # Add tqdm to the dependencies for ipcx.py
+        subprocess.run([sys.executable, "-m", "pip", "install", "tqdm"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([sys.executable, 'ipcx.py'])
 
 def clean_temp_files():
@@ -2017,7 +2019,7 @@ def check_environment(template_mode):
         pip_cmd = [sys.executable, "-m", "pip", "install"]
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
-        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml"])
+        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml", "tqdm"])
         run_cmd(pip_cmd, quiet=True)
         print(" 完成")
     except Exception as e:
@@ -2286,11 +2288,9 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
                 
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=run_env)
-                for line in iter(lambda: process.stdout.readline(), b''):
-                    sys.stdout.write(line.decode('utf-8', errors='ignore'))
-                    sys.stdout.flush()
+                process = subprocess.Popen(cmd, env=run_env)
                 process.wait()
+
                 if process.returncode != 0:
                     raise subprocess.CalledProcessError(process.returncode, cmd)
                 
