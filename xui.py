@@ -8,6 +8,7 @@ import atexit
 import re
 import json
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==================== 最终修复 ====================
 # 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
@@ -1681,89 +1682,61 @@ def debug_log(message, level="INFO"):
     print(f"{colors.get(level, '')}[{level}] {message}{colors['ENDC']}")
 
 def check_server_terminal_status(session, base_url, server_id):
-    """
-    检测单台服务器的终端连接状态
-    """
+    # 检测单台服务器的终端连接状态
     try:
         # 尝试连接服务器的终端 - 使用多种可能的路径
         terminal_paths = [
-            f"/dashboard/terminal/{server_id}",
-            f"/dashboard/ssh/{server_id}",
-            f"/dashboard/console/{server_id}",
-            f"/dashboard/shell/{server_id}",
-            f"/terminal/{server_id}",
-            f"/ssh/{server_id}",
-            f"/console/{server_id}",
-            f"/shell/{server_id}"
+            f"/dashboard/terminal/{server_id}", f"/dashboard/ssh/{server_id}",
+            f"/dashboard/console/{server_id}", f"/dashboard/shell/{server_id}",
+            f"/terminal/{server_id}", f"/ssh/{server_id}",
+            f"/console/{server_id}", f"/shell/{server_id}"
         ]
         
         for path in terminal_paths:
             try:
                 terminal_test_url = base_url + path
-                res = session.get(terminal_test_url, timeout=5)
+                res = session.get(terminal_test_url, timeout=5, verify=False)
                 
                 if res.status_code == 200:
                     content = res.text.lower()
-                    
-                    # 检查是否包含终端功能
                     has_xterm = "xterm" in content
-                    has_terminal_ui = any(element in content for element in [
-                        "terminal-container", "terminal-wrapper", "terminal-screen",
-                        "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
-                    ])
-                    
-                    # 检查是否有错误信息
                     has_errors = any(error in content for error in [
-                        "not found", "404", "error", "failed", "unavailable",
-                        "未找到", "错误", "失败", "不可用",
-                        "服务器不存在", "尚未连接", "terminal not available"
+                        "not found", "404", "error", "failed", "unavailable", "未找到", 
+                        "错误", "失败", "不可用", "服务器不存在", "尚未连接", "terminal not available"
                     ])
-                    
-                    # 如果包含xterm且没有错误，认为终端可用
                     if has_xterm and not has_errors:
                         return True
-                        
-            except Exception as e:
+            except Exception:
                 continue
         
-        # 如果所有路径都失败，尝试检查dashboard页面是否包含终端功能
         try:
-            dashboard_res = session.get(base_url + "/dashboard", timeout=5)
+            dashboard_res = session.get(base_url + "/dashboard", timeout=5, verify=False)
             if dashboard_res.status_code == 200:
                 content = dashboard_res.text.lower()
                 has_xterm = "xterm" in content
-                has_terminal_related = any(term in content for term in [
-                    "terminal", "ssh", "console", "shell", "xterm"
-                ])
-                
-                # 如果dashboard包含xterm和终端相关内容，认为有终端功能
+                has_terminal_related = any(term in content for term in ["terminal", "ssh", "console", "shell", "xterm"])
                 if has_xterm and has_terminal_related:
                     return True
-        except:
+        except Exception:
             pass
             
-    except Exception as e:
+    except Exception:
         return False
+    return False
 
 def count_terminal_accessible_servers(session, base_url):
-    """
-    统计终端畅通的服务器数量
-    """
+    # 统计终端畅通的服务器数量
     try:
-        # 获取服务器列表
-        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT)
+        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT, verify=False)
         if res.status_code != 200:
             return 0, []
         
         data = res.json()
         servers = []
         
-        # 检查是否有错误
         if isinstance(data, dict) and "error" in data:
             error_msg = data.get("error", "")
-            if "unauthorized" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                print(f"⚠️ API未授权，尝试其他方式检测终端状态...")
-                # 如果API未授权，尝试通过页面检测
+            if "unauthorized" in error_msg.lower():
                 return check_terminal_status_via_pages(session, base_url)
         
         if isinstance(data, list):
@@ -1777,575 +1750,119 @@ def count_terminal_accessible_servers(session, base_url):
         terminal_accessible_count = 0
         terminal_accessible_servers = []
         
-        # 检测每台服务器的终端状态
         for server in servers:
             if isinstance(server, dict) and "id" in server:
                 server_id = server["id"]
                 server_name = server.get("name", f"Server-{server_id}")
-                
-                # 检查终端状态
                 if check_server_terminal_status(session, base_url, server_id):
                     terminal_accessible_count += 1
-                    terminal_accessible_servers.append({
-                        "id": server_id,
-                        "name": server_name,
-                        "status": "终端畅通"
-                    })
+                    terminal_accessible_servers.append({"id": server_id, "name": server_name, "status": "终端畅通"})
         
         return terminal_accessible_count, terminal_accessible_servers
-        
-    except Exception as e:
+    except Exception:
         return 0, []
 
 def check_terminal_status_via_pages(session, base_url):
-    """
-    通过页面检测终端状态（当API未授权时使用）
-    """
+    # 通过页面检测终端状态（当API未授权时使用）
     try:
-        # 检查dashboard页面
-        res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
+        res = session.get(base_url + "/dashboard", timeout=TIMEOUT, verify=False)
         if res.status_code == 200:
             content = res.text.lower()
-            
-            # 检查是否包含终端功能
             has_xterm = "xterm" in content
-            has_terminal_related = any(term in content for term in [
-                "terminal", "ssh", "console", "shell", "xterm"
-            ])
-            
+            has_terminal_related = any(term in content for term in ["terminal", "ssh", "console", "shell", "xterm"])
             if has_xterm and has_terminal_related:
-                # 如果dashboard包含终端功能，认为有终端可用
-                # 由于无法获取具体服务器数量，返回一个估计值
                 return 1, [{"id": "unknown", "name": "Dashboard", "status": "终端畅通"}]
-        
         return 0, []
-        
-    except Exception as e:
+    except Exception:
         return 0, []
 
 def check_for_agents_and_terminal(session, base_url):
-    """
-    检查是否有代理和终端功能
-    """
-    if VERBOSE_DEBUG:
-        debug_log(f"开始检查代理和终端状态: {base_url}", "INFO")
-    
-    # 首先检测哪吒面板特性
-    features = detect_nezha_features(session, base_url)
-    
-    # 检查是否有代理
+    # 检查是否有代理和终端功能
     has_agents = False
     total_servers = 0
-    
     try:
-        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT)
+        res = session.get(base_url + "/api/v1/server", timeout=TIMEOUT, verify=False)
         if res.status_code == 200:
             try:
                 data = res.json()
                 if isinstance(data, list):
                     total_servers = len(data)
-                    has_agents = total_servers > 0
-                    if VERBOSE_DEBUG:
-                        debug_log(f"检测到机器列表，数量: {total_servers}", "SUCCESS")
-                elif isinstance(data, dict) and "data" in data:
-                    server_list = data["data"]
-                    if isinstance(server_list, list):
-                        total_servers = len(server_list)
-                        has_agents = total_servers > 0
-                        if VERBOSE_DEBUG:
-                            debug_log(f"检测到机器列表，数量: {total_servers}", "SUCCESS")
-            except Exception as e:
-                if VERBOSE_DEBUG:
-                    debug_log(f"解析服务器数据失败: {str(e)}", "ERROR")
-    except Exception as e:
-        if VERBOSE_DEBUG:
-            debug_log(f"获取服务器列表失败: {str(e)}", "ERROR")
-    
-    if not has_agents:
-        if VERBOSE_DEBUG:
-            debug_log(f"未检测到代理机器", "WARNING")
-        return False, False, 0
-    
-    # 检查终端功能
-    if VERBOSE_DEBUG:
-        debug_log(f"开始检查终端状态，尝试多种路径", "INFO")
-    
-    # 基于版本和特性选择检测策略
-    if features["version"].startswith("1.13"):
-        # 1.13版本使用新的检测策略
-        terminal_accessible = check_terminal_v1_13(session, base_url, features)
-    else:
-        # 其他版本使用传统检测策略
-        terminal_accessible = check_terminal_traditional(session, base_url)
-    
-    if VERBOSE_DEBUG:
-        if terminal_accessible:
-            debug_log(f"终端功能检测成功", "SUCCESS")
-        else:
-            debug_log(f"终端功能检测失败", "WARNING")
-    
-    return has_agents, terminal_accessible, total_servers
-
-def check_terminal_v1_13(session, base_url, features):
-    """
-    针对哪吒面板1.13版本的终端检测
-    """
-    if VERBOSE_DEBUG:
-        debug_log(f"使用1.13版本检测策略", "INFO")
-    
-    # 1.13版本的终端检测策略
-    terminal_paths = [
-        "/dashboard/terminal",
-        "/dashboard/ssh",
-        "/dashboard/console", 
-        "/dashboard/shell"
-    ]
-    
-    for terminal_path in terminal_paths:
-        try:
-            res = session.get(base_url + terminal_path, timeout=TIMEOUT)
-            if res.status_code == 200:
-                content = res.text.lower()
-                
-                # 检查是否包含真正的终端功能
-                has_xterm = "xterm" in content
-                has_terminal_ui = any(element in content for element in [
-                    "terminal-container", "terminal-wrapper", "terminal-screen",
-                    "xterm-helper-textarea", "xterm-viewport"
-                ])
-                has_websocket = "websocket" in content
-                
-                # 检查是否有错误信息
-                has_errors = any(error in content for error in [
-                    "not found", "404", "error", "failed", "unavailable",
-                    "未找到", "错误", "失败", "不可用",
-                    "服务器不存在", "尚未连接", "terminal not available"
-                ])
-                
-                # 多重验证
-                if has_xterm and has_terminal_ui and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"1.13版本终端检测成功: {terminal_path}", "SUCCESS")
-                    return True
-                elif has_xterm and has_websocket and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"1.13版本WebSocket终端检测成功: {terminal_path}", "SUCCESS")
-                    return True
-        except:
-            continue
-    
-    # 如果直接路径检测失败，尝试智能检测
-    return smart_terminal_detection(session, base_url)
-
-def check_terminal_traditional(session, base_url):
-    """
-    传统终端检测方法
-    """
-    if VERBOSE_DEBUG:
-        debug_log(f"使用传统检测策略", "INFO")
-    
-    # 传统终端路径检测
-    terminal_paths = [
-        "/dashboard/terminal/",
-        "/terminal/",
-        "/console/",
-        "/shell/",
-        "/webssh/",
-        "/ssh/",
-        "/tty/",
-        "/pty/"
-    ]
-    
-    for terminal_path in terminal_paths:
-        try:
-            res = session.get(base_url + terminal_path, timeout=TIMEOUT)
-            if res.status_code == 200:
-                content = res.text.lower()
-                
-                # 检查是否包含终端功能
-                has_terminal = any(keyword in content for keyword in [
-                    "terminal", "xterm", "ssh", "console", "shell"
-                ])
-                
-                # 检查是否有错误信息
-                has_errors = any(error in content for error in [
-                    "not found", "404", "error", "failed", "unavailable"
-                ])
-                
-                if has_terminal and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"传统检测成功: {terminal_path}", "SUCCESS")
-                    return True
-        except:
-            continue
-    
-    # 如果传统检测失败，尝试智能检测
-    return smart_terminal_detection(session, base_url)
-
-def detect_nezha_features(session, base_url):
-    """
-    检测哪吒面板的版本和特性
-    """
-    features = {
-        "version": "unknown",
-        "has_terminal": False,
-        "has_file_manager": False,
-        "has_monitoring": False,
-        "api_endpoints": []
-    }
-    
-    try:
-        # 检测版本信息
-        version_endpoints = [
-            "/api/v1/version",
-            "/api/version", 
-            "/version",
-            "/dashboard/version"
-        ]
-        
-        for endpoint in version_endpoints:
-            try:
-                res = session.get(base_url + endpoint, timeout=TIMEOUT)
-                if res.status_code == 200:
-                    try:
-                        data = res.json()
-                        if "version" in data:
-                            features["version"] = data["version"]
-                            break
-                    except:
-                        # 如果不是JSON，尝试从HTML中提取版本
-                        if "1.13" in res.text:
-                            features["version"] = "1.13.x"
-                            break
-            except:
-                continue
-        
-        # 检测API端点
-        api_test_endpoints = [
-            "/api/v1/server",
-            "/api/v1/servers", 
-            "/api/v1/overview",
-            "/api/v1/config",
-            "/api/v1/notification",
-            "/api/v1/cron"
-        ]
-        
-        for endpoint in api_test_endpoints:
-            try:
-                res = session.get(base_url + endpoint, timeout=TIMEOUT)
-                if res.status_code == 200:
-                    features["api_endpoints"].append(endpoint)
-            except:
-                continue
-        
-        # 检测功能特性
-        try:
-            # 检查文件管理器
-            res = session.get(base_url + "/dashboard/file", timeout=TIMEOUT)
-            if res.status_code == 200 and "file" in res.text.lower():
-                features["has_file_manager"] = True
-        except:
-            pass
-        
-        try:
-            # 检查监控功能
-            res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
-            if res.status_code == 200:
-                content = res.text.lower()
-                if any(keyword in content for keyword in ["monitor", "监控", "status", "状态"]):
-                    features["has_monitoring"] = True
-        except:
-            pass
-        
-        if VERBOSE_DEBUG:
-            debug_log(f"哪吒面板特性检测完成: {features}", "INFO")
-        
-        return features
-        
-    except Exception as e:
-        if VERBOSE_DEBUG:
-            debug_log(f"特性检测失败: {str(e)}", "ERROR")
-        return features
-
-def smart_terminal_detection(session, base_url):
-    """
-    智能终端检测 - 通过多种方法检测终端功能
-    """
-    if VERBOSE_DEBUG:
-        debug_log(f"开始智能终端检测: {base_url}", "INFO")
-    
-    # 方法1: 检查哪吒面板配置
-    try:
-        res = session.get(base_url + "/api/v1/config", timeout=TIMEOUT)
-        if res.status_code == 200:
-            try:
-                data = res.json()
-                if isinstance(data, dict):
-                    config_str = str(data).lower()
-                    # 检查配置中是否包含终端相关设置
-                    if any(keyword in config_str for keyword in ["terminal", "ssh", "console", "shell", "websocket"]):
-                        if VERBOSE_DEBUG:
-                            debug_log(f"配置中发现终端相关设置: /api/v1/config", "SUCCESS")
-                        return True
-            except:
+                elif isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+                    total_servers = len(data["data"])
+                has_agents = total_servers > 0
+            except Exception:
                 pass
-    except:
+    except Exception:
         pass
     
-    # 方法2: 检查dashboard页面源码 - 这是最关键的检测方法
-    try:
-        res = session.get(base_url + "/dashboard", timeout=TIMEOUT)
-        if res.status_code == 200:
-            content = res.text.lower()
-            
-            # 检查是否包含终端相关的关键元素 - 基于实际可用的终端HTML特征
-            has_xterm = "xterm" in content
-            has_terminal_ui = any(element in content for element in [
-                "terminal-container", "terminal-wrapper", "terminal-screen",
-                "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
-            ])
-            has_websocket = "websocket" in content
-            has_terminal_js = any(js in content for js in [
-                "terminal.init", "ssh.init", "console.init", "shell.init",
-                "@xterm", "xterm.js", "terminal.js"
-            ])
-            
-            # 检查是否有真正的终端功能代码
-            has_real_terminal_code = any(code in content for code in [
-                "websocket", "socket.io", "terminal-container", "terminal-wrapper",
-                "xterm-helper-textarea", "xterm-screen", "xterm-viewport"
-            ])
-            
-            # 检查是否有错误信息
-            has_errors = any(error in content for error in [
-                "not found", "404", "error", "failed", "unavailable",
-                "未找到", "错误", "失败", "不可用"
-            ])
-            
-            # 关键检测：检查是否包含真正的终端输入框和界面元素
-            has_real_terminal_input = any(input_element in content for input_element in [
-                "xterm-helper-textarea", "terminal-input", "ssh-input",
-                "console-input", "shell-input", "xterm-screen"
-            ])
-            
-            # 检查是否有终端相关的CSS样式
-            has_terminal_css = any(css in content for css in [
-                "@xterm", "xterm.css", "terminal.css", "xterm-rows"
-            ])
-            
-            if VERBOSE_DEBUG:
-                debug_log(f"Dashboard页面检测结果:", "INFO")
-                debug_log(f"  xterm: {has_xterm}", "INFO")
-                debug_log(f"  终端UI: {has_terminal_ui}", "INFO")
-                debug_log(f"  WebSocket: {has_websocket}", "INFO")
-                debug_log(f"  终端JS: {has_terminal_js}", "INFO")
-                debug_log(f"  真实终端代码: {has_real_terminal_code}", "INFO")
-                debug_log(f"  真实终端输入: {has_real_terminal_input}", "INFO")
-                debug_log(f"  终端CSS: {has_terminal_css}", "INFO")
-                debug_log(f"  错误信息: {has_errors}", "INFO")
-            
-            # 多重验证：必须满足多个条件才认为是真正的终端
-            # 基于实际可用的终端特征，放宽检测条件
-            if has_xterm and (has_terminal_ui or has_real_terminal_input) and not has_errors:
-                if VERBOSE_DEBUG:
-                    debug_log(f"Dashboard页面中发现完整终端功能", "SUCCESS")
-                return True
-            elif has_xterm and has_terminal_js and not has_errors:
-                if VERBOSE_DEBUG:
-                    debug_log(f"Dashboard页面中发现终端JavaScript功能", "SUCCESS")
-                return True
-            elif has_xterm and has_terminal_css and not has_errors:
-                if VERBOSE_DEBUG:
-                    debug_log(f"Dashboard页面中发现终端CSS样式", "SUCCESS")
-                return True
-            elif has_real_terminal_input and not has_errors:
-                if VERBOSE_DEBUG:
-                    debug_log(f"Dashboard页面中发现终端输入框", "SUCCESS")
-                return True
-    except Exception as e:
-        if VERBOSE_DEBUG:
-            debug_log(f"Dashboard页面检测异常: {str(e)}", "ERROR")
+    if not has_agents:
+        return False, False, 0
     
-    # 方法3: 检查API响应中的终端信息
-    api_endpoints = [
-        "/api/v1/server",
-        "/api/v1/servers",
-        "/api/v1/overview"
-    ]
+    terminal_accessible_count, _ = count_terminal_accessible_servers(session, base_url)
+    return has_agents, terminal_accessible_count > 0, total_servers
+
+def analyze_panel(result_line):
+    # 多线程分析函数
+    parts = result_line.split()
+    if len(parts) < 3:
+        return result_line, ("格式错误", "N/A", 0, "N/A")
+
+    ip_port, username, password = parts[0], parts[1], parts[2]
     
-    for endpoint in api_endpoints:
+    for protocol in ["http", "https"]:
+        base_url = f"{protocol}://{ip_port}"
+        session = requests.Session()
+        login_url = base_url + "/api/v1/login"
+        payload = {"username": username, "password": password}
+        
         try:
-            res = session.get(base_url + endpoint, timeout=TIMEOUT)
+            requests.packages.urllib3.disable_warnings()
+            res = session.post(login_url, json=payload, timeout=TIMEOUT, verify=False)
+            
             if res.status_code == 200:
                 try:
-                    data = res.json()
-                    # 检查API响应中是否包含终端相关信息
-                    if isinstance(data, dict):
-                        data_str = str(data).lower()
-                        if any(keyword in data_str for keyword in ["terminal", "ssh", "console", "shell"]):
-                            if VERBOSE_DEBUG:
-                                debug_log(f"API响应中发现终端信息: {endpoint}", "SUCCESS")
-                            return True
-                except:
-                    continue
-        except:
-            continue
-    
-    # 方法4: 尝试访问实际的终端页面（通过JavaScript动态加载）
-    terminal_test_paths = [
-        "/dashboard/terminal",
-        "/dashboard/ssh", 
-        "/dashboard/console",
-        "/dashboard/shell"
-    ]
-    
-    for test_path in terminal_test_paths:
-        try:
-            res = session.get(base_url + test_path, timeout=TIMEOUT)
-            if res.status_code == 200:
-                content = res.text.lower()
-                
-                # 检查是否包含真正的终端功能
-                has_xterm = "xterm" in content
-                has_websocket = "websocket" in content
-                has_terminal_ui = any(element in content for element in [
-                    "terminal-container", "terminal-wrapper", "terminal-screen",
-                    "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
-                ])
-                has_js_init = any(js in content for js in [
-                    "terminal.init", "ssh.init", "console.init", "shell.init"
-                ])
-                
-                # 检查是否有错误信息
-                has_errors = any(error in content for error in [
-                    "not found", "404", "error", "failed", "unavailable",
-                    "未找到", "错误", "失败", "不可用"
-                ])
-                
-                # 必须满足多个条件才认为是真正的终端
-                if has_xterm and has_terminal_ui and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"发现真实终端页面: {test_path}", "SUCCESS")
-                    return True
-                elif has_xterm and has_websocket and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"发现WebSocket终端页面: {test_path}", "SUCCESS")
-                    return True
-                elif has_xterm and not has_errors:
-                    if VERBOSE_DEBUG:
-                        debug_log(f"发现xterm终端页面: {test_path}", "SUCCESS")
-                    return True
-        except:
-            continue
-    
-    if VERBOSE_DEBUG:
-        debug_log(f"智能检测未发现终端功能", "WARNING")
-    
-    return False
+                    j = res.json()
+                    is_login_success = False
+                    auth_token = None
 
-def verify_terminal_functionality(session, base_url, terminal_path):
-    """
-    验证终端功能的真实可用性
-    """
-    try:
-        # 尝试访问终端页面
-        res = session.get(base_url + terminal_path, timeout=TIMEOUT)
-        if res.status_code != 200:
-            return False
-        
-        content = res.text.lower()
-        
-        # 检查是否包含真实的终端功能 - 基于实际可用的终端特征
-        has_xterm = "xterm" in content
-        has_websocket = "websocket" in content
-        has_terminal_ui = any(element in content for element in [
-            "terminal-container", "terminal-wrapper", "terminal-screen",
-            "xterm-helper-textarea", "xterm-viewport", "xterm-rows"
-        ])
-        has_js_init = any(js in content for js in [
-            "terminal.init", "ssh.init", "console.init", "shell.init"
-        ])
-        
-        # 检查是否有错误信息
-        has_errors = any(error in content for error in [
-            "not found", "404", "error", "failed", "unavailable",
-            "未找到", "错误", "失败", "不可用",
-            "服务器不存在", "尚未连接", "terminal not available"
-        ])
-        
-        # 检查是否有真正的终端输入框
-        has_terminal_input = any(input_element in content for input_element in [
-            "xterm-helper-textarea", "terminal-input", "ssh-input",
-            "console-input", "shell-input", "xterm-screen"
-        ])
-        
-        # 检查是否有终端相关的JavaScript代码
-        has_terminal_js = any(js_code in content for js_code in [
-            "xterm.js", "terminal.js", "websocket", "socket.io", "@xterm"
-        ])
-        
-        # 检查是否有终端相关的CSS样式
-        has_terminal_css = any(css in content for css in [
-            "xterm.css", "terminal.css", "xterm-rows", "@xterm"
-        ])
-        
-        if VERBOSE_DEBUG:
-            debug_log(f"终端功能验证详情: {terminal_path}", "INFO")
-            debug_log(f"  xterm: {has_xterm}", "INFO")
-            debug_log(f"  终端UI: {has_terminal_ui}", "INFO")
-            debug_log(f"  WebSocket: {has_websocket}", "INFO")
-            debug_log(f"  JS初始化: {has_js_init}", "INFO")
-            debug_log(f"  终端输入: {has_terminal_input}", "INFO")
-            debug_log(f"  终端JS: {has_terminal_js}", "INFO")
-            debug_log(f"  终端CSS: {has_terminal_css}", "INFO")
-            debug_log(f"  错误信息: {has_errors}", "INFO")
-        
-        # 多重验证：必须满足多个条件才认为是真正的终端
-        # 基于实际可用的终端特征，放宽验证条件
-        if has_xterm and has_terminal_ui and not has_errors:
-            if VERBOSE_DEBUG:
-                debug_log(f"终端功能验证成功: {terminal_path}", "SUCCESS")
-            return True
-        elif has_xterm and has_terminal_input and not has_errors:
-            if VERBOSE_DEBUG:
-                debug_log(f"终端输入功能验证成功: {terminal_path}", "SUCCESS")
-            return True
-        elif has_xterm and has_terminal_js and not has_errors:
-            if VERBOSE_DEBUG:
-                debug_log(f"终端JavaScript功能验证成功: {terminal_path}", "SUCCESS")
-            return True
-        elif has_xterm and has_terminal_css and not has_errors:
-            if VERBOSE_DEBUG:
-                debug_log(f"终端CSS样式验证成功: {terminal_path}", "SUCCESS")
-            return True
-        elif has_xterm and has_websocket and not has_errors:
-            if VERBOSE_DEBUG:
-                debug_log(f"WebSocket终端功能验证成功: {terminal_path}", "SUCCESS")
-            return True
-        elif has_xterm and not has_errors:
-            # 如果包含xterm且没有错误，也认为是可用的
-            if VERBOSE_DEBUG:
-                debug_log(f"xterm终端功能验证成功: {terminal_path}", "SUCCESS")
-            return True
-        
-        if VERBOSE_DEBUG:
-            debug_log(f"终端功能验证失败: {terminal_path}", "WARNING")
-            debug_log(f"xterm: {has_xterm}, UI: {has_terminal_ui}, JS: {has_terminal_js}, 错误: {has_errors}", "WARNING")
-        
-        return False
-    except Exception as e:
-        if VERBOSE_DEBUG:
-            debug_log(f"终端功能验证异常: {terminal_path}, 错误: {str(e)}", "ERROR")
-        return False
+                    if "token" in j.get("data", {}):
+                        auth_token = j["data"]["token"]
+                        is_login_success = True
+                    if "nz-jwt" in res.headers.get("Set-Cookie", ""):
+                        is_login_success = True
+                    if j.get("code") == 200 and j.get("message", "").lower() == "success":
+                        is_login_success = True
+
+                    if is_login_success:
+                        if auth_token:
+                            session.headers.update({"Authorization": f"Bearer {auth_token}"})
+                        
+                        has_agents, terminal_accessible, machine_count = check_for_agents_and_terminal(session, base_url)
+                        terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
+                        
+                        server_names = [s.get('name', s.get('id', '')) for s in terminal_accessible_servers]
+                        servers_string = ", ".join(map(str, server_names)) if server_names else "无"
+                        
+                        return result_line, (machine_count, terminal_accessible_count, servers_string)
+                except json.JSONDecodeError:
+                    if "oauth2" in res.text.lower(): # 处理返回HTML登录页的情况
+                         return result_line, ("登录页面", "N/A", 0, "N/A")
+                except Exception as e:
+                    debug_log(f"分析时出错 {base_url}: {e}", "ERROR")
+                    return result_line, ("分析失败", "N/A", 0, "N/A")
+        except requests.exceptions.RequestException as e:
+            debug_log(f"连接失败 {base_url}: {e}", "ERROR")
+            continue # 继续尝试下一个协议
+            
+    return result_line, ("登录失败", "N/A", 0, "N/A")
+
 
 # =========================== 主脚本优化部分 ===========================
 # 定义Go可执行文件的绝对路径
 GO_EXEC = "/usr/local/go/bin/go"
 
 def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
-    """
-    将哪吒面板的分析结果更新到已生成的Excel文件中
-    """
+    # 将哪吒面板的分析结果更新到已生成的Excel文件中
     if not os.path.exists(xlsx_file):
         print(f"⚠️ Excel文件 {xlsx_file} 不存在，跳过更新。")
         return
@@ -2364,14 +1881,13 @@ def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
         ws.cell(row=1, column=terminal_list_col, value="畅通服务器列表")
 
         # 遍历每一行，更新数据
-        for row in ws.iter_rows(min_row=2):
-            original_address_cell = row[0]
-            original_address = original_address_cell.value
+        for row_idx in range(2, ws.max_row + 1):
+            original_address = ws.cell(row=row_idx, column=1).value
             if original_address in analysis_data:
                 machine_count, term_count, servers_string = analysis_data[original_address]
-                ws.cell(row=original_address_cell.row, column=server_count_col, value=machine_count)
-                ws.cell(row=original_address_cell.row, column=terminal_count_col, value=term_count)
-                ws.cell(row=original_address_cell.row, column=terminal_list_col, value=servers_string)
+                ws.cell(row=row_idx, column=server_count_col, value=machine_count)
+                ws.cell(row=row_idx, column=terminal_count_col, value=term_count)
+                ws.cell(row=row_idx, column=terminal_list_col, value=servers_string)
         
         wb.save(xlsx_file)
         print("✅ 成功将哪吒面板分析结果写入Excel报告。")
@@ -3288,83 +2804,24 @@ if __name__ == "__main__":
 
         # ==================== 在这里添加哪吒面板分析与Excel更新逻辑 ====================
         if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
-            print("\n--- 开始对成功的哪吒面板进行深度分析... ---")
+            analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
+            print(f"\n--- 开始对成功的哪吒面板进行深度分析（使用 {analysis_threads} 线程）... ---")
             with open(final_txt_file, 'r', encoding='utf-8') as f:
                 results = [line.strip() for line in f if line.strip()]
             
-            nezha_analysis_data = {} # 用于存储分析结果
+            nezha_analysis_data = {}
             
-            for result_line in tqdm(results, desc="分析哪吒面板", unit="panel"):
-                parts = result_line.split()
-                if len(parts) < 3: continue
+            with ThreadPoolExecutor(max_workers=analysis_threads) as executor:
+                future_to_result = {executor.submit(analyze_panel, res): res for res in results}
                 
-                ip_port, username, password = parts[0], parts[1], parts[2]
-                
-                # 尝试HTTP和HTTPS
-                for protocol in ["http", "https"]:
-                    base_url = f"{protocol}://{ip_port}"
-                    session = requests.Session()
-                    
-                    # 登录
-                    login_url = base_url + "/api/v1/login"
-                    payload = {"username": username, "password": password}
+                for future in tqdm(as_completed(future_to_result), total=len(results), desc="分析哪吒面板"):
+                    result_line = future_to_result[future]
                     try:
-                        # 禁用SSL警告
-                        requests.packages.urllib3.disable_warnings()
-                        res = session.post(login_url, json=payload, timeout=TIMEOUT, verify=False)
-                        
-                        if res.status_code == 200:
-                            try:
-                                j = res.json()
-                                is_login_success = False
-                                auth_token = None
-
-                                if "token" in j.get("data", {}):
-                                    auth_token = j["data"]["token"]
-                                    is_login_success = True
-                                
-                                if "nz-jwt" in res.headers.get("Set-Cookie", ""):
-                                    is_login_success = True
-
-                                if j.get("code") == 200 and j.get("message", "").lower() == "success":
-                                    is_login_success = True
-
-                                if is_login_success:
-                                    if auth_token:
-                                        session.headers.update({"Authorization": f"Bearer {auth_token}"})
-                                    
-                                    has_agents, terminal_accessible, machine_count = check_for_agents_and_terminal(session, base_url)
-                                    
-                                    # 统计终端畅通的服务器数量
-                                    terminal_accessible_count, terminal_accessible_servers = count_terminal_accessible_servers(session, base_url)
-
-                                    server_names = [s.get('name', s.get('id', '')) for s in terminal_accessible_servers]
-                                    servers_string = ", ".join(map(str, server_names)) if server_names else "无"
-                                    
-                                    # 存储分析结果
-                                    nezha_analysis_data[result_line] = (machine_count, terminal_accessible_count, servers_string)
-                                    
-                                    status_msg = f"🎯 [分析成功] {base_url} | 用户名: {username}"
-                                    if has_agents:
-                                        status_msg += Fore.CYAN + f" (有{machine_count}台机器)"
-                                    else:
-                                        status_msg += Fore.YELLOW + " (无机器)"
-                                    
-                                    if terminal_accessible:
-                                        status_msg += Fore.GREEN + f" (终端畅通{terminal_accessible_count}台)"
-                                    else:
-                                        status_msg += Fore.RED + " (终端不畅通)"
-                                    
-                                    tqdm.write(status_msg)
-                                    break # 登录成功，跳出协议循环
-
-                            except Exception as e:
-                                debug_log(f"JSON解析或分析错误 at {base_url}: {str(e)}", "ERROR")
-                                continue
-                    except Exception as e:
-                        if protocol == "https":
-                           nezha_analysis_data[result_line] = ("登录失败", "未知", "未知")
-                           debug_log(f"登录请求错误 at {base_url}: {str(e)}", "ERROR")
+                        _, (machine_count, term_count, servers_string) = future.result()
+                        nezha_analysis_data[result_line] = (machine_count, term_count, servers_string)
+                    except Exception as exc:
+                        print(f'{result_line} 生成了一个异常: {exc}')
+                        nezha_analysis_data[result_line] = ("分析异常", "N/A", 0, "N/A")
 
             # 将分析结果写入Excel
             if nezha_analysis_data:
