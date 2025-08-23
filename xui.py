@@ -47,7 +47,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	\"crypto/tls\"",
     "	\"encoding/json\"",
     "	\"fmt\"",
-    "	\"io\"",
+    "	\"io\"", # 错误修复：此模板确实需要io，予以保留
     "	\"net/http\"",
     "	\"net/url\"",
     "	\"os\"",
@@ -167,7 +167,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	\"crypto/tls\"",
     "	\"encoding/json\"",
     "	\"fmt\"",
-    "	\"io\"",
+    "	\"io\"", # 错误修复：此模板确实需要io，予以保留
     "	\"net/http\"",
     "	\"net/url\"",
     "	\"os\"",
@@ -605,6 +605,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"context\"",
     "	\"crypto/tls\"",
     "	\"fmt\"",
+    # "	\"io\"", // 错误修复：此模板不再需要 io
     "	\"io/ioutil\"",
     "	\"net\"",
     "	\"net/http\"",
@@ -1622,10 +1623,6 @@ def check_environment(template_mode):
 
     if platform.system().lower() == "windows":
         print(">>> 检测到 Windows 系统，跳过环境检测和依赖安装...\\n")
-        try:
-            import psutil, requests, openpyxl, yaml, tqdm
-        except ImportError:
-            print("⚠️ 检测到模块缺失，请在Windows上手动安装: pip install psutil requests openpyxl pyyaml tqdm colorama")
         return
 
     print(">>> 正在检查并安装依赖环境...")
