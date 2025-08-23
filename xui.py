@@ -605,7 +605,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"context\"",
     "	\"crypto/tls\"",
     "	\"fmt\"",
-    "	\"io\"",
     "	\"io/ioutil\"",
     "	\"net\"",
     "	\"net/http\"",
