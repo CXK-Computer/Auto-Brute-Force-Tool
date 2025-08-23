@@ -47,7 +47,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	\"crypto/tls\"",
     "	\"encoding/json\"",
     "	\"fmt\"",
-    "	\"io\"", # 错误修复：此模板确实需要io，予以保留
+    "	\"io\"",
     "	\"net/http\"",
     "	\"net/url\"",
     "	\"os\"",
@@ -167,7 +167,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	\"crypto/tls\"",
     "	\"encoding/json\"",
     "	\"fmt\"",
-    "	\"io\"", # 错误修复：此模板确实需要io，予以保留
+    "	\"io\"",
     "	\"net/http\"",
     "	\"net/url\"",
     "	\"os\"",
@@ -598,6 +598,7 @@ XUI_GO_TEMPLATE_8_LINES = [
     "}",
 ]
 
+# ==================== 代理模板修复 ====================
 PROXY_GO_TEMPLATE_LINES = [
     "package main",
     "import (",
@@ -605,7 +606,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"context\"",
     "	\"crypto/tls\"",
     "	\"fmt\"",
-    # "	\"io\"", // 错误修复：此模板不再需要 io
     "	\"io/ioutil\"",
     "	\"net\"",
     "	\"net/http\"",
@@ -706,6 +706,12 @@ PROXY_GO_TEMPLATE_LINES = [
     "		proxyURL, err := url.Parse(proxyURLString)",
     "		if err != nil { return false, err }",
     "		transport.Proxy = http.ProxyURL(proxyURL)",
+    "       if proxyType == \"https\" {",
+    "           transport.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {",
+    "               dialer := &net.Dialer{Timeout: timeout}",
+    "               return tls.DialWithDialer(dialer, network, proxyAddr, &tls.Config{InsecureSkipVerify: true})",
+    "           }",
+    "       }",
     "	} else {",
     "		dialer, err := proxy.SOCKS5(\"tcp\", proxyAddr, auth, &net.Dialer{",
     "			Timeout:   timeout,",
