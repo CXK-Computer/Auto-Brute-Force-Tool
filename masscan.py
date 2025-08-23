@@ -34,14 +34,14 @@ def convert_masscan_grepable_output():
     print(f"准备写入文件: {output_file_path}")
 
     try:
-        with open(input_file_path, 'r', encoding='utf-8') as infile, \
+        with open(input_file_path, 'r', encoding='utf-8', errors='ignore') as infile, \
              open(output_file_path, 'w', encoding='utf-8') as outfile:
 
             for line in infile:
                 total_lines += 1
                 line = line.strip()
 
-                # 【修正 #1】: 检查行中是否包含关键信息，而不是检查行首。
+                # 【关键修正】: 检查行中是否 *包含* 关键信息，而不是检查行首。
                 # 忽略注释行 (#) 和不包含主机与端口信息的行。
                 if line.startswith("#") or "Host:" not in line or "Ports:" not in line:
                     continue
@@ -51,7 +51,7 @@ def convert_masscan_grepable_output():
                     # 使用默认 split() 可以同时处理空格和制表符
                     parts = line.split()
                     
-                    # 【修正 #2】: 动态查找 "Host:" 的位置来定位 IP 地址，而不是使用固定索引。
+                    # 【关键修正】: 动态查找 "Host:" 的位置来定位 IP 地址，而不是使用固定索引。
                     host_keyword_index = parts.index("Host:")
                     ip_addr = parts[host_keyword_index + 1]
 
@@ -59,7 +59,6 @@ def convert_masscan_grepable_output():
                     ports_keyword_index = parts.index("Ports:")
                     
                     # 'Ports:' 之后的所有内容都属于端口信息
-                    # 我们将它们重新组合成一个字符串，然后按逗号分割，以处理一行多端口的情况
                     port_section_str = " ".join(parts[ports_keyword_index + 1:])
                     port_list = port_section_str.split(',')
 
@@ -92,7 +91,10 @@ def convert_masscan_grepable_output():
     print(f"总共读取行数: {total_lines}")
     print(f"已处理主机行: {processed_hosts}")
     print(f"成功转换 IP:Port 记录: {converted_count}")
-    print(f"✅ 结果已保存到文件: {output_file_path}")
+    if converted_count > 0:
+        print(f"✅ 结果已保存到文件: {output_file_path}")
+    else:
+        print(f"⚠️ 转换完成，但没有找到任何有效数据。请检查输入文件 '{input_file_path}' 的格式。")
 
 
 if __name__ == "__main__":
