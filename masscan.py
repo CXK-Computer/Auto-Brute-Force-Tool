@@ -5,9 +5,11 @@ import os
 def convert_masscan_grepable_output():
     """
     一个交互式脚本，用于将 Masscan 的 Grepable 格式 (-oG) TXT 输出文件转换为 'ip:port' 格式。
+    此版本经过修正，可以处理以 'Timestamp:' 开头的行。
     """
     print("--- Masscan 结果转换脚本 (Grepable 格式专用) ---")
-    print("本脚本将 'Host: 1.2.3.4 () Ports: 80/open/tcp,...' 格式的行转换为 '1.2.3.4:80'")
+    print("本脚本将 'Host: 1.2.3.4 () Ports: 80/open/tcp,...' 或")
+    print("'Timestamp: ... Host: 1.2.3.4 () Ports: 80/open/tcp,...' 格式的行转换为 '1.2.3.4:80'")
 
     # 1. 获取用户输入的源文件路径
     while True:
@@ -39,15 +41,19 @@ def convert_masscan_grepable_output():
                 total_lines += 1
                 line = line.strip()
 
-                # 仅处理以 "Host:" 开头的有效行，忽略注释行 "#"
-                if not line.startswith("Host:"):
+                # 【修正 #1】: 检查行中是否包含关键信息，而不是检查行首。
+                # 忽略注释行 (#) 和不包含主机与端口信息的行。
+                if line.startswith("#") or "Host:" not in line or "Ports:" not in line:
                     continue
                 
                 processed_hosts += 1
                 try:
+                    # 使用默认 split() 可以同时处理空格和制表符
                     parts = line.split()
-                    # IP 地址总是在 'Host:' 后面，即列表的第二个元素 (索引 1)
-                    ip_addr = parts[1]
+                    
+                    # 【修正 #2】: 动态查找 "Host:" 的位置来定位 IP 地址，而不是使用固定索引。
+                    host_keyword_index = parts.index("Host:")
+                    ip_addr = parts[host_keyword_index + 1]
 
                     # 找到 'Ports:' 关键字的索引位置
                     ports_keyword_index = parts.index("Ports:")
