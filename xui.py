@@ -614,7 +614,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"strings\"",
     "	\"sync\"",
     "	\"time\"",
-    "	\"golang.orgx/net/proxy\"",
+    "	\"golang.org/net/proxy\"",
     ")",
     "var (",
     "	proxyType    = \"{proxy_type}\"",
