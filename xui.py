@@ -614,7 +614,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"strings\"",
     "	\"sync\"",
     "	\"time\"",
-    "	\"golang.org/x/net/proxy\"",
+    "	\"golang.orgx/net/proxy\"",
     ")",
     "var (",
     "	proxyType    = \"{proxy_type}\"",
@@ -622,18 +622,19 @@ PROXY_GO_TEMPLATE_LINES = [
     "	testURL      = \"http://myip.ipip.net\"", # This will be replaced by Python script
     "	realIP       = \"\"",
     ")",
+    # FIX 1: Worker no longer creates or passes an http.Client
     "func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {",
     "	defer wg.Done()",
-    "	httpClient := &http.Client{ Timeout: {timeout} * time.Second }",
     "	for proxyAddr := range tasks {",
-    "		processProxy(proxyAddr, outputFile, httpClient)",
+    "		processProxy(proxyAddr, outputFile)",
     "	}",
     "}",
-    "func processProxy(proxyAddr string, outputFile *os.File, httpClient *http.Client) {",
+    # FIX 2: processProxy no longer accepts an http.Client
+    "func processProxy(proxyAddr string, outputFile *os.File) {",
     "	var found bool",
     "	checkAndFormat := func(auth *proxy.Auth) {",
     "        if found { return }",
-    "		success, _ := checkConnection(proxyAddr, auth, httpClient)",
+    "		success, _ := checkConnection(proxyAddr, auth)", # Client removed from call
     "		if success {",
     "            found = true",
     "			var result string",
@@ -690,7 +691,8 @@ PROXY_GO_TEMPLATE_LINES = [
     "	}",
     "	return strings.TrimSpace(ipString), nil",
     "}",
-    "func checkConnection(proxyAddr string, auth *proxy.Auth, httpClient *http.Client) (bool, error) {",
+    # FIX 3: checkConnection no longer accepts a client. It creates its own.
+    "func checkConnection(proxyAddr string, auth *proxy.Auth) (bool, error) {",
     "	transport := &http.Transport{ ",
     "		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},",
     "		DisableKeepAlives: true,",
@@ -722,7 +724,8 @@ PROXY_GO_TEMPLATE_LINES = [
     "			return dialer.Dial(network, addr)",
     "		}",
     "	}",
-    "	httpClient.Transport = transport",
+    # FIX 4: A new, local httpClient is created here for every check.
+    "	httpClient := &http.Client{ Transport: transport, Timeout: timeout }",
     "	req, err := http.NewRequest(\"GET\", testURL, nil)",
     "	if err != nil { return false, err }",
     "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36\")",
@@ -783,7 +786,6 @@ PROXY_GO_TEMPLATE_LINES = [
     "	wg.Wait()",
     "}",
 ]
-
 ALIST_GO_TEMPLATE_LINES = [
     "package main",
     "import (",
