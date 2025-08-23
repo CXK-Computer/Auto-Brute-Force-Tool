@@ -1454,8 +1454,11 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
 
         cmd = ['./' + executable_name, input_file, output_file]
         
-        # 使用subprocess.run，它更简单且能捕获输出
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', env=run_env)
+        # ==================== 兼容性修复 ====================
+        # 使用 stdout=PIPE 和 stderr=PIPE 代替 capture_output=True
+        # 以兼容 Python 3.7 以下的版本
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', env=run_env)
+        # =================================================
 
         if result.returncode != 0:
             if result.returncode == -9 or result.returncode == 137:
