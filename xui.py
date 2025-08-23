@@ -723,7 +723,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	req, err := http.NewRequest(\"GET\", testURL, nil)",
     "	if err != nil { return false, err }",
     "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36\")",
-    "	resp, err := httpClient.Do(req)",
+    "	resp, err := client.Do(req)",
     "	if err != nil { ",
     "        if resp != nil { resp.Body.Close() }",
     "        return false, err ",
@@ -1455,19 +1455,21 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
         cmd = ['./' + executable_name, input_file, output_file]
         
         # ==================== 兼容性修复 ====================
-        # 使用 stdout=PIPE 和 stderr=PIPE 代替 capture_output=True
+        # 使用 stdout=PIPE 和 stderr=PIPE 代替 capture_output=True 和 text=True
         # 以兼容 Python 3.7 以下的版本
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', env=run_env)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
         # =================================================
 
         if result.returncode != 0:
+            # 手动将字节串解码为字符串
+            stderr_str = result.stderr.decode('utf-8', 'ignore')
             if result.returncode == -9 or result.returncode == 137:
                  # OOM Killer
                  # 返回一个特殊错误，让主线程知道发生了什么
                  return (False, f"任务 {chunk_id} 被系统因内存不足而终止(OOM Killed)。")
             else:
                  # 其他错误
-                 return (False, f"任务 {chunk_id} 失败，返回码 {result.returncode}。\n错误信息:\n{result.stderr}")
+                 return (False, f"任务 {chunk_id} 失败，返回码 {result.returncode}。\n错误信息:\n{stderr_str}")
         
         return (True, None) # 成功
     finally:
