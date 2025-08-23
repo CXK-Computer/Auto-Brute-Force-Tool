@@ -619,7 +619,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "var (",
     "	proxyType    = \"{proxy_type}\"",
     "	authMode     = {auth_mode}",
-    "	testURL      = \"http://myip.ipip.net\"",
+    "	testURL      = \"http://myip.ipip.net\"", # This will be replaced by Python script
     "	realIP       = \"\"",
     ")",
     "func worker(tasks <-chan string, outputFile *os.File, wg *sync.WaitGroup) {",
@@ -1327,6 +1327,12 @@ def generate_go_code(template_lines, semaphore_size, usernames, passwords, timeo
         code = code.replace("{proxy_type}", kwargs['proxy_type']) \
                    .replace("{auth_mode}", str(kwargs.get('auth_mode', 0))) \
                    .replace("{creds_list}", creds_list)
+        # Dynamically set the test URL for proxies
+        if 'test_url' in kwargs:
+            # Escape the URL to be a valid Go string literal
+            escaped_url = escape_go_string(kwargs['test_url'])
+            code = code.replace("testURL      = \"http://myip.ipip.net\"", "testURL      = \"{}\"".format(escaped_url))
+
 
     with open('xui.go', 'w', encoding='utf-8', errors='ignore') as f:
         f.write(code)
@@ -1586,6 +1592,44 @@ def choose_template_mode():
         elif choice == "9": return 12  # Alist
         else:
             print("输入无效，请重新输入。")
+
+# ==================== 新增：代理测试目标选择函数 ====================
+def select_proxy_test_target():
+    print("\n--- 代理测试目标选择 ---")
+    print("1: IPIP.net (IP验证, 推荐)")
+    print("2: Google (全球, http)")
+    print("3: Xiaomi (中国大陆稳定, http)")
+    print("4: Baidu (中国大陆稳定, https)")
+    print("5: 自定义URL")
+    
+    default_target = "http://myip.ipip.net"
+    
+    while True:
+        choice_str = input("请选择一个测试目标 (默认 1): ").strip()
+        if choice_str == "" or choice_str == "1":
+            return default_target
+        
+        try:
+            choice = int(choice_str)
+            if choice == 2:
+                return "http://www.google.com/generate_204"
+            elif choice == 3:
+                return "http://connect.rom.miui.com/generate_204"
+            elif choice == 4:
+                return "https://www.baidu.com"
+            elif choice == 5:
+                custom_url = input("请输入自定义测试URL: ").strip()
+                if custom_url:
+                    return custom_url
+                else:
+                    print("[!] 输入为空，使用默认目标。")
+                    return default_target
+            else:
+                print("[!] 无效选择，请重新输入。")
+        except ValueError:
+            print("[!] 无效输入，请输入数字。")
+
+# =================================================================
 
 def check_environment(template_mode):
     import platform
@@ -2048,6 +2092,16 @@ if __name__ == "__main__":
         params['timeout'] = input_with_default("超时时间(秒)", 3)
         masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
         
+        # ==================== 新增：代理模式的目标选择 ====================
+        params['test_url'] = "http://myip.ipip.net" # Default
+        if TEMPLATE_MODE in [9, 10, 11]: # If it's a proxy mode
+            params['test_url'] = select_proxy_test_target()
+            # 智能警告
+            if TEMPLATE_MODE == 11 and not params['test_url'].startswith("https://"):
+                print("\n[警告] 您正在使用HTTP测试目标来测试HTTPS代理。")
+                print("这很可能会失败，建议选择一个HTTPS测试目标(例如Baidu)。")
+        # ============================================================
+
         nezha_analysis_threads = 0
         if TEMPLATE_MODE == 2:
             nezha_analysis_threads = input_with_default("请输入哪吒面板分析线程数", 50)
