@@ -24,7 +24,7 @@ except ImportError as e:
     print("错误：核心 Python 模块缺失！")
     print("缺失的模块是: {}".format(e.name))
     print("请先手动安装所有依赖：")
-    print("pip install psutil requests pyyaml openpyxl tqdm colorama")
+    print("python3 -m pip install psutil requests pyyaml openpyxl tqdm colorama")
     sys.exit(1)
 
 try:
@@ -720,7 +720,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	req, err := http.NewRequest(\"GET\", testURL, nil)",
     "	if err != nil { return false, err }",
     "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36\")",
-    "	resp, err := client.Do(req)",
+    "	resp, err := httpClient.Do(req)",
     "	if err != nil { ",
     "        if resp != nil { resp.Body.Close() }",
     "        return false, err ",
@@ -2086,6 +2086,7 @@ if __name__ == "__main__":
         # ==================== 2. 环境准备与编译 ====================
         check_environment(TEMPLATE_MODE)
         
+        # 再次导入，因为 check_environment 可能会安装它们
         import psutil, requests, yaml
         from openpyxl import Workbook, load_workbook
         from tqdm import tqdm
