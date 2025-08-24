@@ -614,7 +614,7 @@ PROXY_GO_TEMPLATE_LINES = [
     "	\"strings\"",
     "	\"sync\"",
     "	\"time\"",
-    "	\"golang.org/net/proxy\"",
+    "	\"golang.org/x/net/proxy\"",
     ")",
     "var (",
     "	proxyType    = \"{proxy_type}\"",
@@ -1808,6 +1808,7 @@ def check_environment(template_mode):
         sys.stdout.flush()
         for pkg in required_pkgs:
             try:
+                # 修复: 移除了多余的 "go" 参数
                 run_cmd([GO_EXEC, "get", pkg], quiet=True, extra_env=go_env)
             except subprocess.CalledProcessError as e:
                 print("\n❌ Go模块 '{}' 安装失败。请检查网络或代理设置。".format(pkg))
@@ -1912,6 +1913,9 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
+    # BUG修复: 将变量定义移至函数开头
+    masscan_output_file = "masscan_results.tmp"
+
     print("\n--- 正在分析结果以寻找可扩展的IP网段... ---")
     with open(result_file, 'r', encoding='utf-8') as f:
         master_results = {line.strip() for line in f}
@@ -1942,7 +1946,6 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         print("  - 第 {} 轮发现 {} 个可扩展的IP集群。".format(i + 1, len(expandable_targets)))
         
         newly_verified_this_round = set()
-        masscan_output_file = "masscan_results.tmp"
 
         for j, (subnet, port, user, password) in enumerate(expandable_targets):
             print("\n  --- [扫描集群 {}/{}] 目标: {} 端口: {} ---".format(j + 1, len(expandable_targets), subnet, port))
@@ -2055,9 +2058,10 @@ if __name__ == "__main__":
     prefix = mode_map.get(TEMPLATE_MODE, "result")
 
     try:
-        if not sys.stdout.isatty():
-            print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
-            sys.exit(1)
+        # BUG修复: 注释掉交互式终端检查
+        # if not sys.stdout.isatty():
+        #     print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
+        #     sys.exit(1)
         
         # ==================== 1. 收集所有用户输入 ====================
         print("\n=== 爆破一键启动 - 参数配置 ===")
