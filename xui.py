@@ -2302,7 +2302,7 @@ if __name__ == "__main__":
             BOT_TOKEN = "7664203362:AAFTBPQ8Ydl9c1fqM53CSzKIPS0VBj99r0M"
             CHAT_ID = "7697235358"
 
-            if BOT_TOKEN and CHID:
+            if BOT_TOKEN and CHAT_ID:
                 files_to_send = []
                 final_txt_file = "{}-{}.txt".format(prefix, time_str)
                 final_xlsx_file = "{}-{}.xlsx".format(prefix, time_str)
