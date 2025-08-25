@@ -24,7 +24,7 @@ except ImportError as e:
     print("错误：核心 Python 模块缺失！")
     print("缺失的模块是: {}".format(e.name))
     print("请先手动安装所有依赖：")
-    print("python3 -m pip install psutil requests pyyaml openpyxl tqdm colorama")
+    print("python3 -m pip install psutil requests pyyaml openpyxl tqdm colorama --break-system-packages")
     sys.exit(1)
 
 try:
@@ -1829,29 +1829,36 @@ def check_environment(template_mode):
     
     in_china = is_in_china()
     
-    if pkg_manager == "apt-get":
-        ensure_packages("apt-get", ["python3-pip"])
-    else: # yum
-        run_cmd(["yum", "install", "-y", "epel-release"], quiet=True, check=False)
-        ensure_packages("yum", ["python3-pip"])
-        run_cmd(["alternatives", "--set", "python", "/usr/bin/python3"], check=False, quiet=True)
+    # 智能依赖安装
+    required_py_modules = ['requests', 'psutil', 'openpyxl', 'pyyaml', 'tqdm', 'colorama']
+    missing_modules = []
+    for module in required_py_modules:
+        try:
+            __import__(module)
+        except ImportError:
+            missing_modules.append(module)
 
-    sys.stdout.write("    - 正在使用 pip 安装 Python 模块...")
-    sys.stdout.flush()
-    try:
-        pip_cmd = [sys.executable, "-m", "pip", "install"]
-        if in_china:
-            pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
-        
-        # 修复：为 pip 命令添加 --break-system-packages
-        pip_cmd.append("--break-system-packages")
-        
-        pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml", "tqdm", "colorama"])
-        run_cmd(pip_cmd, quiet=True)
-        print(" 完成")
-    except Exception as e:
-        print(" 失败: {}".format(e))
-        sys.exit(1)
+    if missing_modules:
+        print(f"    - 检测到缺失的 Python 模块: {', '.join(missing_modules)}")
+        sys.stdout.write("    - 正在尝试使用 pip 自动安装...")
+        sys.stdout.flush()
+        try:
+            pip_cmd = [sys.executable, "-m", "pip", "install"]
+            if in_china:
+                pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
+            
+            pip_cmd.append("--break-system-packages")
+            pip_cmd.extend(missing_modules)
+            run_cmd(pip_cmd, quiet=True)
+            print(" 完成")
+        except Exception as e:
+            print(" 失败: {}".format(e))
+            print("❌ 自动安装失败。请手动运行以下命令解决依赖问题后重试:")
+            manual_cmd = "{} -m pip install {} --break-system-packages".format(sys.executable, " ".join(missing_modules))
+            if in_china:
+                manual_cmd += " -i https://pypi.tuna.tsinghua.edu.cn/simple"
+            print(manual_cmd)
+            sys.exit(1)
 
     ensure_packages(pkg_manager, ["ca-certificates", "tar", "masscan"])
 
@@ -2225,7 +2232,23 @@ def run_nmap_prescan(all_unique_ips, ports_str, ip_port_to_original_line):
             "-T4", "--open", "-n", "-Pn"
         ]
         
-        subprocess.run(nmap_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # 使用 tqdm 监控 nmap 进度
+        process = subprocess.Popen(nmap_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='ignore')
+        
+        pbar = tqdm(total=100, desc="Nmap 扫描中", unit="%", ncols=100)
+        for line in process.stdout:
+            match = re.search(r"(\d+\.\d+)% done", line)
+            if match:
+                progress = float(match.group(1))
+                pbar.n = progress
+                pbar.refresh()
+        pbar.n = 100
+        pbar.refresh()
+        pbar.close()
+        process.wait()
+
+        if process.returncode != 0:
+             raise subprocess.CalledProcessError(process.returncode, nmap_cmd)
 
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"\n  - ❌ Nmap 扫描失败: {e}")
@@ -2237,7 +2260,7 @@ def run_nmap_prescan(all_unique_ips, ports_str, ip_port_to_original_line):
     # 解析 Nmap XML 输出
     live_targets = set()
     if os.path.exists(nmap_output_file):
-        with open(nmap_output_file, 'r') as f:
+        with open(nmap_output_file, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
             hosts = re.findall(r'<host>.*?<address addr="(.*?)" addrtype="ipv4"/>.*?<port protocol="tcp" portid="(.*?)">.*?<state state="open"', content, re.DOTALL)
             for ip, port in hosts:
