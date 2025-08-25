@@ -1466,20 +1466,21 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
 
         cmd = ['./' + executable_name, input_file, output_file]
         
-        # 使用 Popen 进行更灵活的输出处理
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', env=run_env)
+        # Python 3.6 兼容性修复：移除 text=True，手动解码
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
 
-        # 实时读取标准输出
-        for line in iter(process.stdout.readline, ''):
+        # 实时读取标准输出（字节流）并解码
+        for line_bytes in iter(process.stdout.readline, b''):
+            line = line_bytes.decode('utf-8', 'ignore')
             # SSH模式的特殊日志，直接打印
             if "Scanning SSH:" in line:
                 # 使用 \r 和 end='' 来实现单行刷新，避免刷屏
                 print(line.strip(), end='\r')
-            # 其他模式的输出可以根据需要处理，这里暂时忽略
         
         # 等待进程结束并获取返回码和标准错误
         process.wait()
-        stderr_output = process.stderr.read()
+        stderr_bytes = process.stderr.read()
+        stderr_output = stderr_bytes.decode('utf-8', 'ignore')
 
         if process.returncode != 0:
             if process.returncode == -9 or process.returncode == 137:
@@ -2298,7 +2299,9 @@ if __name__ == "__main__":
             print("\\n>>> 用户中断操作（Ctrl+C），准备清理临时文件...")
             interrupted = True
     except SystemExit as e:
-            print("\n脚本因严重错误中止: {}".format(e))
+            # 只有在有错误信息时才打印
+            if str(e) != "0" and str(e) !="1":
+                print("\n脚本因故中止: {}".format(e))
             interrupted = True # Treat as interruption for cleanup
     except EOFError:
             print("\\n❌ 错误：无法读取用户输入。请在交互式终端(TTY)中运行此脚本。")
