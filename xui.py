@@ -1744,8 +1744,8 @@ def get_default_interface():
                     if fields[1] == '00000000' and int(fields[3], 16) & 2:
                         return fields[0]
         except Exception:
-            return "eth0" # 最终备用
-    return "eth0"
+            return None # 最终备用，返回None表示失败
+    return None
 
 def check_environment(template_mode):
     import platform
@@ -2046,6 +2046,10 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
 
     masscan_output_file = "masscan_results.tmp"
     interface = get_default_interface()
+    if not interface:
+        print("⚠️ 无法自动检测网络接口，扩展扫描功能可能无法正常工作。")
+        return set()
+        
     print(f"ℹ️  自动检测到网络接口: {interface}")
 
     print("\n--- 正在分析结果以寻找可扩展的IP网段... ---")
@@ -2234,8 +2238,14 @@ def run_masscan_prescan(source_lines, masscan_rate):
     ports_str = ",".join(targets_by_port.keys())
     interface = get_default_interface()
     
+    if not interface:
+        print("  - ❌ 无法自动检测到有效的网络接口。")
+        print("  - 请确保您的系统已正确配置网络，并且 'ip route' 命令可用。")
+        print("  - 跳过 Masscan 预扫描。")
+        return source_lines
+    
     print(f"  - 发现 {len(all_unique_ips)} 个独立IP，将在 {len(targets_by_port)} 个不同端口 ({ports_str[:100]}...) 上进行扫描。")
-    print(f"  - 使用接口: {interface}, 速率: {masscan_rate} pps")
+    print(f"  - 自动检测到网络接口: {interface}, 速率: {masscan_rate} pps")
 
     # 3. 运行 Masscan
     try:
@@ -2253,11 +2263,15 @@ def run_masscan_prescan(source_lines, masscan_rate):
         
         process = subprocess.Popen(masscan_cmd, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
         
+        # 实时捕获错误输出
+        stderr_output = ""
+        
         pbar = tqdm(total=100, desc="Masscan 扫描中", unit="%", ncols=100)
         while True:
             line = process.stderr.readline()
             if not line:
                 break
+            stderr_output += line # 收集所有错误输出
             match = re.search(r"(\d+\.\d+)%.*ETA", line)
             if match:
                 progress = float(match.group(1))
@@ -2269,10 +2283,21 @@ def run_masscan_prescan(source_lines, masscan_rate):
         process.wait()
 
         if process.returncode != 0:
-             raise subprocess.CalledProcessError(process.returncode, masscan_cmd)
+             # 将收集到的错误信息一起抛出
+             raise subprocess.CalledProcessError(process.returncode, masscan_cmd, stderr=stderr_output)
 
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"\n  - ❌ Masscan 预扫描失败: {e}")
+    except subprocess.CalledProcessError as e:
+        print(f"\n  - ❌ Masscan 预扫描失败 (返回码: {e.returncode})。")
+        # 打印详细错误
+        print("  - Masscan 错误信息如下:")
+        print("-----------------------------------------")
+        print(e.stderr or "没有捕获到具体的错误信息。")
+        print("-----------------------------------------")
+        print("  - 常见原因包括网络接口名称错误、权限问题或云服务商限制。")
+        print("  - 将继续对所有原始目标进行扫描。")
+        return source_lines
+    except FileNotFoundError:
+        print("\n  - ❌ 命令 'masscan' 未找到。请确保已正确安装 Masscan。")
         print("  - 将继续对所有原始目标进行扫描。")
         return source_lines
     except Exception as e:
