@@ -308,6 +308,7 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	parts := strings.Split(ipPort, \":\")",
     "	if len(parts) != 2 { return }",
     "	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])",
+    "   fmt.Printf(\"Scanning SSH: %s:%s\\n\", ip, port)",
     "	for _, username := range usernames {",
     "		for _, password := range passwords {",
     "			client, success, _ := trySSH(ip, port, username, password)",
@@ -1465,22 +1466,26 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
 
         cmd = ['./' + executable_name, input_file, output_file]
         
-        # ==================== 兼容性修复 ====================
-        # 使用 stdout=PIPE 和 stderr=PIPE 代替 capture_output=True 和 text=True
-        # 以兼容 Python 3.7 以下的版本
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
-        # =================================================
+        # 使用 Popen 进行更灵活的输出处理
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', env=run_env)
 
-        if result.returncode != 0:
-            # 手动将字节串解码为字符串
-            stderr_str = result.stderr.decode('utf-8', 'ignore')
-            if result.returncode == -9 or result.returncode == 137:
-                 # OOM Killer
-                 # 返回一个特殊错误，让主线程知道发生了什么
+        # 实时读取标准输出
+        for line in iter(process.stdout.readline, ''):
+            # SSH模式的特殊日志，直接打印
+            if "Scanning SSH:" in line:
+                # 使用 \r 和 end='' 来实现单行刷新，避免刷屏
+                print(line.strip(), end='\r')
+            # 其他模式的输出可以根据需要处理，这里暂时忽略
+        
+        # 等待进程结束并获取返回码和标准错误
+        process.wait()
+        stderr_output = process.stderr.read()
+
+        if process.returncode != 0:
+            if process.returncode == -9 or process.returncode == 137:
                  return (False, "任务 {} 被系统因内存不足而终止(OOM Killed)。".format(chunk_id))
             else:
-                 # 其他错误
-                 return (False, "任务 {} 失败，返回码 {}。\n错误信息:\n{}".format(chunk_id, result.returncode, stderr_str))
+                 return (False, "任务 {} 失败，返回码 {}。\n错误信息:\n{}".format(chunk_id, process.returncode, stderr_output))
         
         return (True, None) # 成功
     finally:
@@ -1509,6 +1514,8 @@ def run_scan_in_parallel(lines, executable_name, python_concurrency, go_internal
                 try:
                     success, error_message = future.result()
                     if not success:
+                        # 清除可能残留的单行日志
+                        print(" " * 80, end='\r')
                         print("\n❌ {}".format(error_message))
                         # 如果发生OOM，最好停止所有任务
                         if "OOM" in error_message:
@@ -1519,6 +1526,9 @@ def run_scan_in_parallel(lines, executable_name, python_concurrency, go_internal
                     print('\n任务 {} 执行时产生异常: {}'.format(chunk_id, exc))
                 
                 pbar.update(1)
+    # 扫描结束后，打印一个换行符以清除最后的单行日志
+    print("\n")
+
 
 # =======================================================
 
@@ -1955,7 +1965,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         master_results = {line.strip() for line in f}
     
     ips_to_analyze = master_results
-
+    
     for i in range(2): # 执行两轮扩展
         print(f"\n--- [扩展扫描 第 {i + 1}/2 轮] ---")
         
