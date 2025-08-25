@@ -283,9 +283,8 @@ XUI_GO_TEMPLATE_6_LINES = [
     "package main",
     "import (",
     "	\"bufio\"",
-    "	\"context\"",
     "	\"fmt\"",
-    "	\"net\"",
+    "	\"log\"",
     "	\"net/url\"",
     "	\"os\"",
     "	\"strings\"",
@@ -310,7 +309,7 @@ XUI_GO_TEMPLATE_6_LINES = [
     "	parts := strings.Split(ipPort, \":\")",
     "	if len(parts) != 2 { return }",
     "	ip, port := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])",
-    "   fmt.Printf(\"Scanning SSH: %s:%s\\n\", ip, port)",
+    "   log.Printf(\"Scanning SSH: %s:%s\", ip, port)",
     "	for _, username := range usernames {",
     "		for _, password := range passwords {",
     "			client, success, _ := trySSH(ip, port, username, password)",
@@ -332,19 +331,8 @@ XUI_GO_TEMPLATE_6_LINES = [
     "		HostKeyCallback: ssh.InsecureIgnoreHostKey(),",
     "		Timeout:         {timeout} * time.Second,",
     "	}",
-    "	ctx, cancel := context.WithTimeout(context.Background(), {timeout}*time.Second)",
-    "	defer cancel()",
-    "	var d net.Dialer",
-    "	conn, err := d.DialContext(ctx, \"tcp\", addr)",
-    "	if err != nil {",
-    "		return nil, false, err",
-    "	}",
-    "	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)",
-    "	if err != nil {",
-    "		return nil, false, err",
-    "	}",
-    "	client := ssh.NewClient(c, chans, reqs)",
-    "	return client, true, nil",
+    "	client, err := ssh.Dial(\"tcp\", addr, config)",
+    "    return client, err == nil, err",
     "}",
     "func isLikelyHoneypot(client *ssh.Client) bool {",
     "	session, err := client.NewSession()",
@@ -1479,26 +1467,26 @@ def process_chunk(chunk_id, lines, executable_name, go_internal_concurrency):
 
         cmd = ['./' + executable_name, input_file, output_file]
         
-        # Python 3.6 兼容性修复：移除 text=True，手动解码
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=run_env)
+        # 死锁修复：将 stderr 合并到 stdout
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=run_env)
 
-        # 实时读取标准输出（字节流）并解码
+        # 实时读取合并后的输出流（字节流）并解码
         for line_bytes in iter(process.stdout.readline, b''):
             line = line_bytes.decode('utf-8', 'ignore')
             # SSH模式的特殊日志，直接打印
             if "Scanning SSH:" in line:
                 # 使用 \r 和 end='' 来实现单行刷新，避免刷屏
-                print(line.strip(), end='\r')
+                print(line.strip().ljust(80), end='\r')
         
-        # 等待进程结束并获取返回码和标准错误
+        # 等待进程结束并获取返回码
         process.wait()
-        stderr_bytes = process.stderr.read()
-        stderr_output = stderr_bytes.decode('utf-8', 'ignore')
-
+        
         if process.returncode != 0:
             if process.returncode == -9 or process.returncode == 137:
                  return (False, "任务 {} 被系统因内存不足而终止(OOM Killed)。".format(chunk_id))
             else:
+                 # 读取残余的错误信息（如果有）
+                 stderr_output = process.stdout.read().decode('utf-8', 'ignore')
                  return (False, "任务 {} 失败，返回码 {}。\n错误信息:\n{}".format(chunk_id, process.returncode, stderr_output))
         
         return (True, None) # 成功
