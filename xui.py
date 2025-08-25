@@ -1758,6 +1758,10 @@ def check_environment(template_mode):
         pip_cmd = [sys.executable, "-m", "pip", "install"]
         if in_china:
             pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
+        
+        # 修复：为 pip 命令添加 --break-system-packages
+        pip_cmd.append("--break-system-packages")
+        
         pip_cmd.extend(["requests", "psutil", "openpyxl", "pyyaml", "tqdm", "colorama"])
         run_cmd(pip_cmd, quiet=True)
         print(" 完成")
