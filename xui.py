@@ -2596,7 +2596,7 @@ if __name__ == "__main__":
                                     if response.status_code == 200:
                                             print("✅ 文件 {} 已发送到 Telegram".format(file_path))
                                     else:
-                                            print("❌ TG上传失败，状态码：{}，返回：{}\".format(response.status_code, response.text))
+                                            print("❌ TG上传失败，状态码：{}，返回：{}".format(response.status_code, response.text))
                             except Exception as e:
                                     print("❌ 发送到 TG 失败：{}".format(e))
 
