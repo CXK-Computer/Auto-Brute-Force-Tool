@@ -1823,7 +1823,9 @@ def check_environment(template_mode):
 
     ping_package = "iputils-ping" if pkg_manager == "apt-get" else "iputils"
     iproute_package = "iproute2" if pkg_manager == "apt-get" else "iproute"
-    ensure_packages(pkg_manager, ["curl", ping_package, iproute_package])
+    
+    # 增加 nmap
+    ensure_packages(pkg_manager, ["curl", ping_package, iproute_package, "nmap"])
     
     in_china = is_in_china()
     
@@ -2183,7 +2185,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         initial_set = {line.strip() for line in f}
     return master_results - initial_set
 
-# ==================== 新增：Masscan 预扫描功能 ====================
+# ==================== 新增：Masscan/Nmap 预扫描功能 ====================
 def parse_ip_port_from_line(line):
     """
     一个更健壮的解析器，用于从各种格式中仅获取ip和端口。
@@ -2201,19 +2203,72 @@ def parse_ip_port_from_line(line):
         
     return None, None
 
+def run_nmap_prescan(all_unique_ips, ports_str, ip_port_to_original_line):
+    print("\n--- 正在使用 Nmap 作为备用方案进行活性探测... ---")
+    print("  - Nmap 速度较慢，请耐心等待。")
+    
+    nmap_input_file = "nmap_prescan_input.tmp"
+    nmap_output_file = "nmap_prescan_output.xml"
+    
+    with open(nmap_input_file, 'w') as f:
+        for ip in all_unique_ips:
+            f.write(f"{ip}\n")
+    
+    try:
+        if os.path.exists(nmap_output_file):
+            os.remove(nmap_output_file)
+            
+        nmap_cmd = [
+            "nmap", "-iL", nmap_input_file,
+            "-p", ports_str,
+            "-oX", nmap_output_file,
+            "-T4", "--open", "-n", "-Pn"
+        ]
+        
+        subprocess.run(nmap_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"\n  - ❌ Nmap 扫描失败: {e}")
+        return None # 返回 None 表示失败
+    except Exception as e:
+        print(f"\n  - ❌ Nmap 扫描时发生未知错误: {e}")
+        return None
+
+    # 解析 Nmap XML 输出
+    live_targets = set()
+    if os.path.exists(nmap_output_file):
+        with open(nmap_output_file, 'r') as f:
+            content = f.read()
+            hosts = re.findall(r'<host>.*?<address addr="(.*?)" addrtype="ipv4"/>.*?<port protocol="tcp" portid="(.*?)">.*?<state state="open"', content, re.DOTALL)
+            for ip, port in hosts:
+                live_targets.add(f"{ip}:{port}")
+
+    filtered_lines = []
+    for live_target in live_targets:
+        if live_target in ip_port_to_original_line:
+            filtered_lines.append(ip_port_to_original_line[live_target])
+            
+    try:
+        if os.path.exists(nmap_input_file): os.remove(nmap_input_file)
+        if os.path.exists(nmap_output_file): os.remove(nmap_output_file)
+    except OSError:
+        pass
+        
+    return filtered_lines
+
+
 def run_masscan_prescan(source_lines, masscan_rate):
     """
     使用 Masscan 预扫描目标，并仅返回端口开放的原始行。
     """
     print("\n--- 正在执行 Masscan 预扫描以筛选活性IP... ---")
 
-    # 0. 预检查 masscan 是否存在
     if not shutil.which("masscan"):
         print("  - ❌ 命令 'masscan' 未找到或不可执行。请确保已正确安装 Masscan。")
         print("  - 跳过预扫描，将继续对所有原始目标进行扫描。")
         return source_lines
     
-    # 1. 解析所有源行以提取IP和端口
+    # 1. 解析
     targets_by_port = {}
     all_unique_ips = set()
     ip_port_to_original_line = {}
@@ -2225,35 +2280,41 @@ def run_masscan_prescan(source_lines, masscan_rate):
                 targets_by_port[port] = set()
             targets_by_port[port].add(ip)
             all_unique_ips.add(ip)
-            # 存储 ip:port 到原始行的映射
             if f"{ip}:{port}" not in ip_port_to_original_line:
                  ip_port_to_original_line[f"{ip}:{port}"] = line.strip()
 
     if not all_unique_ips:
         print("  - ⚠️ 未在源文件中找到任何可供预扫描的 'IP:端口' 格式的目标。")
-        print("  - 跳过预扫描，将继续对所有原始目标进行扫描。")
+        print("  - 跳过预扫描。")
         return source_lines
 
-    # 2. 准备 Masscan
+    # 2. 准备
     masscan_output_file = "masscan_prescan_output.tmp"
     ports_str = ",".join(targets_by_port.keys())
-    interface = get_default_interface()
     
-    if not interface:
-        print("  - ❌ 无法自动检测到有效的网络接口。")
-        print("  - 请确保您的系统已正确配置网络，并且 'ip route' 命令可用。")
-        print("  - 跳过 Masscan 预扫描。")
-        return source_lines
+    detected_interface = get_default_interface()
+    if not detected_interface:
+        print("  - ⚠️ 无法自动检测到有效的网络接口。")
+        interface = input("  - 请手动输入您的网络接口名称 (例如 eth0, ens18): ").strip()
+        if not interface:
+            print("  - 未提供接口名称，跳过预扫描。")
+            return source_lines
+    else:
+        user_choice = input(f"  - 自动检测到网络接口: {detected_interface}。是否使用此接口？(Y/n/手动输入): ").strip().lower()
+        if user_choice == 'n':
+            print("  - 跳过预扫描。")
+            return source_lines
+        elif user_choice == '' or user_choice == 'y':
+            interface = detected_interface
+        else:
+            interface = user_choice
     
-    print(f"  - 发现 {len(all_unique_ips)} 个独立IP，将在 {len(targets_by_port)} 个不同端口 ({ports_str[:100]}...) 上进行扫描。")
-    print(f"  - 自动检测到网络接口: {interface}, 速率: {masscan_rate} pps")
+    print(f"  - 将使用接口: {interface}, 速率: {masscan_rate} pps")
 
-    # 3. 运行 Masscan，通过管道传递输入
+    # 3. 运行
     try:
-        if os.path.exists(masscan_output_file):
-            os.remove(masscan_output_file)
+        if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
         
-        # 使用 -iL - 从标准输入读取IP列表
         masscan_cmd = [
             "masscan", "-iL", "-",
             "-p", ports_str,
@@ -2264,17 +2325,14 @@ def run_masscan_prescan(source_lines, masscan_rate):
         ]
         
         ip_input_str = "\n".join(all_unique_ips)
-        
         process = subprocess.Popen(masscan_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
         
-        # 将IP列表写入 masscan 的标准输入
         process.stdin.write(ip_input_str)
-        process.stdin.close() # 关闭输入流，masscan才会开始处理
+        process.stdin.close()
         
         stderr_output = ""
         pbar = tqdm(total=100, desc="Masscan 扫描中", unit="%", ncols=100)
         
-        # 从标准错误读取进度
         for line in process.stderr:
             stderr_output += line
             match = re.search(r"(\d+\.\d+)%.*ETA", line)
@@ -2291,24 +2349,30 @@ def run_masscan_prescan(source_lines, masscan_rate):
         if process.returncode != 0:
              raise subprocess.CalledProcessError(process.returncode, masscan_cmd, stderr=stderr_output)
 
-    except subprocess.CalledProcessError as e:
-        print(f"\n  - ❌ Masscan 预扫描失败 (返回码: {e.returncode})。")
-        print("  - Masscan 错误信息如下:")
-        print("-----------------------------------------")
-        stderr_msg = e.stderr or "没有捕获到具体的错误信息。"
-        print(stderr_msg)
-        print("-----------------------------------------")
-        if "FAIL: error reading from include file" in stderr_msg:
-             print("  - [!] 提示：这个错误在管道模式下不应出现，但如果出现，请检查您的系统环境。")
-        else:
-            print("  - 常见原因包括网络接口名称错误、权限问题或云服务商限制。")
-        print("  - 将继续对所有原始目标进行扫描。")
-        return source_lines
     except Exception as e:
-        print(f"\n  - ❌ Masscan 预扫描时发生未知错误: {e}")
-        return source_lines
+        print(f"\n  - ❌ Masscan 预扫描失败。")
+        if isinstance(e, subprocess.CalledProcessError):
+            print("  - Masscan 错误信息:")
+            print("-----------------------------------------")
+            print(e.stderr or "没有捕获到具体的错误信息。")
+            print("-----------------------------------------")
+        else:
+            print(f"  - Python 错误: {e}")
 
-    # 4. 解析 Masscan 结果并筛选原始行
+        use_nmap = input("  - 是否尝试使用 Nmap 作为备用方案进行扫描？(y/N): ").strip().lower()
+        if use_nmap == 'y':
+            nmap_results = run_nmap_prescan(all_unique_ips, ports_str, ip_port_to_original_line)
+            if nmap_results is not None:
+                print(f"--- Nmap 扫描完成。筛选出 {len(nmap_results)} 个活性目标。---")
+                return nmap_results
+            else:
+                print("  - Nmap 扫描也失败了，将继续对所有原始目标进行扫描。")
+                return source_lines
+        else:
+            print("  - 将继续对所有原始目标进行扫描。")
+            return source_lines
+
+    # 4. 解析
     live_targets = set()
     if os.path.exists(masscan_output_file):
         with open(masscan_output_file, 'r') as f:
@@ -2324,7 +2388,7 @@ def run_masscan_prescan(source_lines, masscan_rate):
         if live_target in ip_port_to_original_line:
             filtered_lines.append(ip_port_to_original_line[live_target])
 
-    # 5. 清理并报告
+    # 5. 清理和报告
     try:
         if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
     except OSError:
