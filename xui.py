@@ -2238,29 +2238,18 @@ def run_nmap_prescan(all_unique_ips, ports_str, ip_port_to_original_line):
             "nmap", "-iL", nmap_input_file,
             "-p", ports_str,
             "-oX", nmap_output_file,
-            "-T4", "--open", "-n", "-Pn"
+            "-T4", "--open", "-n", "-Pn",
+            "--max-retries", "2", "--host-timeout", "90s"
         ]
         
-        # 使用 tqdm 监控 nmap 进度
-        process = subprocess.Popen(nmap_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='ignore')
-        
-        pbar = tqdm(total=100, desc="Nmap 扫描中", unit="%", ncols=100)
-        for line in process.stdout:
-            match = re.search(r"(\d+\.\d+)% done", line)
-            if match:
-                progress = float(match.group(1))
-                pbar.n = progress
-                pbar.refresh()
-        pbar.n = 100
-        pbar.refresh()
-        pbar.close()
-        process.wait()
-
-        if process.returncode != 0:
-             raise subprocess.CalledProcessError(process.returncode, nmap_cmd)
+        # 移除tqdm，因为它对nmap的进度解析不可靠
+        print("  - Nmap 正在后台运行，此过程可能需要几分钟到几十分钟，具体取决于目标数量...")
+        process = subprocess.run(nmap_cmd, check=True, capture_output=True, text=True)
 
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"\n  - ❌ Nmap 扫描失败: {e}")
+        if hasattr(e, 'stderr'):
+            print(e.stderr)
         return None # 返回 None 表示失败
     except Exception as e:
         print(f"\n  - ❌ Nmap 扫描时发生未知错误: {e}")
