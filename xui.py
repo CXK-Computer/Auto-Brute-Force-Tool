@@ -2403,15 +2403,16 @@ def run_masscan_prescan(source_lines, masscan_rate):
             print("  - 将继续对所有原始目标进行扫描。")
             return source_lines
 
-    # 4. 解析
+    # 4. 解析 (修正版)
     live_ip_lines = []
     if os.path.exists(masscan_output_file):
         with open(masscan_output_file, 'r') as f:
             for line in f:
-                if line.startswith("Host:"):
-                    parts = line.split()
-                    ip_addr = parts[1]
-                    port_str = parts[3].split('/')[0]
+                # 使用正则表达式进行更可靠的解析
+                match = re.search(r"Host: ([\d\.]+) .*?Ports: (\d+)/open", line)
+                if match:
+                    ip_addr = match.group(1)
+                    port_str = match.group(2)
                     live_target_key = f"{ip_addr}:{port_str}"
                     if live_target_key in ip_port_to_original_line:
                         live_ip_lines.append(ip_port_to_original_line[live_target_key])
