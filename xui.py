@@ -1844,7 +1844,7 @@ def check_environment(template_mode):
         sys.stdout.flush()
         try:
             # 检查 pip 是否支持 --break-system-packages
-            pip_help_output = subprocess.check_output([sys.executable, "-m", "pip", "install", "--help"], text=True)
+            pip_help_output = subprocess.check_output([sys.executable, "-m", "pip", "install", "--help"], text=True, stderr=subprocess.DEVNULL)
             use_break_system_packages = "--break-system-packages" in pip_help_output
 
             pip_cmd = [sys.executable, "-m", "pip", "install"]
@@ -2311,6 +2311,7 @@ def run_masscan_prescan(source_lines, masscan_rate):
 
     # 2. 准备
     masscan_output_file = "masscan_prescan_output.tmp"
+    masscan_input_file = "masscan_prescan_input.tmp" # Reverted to using file
     ports_str = ",".join(targets_by_port.keys())
     
     detected_interface = get_default_interface()
@@ -2336,8 +2337,12 @@ def run_masscan_prescan(source_lines, masscan_rate):
     try:
         if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
         
+        with open(masscan_input_file, 'w') as f:
+            for ip in all_unique_ips:
+                f.write(f"{ip}\n")
+
         masscan_cmd = [
-            "masscan", "-iL", "-",
+            "masscan", "-iL", masscan_input_file,
             "-p", ports_str,
             "--rate", str(masscan_rate),
             "-oG", masscan_output_file,
@@ -2345,11 +2350,7 @@ def run_masscan_prescan(source_lines, masscan_rate):
             "--wait", "0"
         ]
         
-        ip_input_str = "\n".join(all_unique_ips)
-        process = subprocess.Popen(masscan_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
-        
-        process.stdin.write(ip_input_str)
-        process.stdin.close()
+        process = subprocess.Popen(masscan_cmd, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
         
         stderr_output = ""
         pbar = tqdm(total=100, desc="Masscan 扫描中", unit="%", ncols=100)
@@ -2411,6 +2412,7 @@ def run_masscan_prescan(source_lines, masscan_rate):
 
     # 5. 清理和报告
     try:
+        if os.path.exists(masscan_input_file): os.remove(masscan_input_file)
         if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
     except OSError:
         pass
