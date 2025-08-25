@@ -905,6 +905,86 @@ ALIST_GO_TEMPLATE_LINES = [
     "}",
 ]
 
+# ==================== 新增：TCP端口活性测试模板 ====================
+TCP_TEST_GO_TEMPLATE_LINES = [
+    "package main",
+    "import (",
+    "	\"bufio\"",
+    "	\"fmt\"",
+    "	\"net\"",
+    "	\"os\"",
+    "	\"strings\"",
+    "	\"sync\"",
+    "	\"time\"",
+    ")",
+    # The worker function reads tasks (IP:port strings) from a channel.
+    "func worker(tasks <-chan string, file *os.File, wg *sync.WaitGroup) {",
+    "	defer wg.Done()",
+    "	for line := range tasks {",
+    "		processIP(line, file)",
+    "	}",
+    "}",
+    # The processIP function performs the actual TCP check.
+    "func processIP(line string, file *os.File) {",
+    "	ipPort := strings.TrimSpace(line)",
+    # Basic validation to ensure the line is in a host:port format.
+    "	if _, _, err := net.SplitHostPort(ipPort); err != nil {",
+    "		return",
+    "	}",
+    "	successCount := 0",
+    # Loop 3 times as requested by the user.
+    "	for i := 0; i < 3; i++ {",
+    "		conn, err := net.DialTimeout(\"tcp\", ipPort, {timeout}*time.Second)",
+    # If any connection attempt fails, we immediately stop and return.
+    "		if err != nil {",
+    "			return",
+    "		}",
+    "		conn.Close()",
+    "		successCount++",
+    # A short delay between checks can prevent overwhelming a sensitive target.
+    "       time.Sleep(100 * time.Millisecond)",
+    "	}",
+    # Only if all 3 attempts were successful, write the result to the output file.
+    "	if successCount == 3 {",
+    "		file.WriteString(ipPort + \"\\n\")",
+    "	}",
+    "}",
+    # The main function sets up the concurrent workers and file handling.
+    "func main() {",
+    "	if len(os.Args) < 3 {",
+    "		fmt.Println(\"Usage: ./program <inputFile> <outputFile>\")",
+    "		os.Exit(1)",
+    "	}",
+    "	inputFile, outputFile := os.Args[1], os.Args[2]",
+    "	batch, err := os.Open(inputFile)",
+    "	if err != nil {",
+    "		fmt.Printf(\"无法读取输入文件: %v\\n\", err)",
+    "		return",
+    "	}",
+    "	defer batch.Close()",
+    "	outFile, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)",
+    "	if err != nil {",
+    "		fmt.Println(\"无法打开输出文件:\", err)",
+    "		return",
+    "	}",
+    "	defer outFile.Close()",
+    "	tasks := make(chan string, {semaphore_size})",
+    "	var wg sync.WaitGroup",
+    "	for i := 0; i < {semaphore_size}; i++ {",
+    "		wg.Add(1)",
+    "		go worker(tasks, outFile, &wg)",
+    "	}",
+    "	scanner := bufio.NewScanner(batch)",
+    "	for scanner.Scan() {",
+    "		line := strings.TrimSpace(scanner.Text())",
+    "		if line != \"\" { tasks <- line }",
+    "	}",
+    "	close(tasks)",
+    "	wg.Wait()",
+    "}",
+]
+
+
 # =========================== ipcx.py 内容 (增加tqdm风格进度条和批量查询) ===========================
 IPCX_PY_CONTENT = r"""import requests
 import time
@@ -1593,8 +1673,9 @@ def choose_template_mode():
     print("8. HTTPS 代理")
     print("--- 其他面板 ---")
     print("9. Alist 面板")
+    print("10. TCP 端口活性检测")
     while True:
-        choice = input("输入 1-9 之间的数字（默认1）：").strip()
+        choice = input("输入 1-10 之间的数字（默认1）：").strip()
         if choice in ("", "1"): return 1
         elif choice == "2": return 2
         elif choice == "3": return 6
@@ -1604,6 +1685,7 @@ def choose_template_mode():
         elif choice == "7": return 10  # HTTP
         elif choice == "8": return 11  # HTTPS
         elif choice == "9": return 12  # Alist
+        elif choice == "10": return 13 # TCP Test
         else:
             print("输入无效，请重新输入。")
 
@@ -1861,7 +1943,7 @@ def load_credentials(template_mode, auth_mode=0):
         usernames, passwords = ["2cXaAxRGfddmGz2yx1wA"], ["2cXaAxRGfddmGz2yx1wA"]
         return usernames, passwords, credentials
     
-    if template_mode == 12: # Alist 模式不需要凭据
+    if template_mode in [12, 13]: # Alist 和 TCP Test 模式不需要凭据
         return [], [], []
 
     if auth_mode == 1: # 无凭据
@@ -2115,7 +2197,7 @@ if __name__ == "__main__":
     
     # 将prefix的定义提前
     TEMPLATE_MODE = choose_template_mode()
-    mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist"}
+    mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist", 13: "TCP-Active"}
     prefix = mode_map.get(TEMPLATE_MODE, "result")
 
     try:
@@ -2229,6 +2311,7 @@ if __name__ == "__main__":
             8: XUI_GO_TEMPLATE_8_LINES, 9: PROXY_GO_TEMPLATE_LINES,
             10: PROXY_GO_TEMPLATE_LINES, 11: PROXY_GO_TEMPLATE_LINES,
             12: ALIST_GO_TEMPLATE_LINES,
+            13: TCP_TEST_GO_TEMPLATE_LINES,
         }
 
         template_lines = template_map[TEMPLATE_MODE]
