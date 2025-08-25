@@ -2063,6 +2063,7 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         return set()
 
     masscan_output_file = "masscan_results.tmp"
+    masscan_input_file = "masscan_input.tmp" # Initialize here
     interface = get_default_interface()
     if not interface:
         print("⚠️ 无法自动检测网络接口，扩展扫描功能可能无法正常工作。")
@@ -2099,7 +2100,6 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         print(f"  - 第 {i + 1} 轮发现 {len(expandable_targets)} 个可扩展的IP集群。")
         
         # --- Masscan 批量扫描 ---
-        masscan_input_file = "masscan_input.tmp"
         with open(masscan_input_file, 'w') as f:
             for subnet, port, _, _ in expandable_targets:
                 f.write(f"{subnet} -p {port}\n")
@@ -2468,26 +2468,26 @@ if __name__ == "__main__":
             total_ips = len(all_lines)
         print("--- 总计 {} 个目标 ---".format(total_ips))
         
-        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
+        # ==================== 优化：动态并发建议 ====================
+        total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
+        if total_memory_mb < 1500: # 如果内存小于 1.5GB
+            print("⚠️ 检测到系统内存较低 ({:.2f} MiB)，建议使用保守的并发数和扫描速率。".format(total_memory_mb))
+            recommended_py_concurrency = 5
+            recommended_go_concurrency = 20
+            recommended_masscan_rate = 10000
+        else:
+            recommended_py_concurrency = 10
+            recommended_go_concurrency = 100
+            recommended_masscan_rate = 50000
 
-        # 如果启用预扫描，则执行
         if use_masscan_prescan:
+            print("ℹ️  提示：如果 Masscan 扫描结果为0，请尝试大幅降低扫描速率。")
+            masscan_rate = input_with_default(f"请输入Masscan扫描速率(pps, 推荐 {recommended_masscan_rate})", recommended_masscan_rate)
             all_lines = run_masscan_prescan(all_lines, masscan_rate)
             total_ips = len(all_lines)
             if not all_lines:
                 print("预扫描后没有发现活性目标，脚本结束。")
                 sys.exit(0)
-        
-        # ==================== 优化：动态并发建议 ====================
-        total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
-        if total_memory_mb < 1500: # 如果内存小于 1.5GB
-            print("⚠️ 检测到系统内存较低 ({:.2f} MiB)，建议使用保守的并发数。".format(total_memory_mb))
-            recommended_py_concurrency = 5
-            recommended_go_concurrency = 20
-        else:
-            recommended_py_concurrency = 10
-            recommended_go_concurrency = 100
-        # ==========================================================
         
         print("\n--- 并发模型说明 ---")
         print("脚本将启动多个并行的扫描进程（由Python控制），每个进程内部再使用多个线程（由Go控制）进行扫描。")
@@ -2587,19 +2587,20 @@ if __name__ == "__main__":
         
         initial_results_file = "xui.txt"
         if os.path.exists(initial_results_file) and os.path.getsize(initial_results_file) > 0:
-            # 性能优化：将编译好的可执行文件名传入
-            newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate, executable)
-            if newly_found_results:
-                print("--- 扩展扫描完成，共新增 {} 个结果。正在合并... ---".format(len(newly_found_results)))
-                with open(initial_results_file, 'a', encoding='utf-8') as f:
-                    for result in sorted(list(newly_found_results)):
-                        f.write(result + '\n')
-                
-                with open(initial_results_file, 'r', encoding='utf-8') as f:
-                    unique_lines = sorted(list(set(f.readlines())))
-                with open(initial_results_file, 'w', encoding='utf-8') as f:
-                    f.writelines(unique_lines)
-                print("--- 结果合并去重完成。 ---")
+            if use_masscan_prescan: # 只有预扫描模式才需要扩展
+                # 性能优化：将编译好的可执行文件名传入
+                newly_found_results = analyze_and_expand_scan(initial_results_file, TEMPLATE_MODE, params, template_map, masscan_rate, executable)
+                if newly_found_results:
+                    print("--- 扩展扫描完成，共新增 {} 个结果。正在合并... ---".format(len(newly_found_results)))
+                    with open(initial_results_file, 'a', encoding='utf-8') as f:
+                        for result in sorted(list(newly_found_results)):
+                            f.write(result + '\n')
+                    
+                    with open(initial_results_file, 'r', encoding='utf-8') as f:
+                        unique_lines = sorted(list(set(f.readlines())))
+                    with open(initial_results_file, 'w', encoding='utf-8') as f:
+                        f.writelines(unique_lines)
+                    print("--- 结果合并去重完成。 ---")
         
         final_txt_file = "{}-{}.txt".format(prefix, time_str)
         final_xlsx_file = "{}-{}.xlsx".format(prefix, time_str)
