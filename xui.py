@@ -1843,18 +1843,26 @@ def check_environment(template_mode):
         sys.stdout.write("    - 正在尝试使用 pip 自动安装...")
         sys.stdout.flush()
         try:
+            # 检查 pip 是否支持 --break-system-packages
+            pip_help_output = subprocess.check_output([sys.executable, "-m", "pip", "install", "--help"], text=True)
+            use_break_system_packages = "--break-system-packages" in pip_help_output
+
             pip_cmd = [sys.executable, "-m", "pip", "install"]
             if in_china:
                 pip_cmd.extend(["-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
             
-            pip_cmd.append("--break-system-packages")
+            if use_break_system_packages:
+                pip_cmd.append("--break-system-packages")
+
             pip_cmd.extend(missing_modules)
             run_cmd(pip_cmd, quiet=True)
             print(" 完成")
         except Exception as e:
             print(" 失败: {}".format(e))
             print("❌ 自动安装失败。请手动运行以下命令解决依赖问题后重试:")
-            manual_cmd = "{} -m pip install {} --break-system-packages".format(sys.executable, " ".join(missing_modules))
+            manual_cmd = "{} -m pip install {}".format(sys.executable, " ".join(missing_modules))
+            if use_break_system_packages:
+                 manual_cmd += " --break-system-packages"
             if in_china:
                 manual_cmd += " -i https://pypi.tuna.tsinghua.edu.cn/simple"
             print(manual_cmd)
@@ -1971,11 +1979,12 @@ def load_credentials(template_mode, auth_mode=0):
         if template_mode == 2:
             print("ℹ️  检测到哪吒面板模式，将自动过滤长度小于8的密码...")
             original_pass_count = len(passwords)
-            passwords = [p for p in passwords if len(p) >= 8]
+            # 修正：保留长度大于等于8的密码，或者密码就是'admin'
+            passwords = [p for p in passwords if len(p) >= 8 or p == 'admin']
             print(f"  - 过滤完成，保留了 {len(passwords)}/{original_pass_count} 个密码。")
             if not passwords:
-                print("❌ 错误: 过滤后，密码字典中没有剩余长度大于或等于8的密码。")
-                print("   哪吒面板要求密码至少为8个字符，无法继续扫描。")
+                print("❌ 错误: 过滤后，密码字典中没有剩余的有效密码。")
+                print("   哪吒面板要求密码至少为8个字符（默认密码'admin'除外），无法继续扫描。")
                 sys.exit(1)
 
         if not usernames or not passwords:
