@@ -2206,6 +2206,12 @@ def run_masscan_prescan(source_lines, masscan_rate):
     使用 Masscan 预扫描目标，并仅返回端口开放的原始行。
     """
     print("\n--- 正在执行 Masscan 预扫描以筛选活性IP... ---")
+
+    # 0. 预检查 masscan 是否存在
+    if not shutil.which("masscan"):
+        print("  - ❌ 命令 'masscan' 未找到或不可执行。请确保已正确安装 Masscan。")
+        print("  - 跳过预扫描，将继续对所有原始目标进行扫描。")
+        return source_lines
     
     # 1. 解析所有源行以提取IP和端口
     targets_by_port = {}
@@ -2224,17 +2230,12 @@ def run_masscan_prescan(source_lines, masscan_rate):
                  ip_port_to_original_line[f"{ip}:{port}"] = line.strip()
 
     if not all_unique_ips:
-        print("  - 未在源文件中找到有效的 IP:端口 目标，跳过预扫描。")
+        print("  - ⚠️ 未在源文件中找到任何可供预扫描的 'IP:端口' 格式的目标。")
+        print("  - 跳过预扫描，将继续对所有原始目标进行扫描。")
         return source_lines
 
     # 2. 准备 Masscan
-    masscan_input_file = "masscan_prescan_input.tmp"
     masscan_output_file = "masscan_prescan_output.tmp"
-    
-    with open(masscan_input_file, 'w') as f:
-        for ip in all_unique_ips:
-            f.write(f"{ip}\n")
-            
     ports_str = ",".join(targets_by_port.keys())
     interface = get_default_interface()
     
@@ -2247,13 +2248,14 @@ def run_masscan_prescan(source_lines, masscan_rate):
     print(f"  - 发现 {len(all_unique_ips)} 个独立IP，将在 {len(targets_by_port)} 个不同端口 ({ports_str[:100]}...) 上进行扫描。")
     print(f"  - 自动检测到网络接口: {interface}, 速率: {masscan_rate} pps")
 
-    # 3. 运行 Masscan
+    # 3. 运行 Masscan，通过管道传递输入
     try:
         if os.path.exists(masscan_output_file):
             os.remove(masscan_output_file)
-            
+        
+        # 使用 -iL - 从标准输入读取IP列表
         masscan_cmd = [
-            "masscan", "-iL", masscan_input_file,
+            "masscan", "-iL", "-",
             "-p", ports_str,
             "--rate", str(masscan_rate),
             "-oG", masscan_output_file,
@@ -2261,43 +2263,45 @@ def run_masscan_prescan(source_lines, masscan_rate):
             "--wait", "0"
         ]
         
-        process = subprocess.Popen(masscan_cmd, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+        ip_input_str = "\n".join(all_unique_ips)
         
-        # 实时捕获错误输出
+        process = subprocess.Popen(masscan_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+        
+        # 将IP列表写入 masscan 的标准输入
+        process.stdin.write(ip_input_str)
+        process.stdin.close() # 关闭输入流，masscan才会开始处理
+        
         stderr_output = ""
-        
         pbar = tqdm(total=100, desc="Masscan 扫描中", unit="%", ncols=100)
-        while True:
-            line = process.stderr.readline()
-            if not line:
-                break
-            stderr_output += line # 收集所有错误输出
+        
+        # 从标准错误读取进度
+        for line in process.stderr:
+            stderr_output += line
             match = re.search(r"(\d+\.\d+)%.*ETA", line)
             if match:
                 progress = float(match.group(1))
                 pbar.n = progress
                 pbar.refresh()
-        pbar.n = 100 # 确保进度条达到100%
+        
+        pbar.n = 100
         pbar.refresh()
         pbar.close()
         process.wait()
 
         if process.returncode != 0:
-             # 将收集到的错误信息一起抛出
              raise subprocess.CalledProcessError(process.returncode, masscan_cmd, stderr=stderr_output)
 
     except subprocess.CalledProcessError as e:
         print(f"\n  - ❌ Masscan 预扫描失败 (返回码: {e.returncode})。")
-        # 打印详细错误
         print("  - Masscan 错误信息如下:")
         print("-----------------------------------------")
-        print(e.stderr or "没有捕获到具体的错误信息。")
+        stderr_msg = e.stderr or "没有捕获到具体的错误信息。"
+        print(stderr_msg)
         print("-----------------------------------------")
-        print("  - 常见原因包括网络接口名称错误、权限问题或云服务商限制。")
-        print("  - 将继续对所有原始目标进行扫描。")
-        return source_lines
-    except FileNotFoundError:
-        print("\n  - ❌ 命令 'masscan' 未找到。请确保已正确安装 Masscan。")
+        if "FAIL: error reading from include file" in stderr_msg:
+             print("  - [!] 提示：这个错误在管道模式下不应出现，但如果出现，请检查您的系统环境。")
+        else:
+            print("  - 常见原因包括网络接口名称错误、权限问题或云服务商限制。")
         print("  - 将继续对所有原始目标进行扫描。")
         return source_lines
     except Exception as e:
@@ -2322,7 +2326,6 @@ def run_masscan_prescan(source_lines, masscan_rate):
 
     # 5. 清理并报告
     try:
-        if os.path.exists(masscan_input_file): os.remove(masscan_input_file)
         if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
     except OSError:
         pass
@@ -2593,7 +2596,7 @@ if __name__ == "__main__":
                                     if response.status_code == 200:
                                             print("✅ 文件 {} 已发送到 Telegram".format(file_path))
                                     else:
-                                            print("❌ TG上传失败，状态码：{}，返回：{}".format(response.status_code, response.text))
+                                            print("❌ TG上传失败，状态码：{}，返回：{}\".format(response.status_code, response.text))
                             except Exception as e:
                                     print("❌ 发送到 TG 失败：{}".format(e))
 
