@@ -1673,7 +1673,7 @@ def choose_template_mode():
     print("8. HTTPS 代理")
     print("--- 其他面板 ---")
     print("9. Alist 面板")
-    print("10. TCP 端口活性检测")
+    print("10. TCP 端口活性检测 (3次握手)")
     while True:
         choice = input("输入 1-10 之间的数字（默认1）：").strip()
         if choice in ("", "1"): return 1
@@ -2179,6 +2179,132 @@ def analyze_and_expand_scan(result_file, template_mode, params, template_map, ma
         initial_set = {line.strip() for line in f}
     return master_results - initial_set
 
+# ==================== 新增：Masscan 预扫描功能 ====================
+def parse_ip_port_from_line(line):
+    """
+    一个更健壮的解析器，用于从各种格式中仅获取ip和端口。
+    """
+    line = line.strip()
+    # 格式: http(s)://user:pass@ip:port/path... 或 http(s)://ip:port
+    match = re.search(r'//(?:[^@/]+@)?([\d\w\.-]+):(\d+)', line)
+    if match:
+        return match.group(1), match.group(2)
+    
+    # 格式: ip:port user pass 或 ip:port
+    match = re.search(r'^([\d\w\.-]+):(\d+)', line)
+    if match:
+        return match.group(1), match.group(2)
+        
+    return None, None
+
+def run_masscan_prescan(source_lines, masscan_rate):
+    """
+    使用 Masscan 预扫描目标，并仅返回端口开放的原始行。
+    """
+    print("\n--- 正在执行 Masscan 预扫描以筛选活性IP... ---")
+    
+    # 1. 解析所有源行以提取IP和端口
+    targets_by_port = {}
+    all_unique_ips = set()
+    ip_port_to_original_line = {}
+
+    for line in source_lines:
+        ip, port = parse_ip_port_from_line(line.strip())
+        if ip and port:
+            if port not in targets_by_port:
+                targets_by_port[port] = set()
+            targets_by_port[port].add(ip)
+            all_unique_ips.add(ip)
+            # 存储 ip:port 到原始行的映射
+            if f"{ip}:{port}" not in ip_port_to_original_line:
+                 ip_port_to_original_line[f"{ip}:{port}"] = line.strip()
+
+    if not all_unique_ips:
+        print("  - 未在源文件中找到有效的 IP:端口 目标，跳过预扫描。")
+        return source_lines
+
+    # 2. 准备 Masscan
+    masscan_input_file = "masscan_prescan_input.tmp"
+    masscan_output_file = "masscan_prescan_output.tmp"
+    
+    with open(masscan_input_file, 'w') as f:
+        for ip in all_unique_ips:
+            f.write(f"{ip}\n")
+            
+    ports_str = ",".join(targets_by_port.keys())
+    interface = get_default_interface()
+    
+    print(f"  - 发现 {len(all_unique_ips)} 个独立IP，将在 {len(targets_by_port)} 个不同端口 ({ports_str[:100]}...) 上进行扫描。")
+    print(f"  - 使用接口: {interface}, 速率: {masscan_rate} pps")
+
+    # 3. 运行 Masscan
+    try:
+        if os.path.exists(masscan_output_file):
+            os.remove(masscan_output_file)
+            
+        masscan_cmd = [
+            "masscan", "-iL", masscan_input_file,
+            "-p", ports_str,
+            "--rate", str(masscan_rate),
+            "-oG", masscan_output_file,
+            "--interface", interface,
+            "--wait", "0"
+        ]
+        
+        process = subprocess.Popen(masscan_cmd, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+        
+        pbar = tqdm(total=100, desc="Masscan 扫描中", unit="%", ncols=100)
+        while True:
+            line = process.stderr.readline()
+            if not line:
+                break
+            match = re.search(r"(\d+\.\d+)%.*ETA", line)
+            if match:
+                progress = float(match.group(1))
+                pbar.n = progress
+                pbar.refresh()
+        pbar.n = 100 # 确保进度条达到100%
+        pbar.refresh()
+        pbar.close()
+        process.wait()
+
+        if process.returncode != 0:
+             raise subprocess.CalledProcessError(process.returncode, masscan_cmd)
+
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"\n  - ❌ Masscan 预扫描失败: {e}")
+        print("  - 将继续对所有原始目标进行扫描。")
+        return source_lines
+    except Exception as e:
+        print(f"\n  - ❌ Masscan 预扫描时发生未知错误: {e}")
+        return source_lines
+
+    # 4. 解析 Masscan 结果并筛选原始行
+    live_targets = set()
+    if os.path.exists(masscan_output_file):
+        with open(masscan_output_file, 'r') as f:
+            for line in f:
+                if line.startswith("Host:"):
+                    parts = line.split()
+                    ip_addr = parts[1]
+                    port_str = parts[3].split('/')[0]
+                    live_targets.add(f"{ip_addr}:{port_str}")
+
+    filtered_lines = []
+    for live_target in live_targets:
+        if live_target in ip_port_to_original_line:
+            filtered_lines.append(ip_port_to_original_line[live_target])
+
+    # 5. 清理并报告
+    try:
+        if os.path.exists(masscan_input_file): os.remove(masscan_input_file)
+        if os.path.exists(masscan_output_file): os.remove(masscan_output_file)
+    except OSError:
+        pass
+
+    print(f"--- Masscan 预扫描完成。从 {len(source_lines)} 个初始目标中筛选出 {len(filtered_lines)} 个活性目标。---")
+    
+    return filtered_lines
 
 if __name__ == "__main__":
     start = time.time()
@@ -2201,13 +2327,15 @@ if __name__ == "__main__":
     prefix = mode_map.get(TEMPLATE_MODE, "result")
 
     try:
-        # BUG修复: 注释掉交互式终端检查
-        # if not sys.stdout.isatty():
-        #     print("❌ 错误：此脚本需要在交互式终端中运行以接收用户输入。")
-        #     sys.exit(1)
-        
         # ==================== 1. 收集所有用户输入 ====================
         print("\n=== 爆破一键启动 - 参数配置 ===")
+        
+        use_masscan_prescan = False
+        if TEMPLATE_MODE != 13: # TCP活性测试模式本身就是端口扫描，无需预扫描
+            prescan_choice = input("是否启用 Masscan 预扫描以筛选活性IP？(y/N): ").strip().lower()
+            if prescan_choice == 'y':
+                use_masscan_prescan = True
+
         input_file = input_filename_with_default("请输入源文件名", "1.txt")
         if not os.path.exists(input_file):
                 print("❌ 错误: 文件 '{}' 不存在。".format(input_file))
@@ -2217,6 +2345,16 @@ if __name__ == "__main__":
             all_lines = [line.strip() for line in f if line.strip()]
             total_ips = len(all_lines)
         print("--- 总计 {} 个目标 ---".format(total_ips))
+        
+        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
+
+        # 如果启用预扫描，则执行
+        if use_masscan_prescan:
+            all_lines = run_masscan_prescan(all_lines, masscan_rate)
+            total_ips = len(all_lines)
+            if not all_lines:
+                print("预扫描后没有发现活性目标，脚本结束。")
+                sys.exit(0)
         
         # ==================== 优化：动态并发建议 ====================
         total_memory_mb = psutil.virtual_memory().total / 1024 / 1024
@@ -2239,7 +2377,6 @@ if __name__ == "__main__":
 
         params = {'semaphore_size': go_internal_concurrency} # Go程序现在使用这个参数
         params['timeout'] = input_with_default("超时时间(秒)", 3)
-        masscan_rate = input_with_default("请输入Masscan扫描速率(pps)", 50000)
         
         # ==================== 新增：代理模式的目标选择 ====================
         params['test_url'] = "http://myip.ipip.net" # Default
