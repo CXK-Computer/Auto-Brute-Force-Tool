@@ -1274,9 +1274,6 @@ def get_vps_info():
         return data.get('query', 'N/A'), data.get('country', 'N/A')
     except requests.exceptions.RequestException:
         return "N/A", "N/A"
-
-# ... (其他辅助函数如 get_nezha_server, parse_result_line, process_expandable_cluster, expand_scan_with_go, run_go_tcp_prescan 保持不变或稍作调整以适应新模型)
-
 if __name__ == "__main__":
     start = time.time()
     interrupted = False
@@ -1342,15 +1339,20 @@ if __name__ == "__main__":
             12: ALIST_GO_TEMPLATE_LINES, 13: TCP_ACTIVE_GO_TEMPLATE_LINES,
         }
         template_lines = template_map.get(TEMPLATE_MODE)
-        if not template_lines: print(f"❌ 错误: 模式 {TEMPLATE_MODE} 无效。"); sys.exit(1)
+        # --- 这是被修正的地方 ---
+        if not template_lines:
+            print(f"❌ {Fore.RED}错误: 模式 {TEMPLATE_MODE} 无效或未定义模板。{Style.RESET_ALL}")
+            sys.exit(1)
 
         generate_go_code("xui.go", template_lines, **params)
         executable = compile_go_program("xui.go", "xui_executable")
-        if not executable: sys.exit(1)
+        if not executable: 
+            sys.exit(1)
         
         final_txt_file = f"{prefix}-{time_str}.txt"
         final_xlsx_file = f"{prefix}-{time_str}.xlsx"
-        if os.path.exists(final_txt_file): os.remove(final_txt_file)
+        if os.path.exists(final_txt_file): 
+            os.remove(final_txt_file)
 
         run_scan_in_parallel(all_lines, executable, python_concurrency, go_internal_concurrency, chunk_size, go_timeout, final_txt_file)
         
@@ -1387,4 +1389,4 @@ if __name__ == "__main__":
             print(f"\n=== 🛑 脚本已被中断，中止前共运行 {run_time_str} ===")
         else:
             print(f"\n=== 🎉 全部完成！总用时 {run_time_str} ===")
-        # Telegram apload logic can be added here if needed.
+        # Telegram upload logic can be added here if needed.
