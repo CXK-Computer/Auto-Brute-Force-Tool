@@ -1094,7 +1094,6 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
             for i, future in enumerate(as_completed(futures)):
                 all_ip_info.update(future.result())
                 pbar.update(1)
-                # ip-api.com 速率限制: 45 requests/min. 100个IP一批，每批间隔1.5秒
                 if i < len(ip_chunks) - 1:
                     time.sleep(1.5)
 
@@ -1108,24 +1107,34 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
         headers.extend(['服务器总数', '终端畅通数', '畅通服务器列表'])
     worksheet.write_row('A1', headers, header_format)
 
-    row_num = 1
+    # --- 全新的、健壮的写入和列宽计算逻辑 ---
+
+    # 步骤 A: 将所有要写入的数据行聚合到一个列表中
+    all_rows_data = []
     for item in parsed_data:
         ip_info = all_ip_info.get(item['addr'], ['N/A'] * 4)
         row_data = [item['line'], item['addr'], item['user'], item['passwd']] + ip_info
         if nezha_analysis_data:
             analysis = nezha_analysis_data.get(item['line'], ('N/A', 'N/A', 'N/A'))
-            row_data.extend(analysis)
-        worksheet.write_row(row_num, 0, row_data)
-        row_num += 1
+            # 确保分析结果是字符串以便计算长度
+            row_data.extend(map(str, analysis))
+        all_rows_data.append(row_data)
 
-    # 自动调整列宽
-    for i, header in enumerate(headers):
-        column_len = max(len(header), *[len(str(item.get('line' if i == 0 else 'addr' if i == 1 else 'user' if i == 2 else 'passwd' if i == 3, ''))) for item in parsed_data])
-        worksheet.set_column(i, i, column_len + 2)
+    # 步骤 B: 将聚合好的数据写入工作表
+    for row_num, row_data in enumerate(all_rows_data, 1):  # 从第2行开始写 (索引1)
+        worksheet.write_row(row_num, 0, row_data)
+
+    # 步骤 C: 根据实际写入的数据计算并设置列宽
+    for col_num, header in enumerate(headers):
+        # 提取该列的所有数据（包括表头），并转换为字符串
+        column_data = [str(header)] + [str(row[col_num]) for row in all_rows_data]
+        # 计算该列中最长字符串的长度
+        max_len = max(len(cell) for cell in column_data)
+        # 设置列宽，并增加一点余量
+        worksheet.set_column(col_num, col_num, max_len + 2)
 
     workbook.close()
     print(f"✅ [报告] Excel报告已生成: {xlsx_output_file}")
-
 def clean_temp_files():
     print("🗑️  [清理] 正在删除临时文件...")
     # 由于不再使用临时目录，主要清理Go相关文件
