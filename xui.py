@@ -14,22 +14,24 @@ import uuid
 import platform
 from multiprocessing import Lock, Manager
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
-# ==================== 依赖导入强化 ====================
+# ==================== 依赖导入强化 (已修正) ====================
 # 在脚本最开始就强制检查核心依赖，如果失败则直接退出
 try:
     import psutil
     import requests
     import yaml
-    import xlsxwriter # 使用更高性能的库
+    import xlsxwriter
     from tqdm import tqdm
     from colorama import Fore, Style, init
     init(autoreset=True)
 except ImportError as e:
-    print(f"❌ {Fore.RED}错误：核心 Python 模块缺失！{Style.RESET_ALL}")
+    # --- 这是被修正的部分 ---
+    # 在这里不能使用 Fore 或 Style，因为它们可能就是导入失败的对象
+    print("❌ 错误：核心 Python 模块缺失！")
     print(f"缺失的模块是: {e.name}")
     print("请先手动安装所有依赖：")
-    print(f"{Fore.YELLOW}python3 -m pip install psutil requests pyyaml xlsxwriter tqdm colorama --break-system-packages{Style.RESET_ALL}")
+    # 使用无颜色的 print
+    print("python3 -m pip install psutil requests pyyaml xlsxwriter tqdm colorama --break-system-packages")
     sys.exit(1)
 
 # 仅在非Windows系统上尝试导入
