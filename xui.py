@@ -1236,6 +1236,7 @@ def check_environment(template_mode, is_china_env):
     if template_mode in [9, 10, 11]: required_pkgs.append("golang.org/x/net/proxy")
 
     print("    - 正在检查并安装必要的Go模块...")
+    go_env['GOPATH'] = os.path.expanduser('~/go') # 设置GOPATH到用户主目录下的go文件夹
     go_env = os.environ.copy()
     if is_china_env: go_env['GOPROXY'] = 'https://goproxy.cn,direct'
     if not os.path.exists("go.mod"):
